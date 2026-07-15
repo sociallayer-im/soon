@@ -1,0 +1,25 @@
+Gemfile
+  s_366b4800ea8f42::t_ba3a27f812c77a 48-50
+app/views/layouts/application.html.erb
+  s_366b4800ea8f42::t_8a1846916d7170 22-23
+Gemfile.lock
+  s_366b4800ea8f42::t_6bf3bab996a38e 113-116,397,453-454
+config/database.yml
+  s_366b4800ea8f42::t_4e68c4d6dafb6d 25,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "26b01e3b22176272ee41744f9d0ac94ddb368a88",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
