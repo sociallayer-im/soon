@@ -1,0 +1,43 @@
+design/CHANGELOG.md
+  s_366b4800ea8f42::t_18caaba6df681b 5-51
+test/models/group_test.rb
+  s_366b4800ea8f42::t_4f330b6973de66 28-45
+app/models/group.rb
+  s_366b4800ea8f42::t_fdf24263a82c6a 18-20,24,26
+app/models/group_invite.rb
+  s_366b4800ea8f42::t_03e1123ee2c354 9-12
+test/controllers/api/v1/memberships_controller_test.rb
+  s_366b4800ea8f42::t_f2634d3ad7e918 25-45
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_366b4800ea8f42::t_addf1ee8d50904 71-96
+test/controllers/api/v1/tickets_controller_test.rb
+  s_366b4800ea8f42::t_798c6aac51c6ca 25-50,55,58-63
+  s_366b4800ea8f42::t_1bb8b4aeb3ab25 51-54,56-57
+app/controllers/api/v1/memberships_controller.rb
+  s_366b4800ea8f42::t_4b2ce3908fa476 19,22-23
+app/controllers/api/v1/vouchers_controller.rb
+  s_366b4800ea8f42::t_5445248b5ec6e0 57-58
+app/controllers/api/v1/group_invites_controller.rb
+  s_366b4800ea8f42::t_2f5be55a337638 139,160-161
+  s_366b4800ea8f42::t_4fe17b2cb32794 5-8
+test/models/group_invite_test.rb
+  s_366b4800ea8f42::t_4e8c4e136857b9 1-16
+app/controllers/api/v1/tickets_controller.rb
+  s_366b4800ea8f42::t_447bcd2f493409 92-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "9a106a2f08285c563abee0eee7d55c11ffdbcf9b",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
