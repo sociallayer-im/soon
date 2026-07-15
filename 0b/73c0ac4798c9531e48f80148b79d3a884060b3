@@ -1,0 +1,60 @@
+app/models/ticket_item.rb
+  s_366b4800ea8f42::t_d119b1143812d8 74-91
+  s_366b4800ea8f42::t_c83b17bf93b1d8 38,42-61,63
+test/controllers/api/v1/tickets_controller_test.rb
+  s_366b4800ea8f42::t_9ad523d27481ed 165-166
+  s_366b4800ea8f42::t_ce9561404dbbd0 25,32-35,42-44
+  s_366b4800ea8f42::t_3b472288e18087 419,428-431,438-450
+  s_366b4800ea8f42::t_42067fc76c5822 180
+  s_366b4800ea8f42::t_f4f59c91baf45e 349,369
+  s_366b4800ea8f42::t_01e8d7c91ae2ef 453,685-839
+  s_366b4800ea8f42::t_c7cd754400d687 451-452
+  s_366b4800ea8f42::t_644920ba7e95b9 454
+db/migrate/20260316000002_add_txhash_uniqueness_and_coupon_code_index.rb
+  s_366b4800ea8f42::t_6cd896c3423841 1-13
+app/models/coupon.rb
+  s_366b4800ea8f42::t_90e5efb01012f7 9-16,20-24,27,29
+  s_366b4800ea8f42::t_1712a9e5ef8903 35-37
+design/CHANGELOG.md
+  s_366b4800ea8f42::t_7713efd9762996 5-63
+test/models/coupon_test.rb
+  s_366b4800ea8f42::t_ad681a5f5a772a 93-119
+config/initializers/stripe.rb
+  s_366b4800ea8f42::t_03c7295f8b3597 1
+app/controllers/api/v1/tickets_controller.rb
+  s_366b4800ea8f42::t_b11f48a6e2012c 307-332,334,336-337,342,349-361,364-372,374-375
+  s_366b4800ea8f42::t_0a091c98314590 339-341,343-347
+  s_366b4800ea8f42::t_5f4e126cd0a5f6 391,395-408,417,420-421,424-427
+  s_366b4800ea8f42::t_2c2b9835105296 441-443,445-451
+  s_366b4800ea8f42::t_74445247b92685 46-50,72-83,87-89,91
+  s_366b4800ea8f42::t_1a027b05c7d22b 377-380,382-385
+  s_366b4800ea8f42::t_cf6dfc93b48410 8-10
+  s_366b4800ea8f42::t_b34267c2197368 106-107,110-111
+  s_366b4800ea8f42::t_c80b209b46fd1e 149-162
+  s_366b4800ea8f42::t_20b6e8a952f98a 333,335
+  s_366b4800ea8f42::t_b18b6b9179e4de 127-132,139-140,143-144
+  s_366b4800ea8f42::t_474a2e796ae3fc 338
+  s_366b4800ea8f42::t_b2737f27534be6 376
+design/ARCHITECTURE.md
+  s_366b4800ea8f42::t_03d8ef75f560ab 616-619
+  s_366b4800ea8f42::t_34aa5bd814acbf 257-262,264-265,267-274
+  s_366b4800ea8f42::t_e2ea8ad06fe696 485-486,488,491,494-495,498-503
+db/schema.rb
+  s_366b4800ea8f42::t_6d166b4364a1fd 13,142,438
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "0b73c0ac4798c9531e48f80148b79d3a884060b3",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
