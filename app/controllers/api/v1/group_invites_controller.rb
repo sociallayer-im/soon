@@ -2,6 +2,10 @@ class Api::V1::GroupInvitesController < Api::BaseController
   before_action :set_group, except: %i[pending]
   before_action :set_invite, only: %i[destroy accept accept_request revoke]
 
+  rescue_from ActiveRecord::RecordInvalid do |e|
+    render_error(e.record.errors.full_messages.join(", "))
+  end
+
   INVITE_TTL = 30.days
 
   # GET /api/v1/groups/:group_id/group_invites
@@ -132,7 +136,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     if user
       membership = @group.memberships.find_by(user_id: user.id)
       if membership && membership.role == "member" && role != "member"
-        membership.update(role: role)
+        membership.update!(role: role)
         Activity.create(item: membership, initiator: current_user, action: "group_invite/update_role", receiver: user, payload: { message: params[:message] })
         return { address: address, result: "role_updated" }
       elsif membership
@@ -153,5 +157,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     else
       return { address: address, result: "error", message: "invalid receiver handle" }
     end
+  rescue ActiveRecord::RecordInvalid => e
+    { address: address, result: "error", message: e.record.errors.full_messages.join(", ") }
   end
 end

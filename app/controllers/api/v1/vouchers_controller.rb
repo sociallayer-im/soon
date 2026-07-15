@@ -54,8 +54,8 @@ class Api::V1::VouchersController < Api::BaseController
     badge = nil
     badge_class = nil
     @voucher.with_lock do
-      @voucher.reload
-
+      # with_lock already reloads the record under lock (via lock!) before
+      # yielding here — no need for an explicit extra reload.
       if @voucher.invalid?
         return render_error("invalid voucher")
       end

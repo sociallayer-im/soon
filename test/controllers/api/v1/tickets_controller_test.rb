@@ -22,6 +22,45 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", json_response["participant"]["payment_status"]
   end
 
+  test "rsvp does not release ticket quantity when the ticket_item already persisted before a later failure" do
+    ticket = create_ticket(event: @event, quantity: 1)
+    buyer = create_user
+    form = create_form
+    field = create_form_field(form: form, required: true, for_admin: false)
+    @event.update!(form_id: form.id)
+
+    # Force a failure AFTER ticket_item.save! (line 66) but before the method
+    # returns successfully — simulates the real-world case of a bad form answer,
+    # a coupon race, or the group auto-join failing after the reservation is
+    # already genuinely consumed.
+    FormAnswer.stub(:create!, ->(*) { raise ActiveRecord::RecordInvalid.new(FormAnswer.new) }) do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+        params: { answers: [{ field_id: field.id, value: "reason" }] }, headers: auth_headers(buyer)
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal 0, ticket.reload.quantity, "quantity must stay 0 — the persisted ticket_item genuinely consumed the reservation"
+    assert TicketItem.exists?(ticket: ticket, user: buyer), "the ticket_item that consumed the slot should still exist"
+  end
+
+  test "rsvp releases ticket quantity when the failure happens before the ticket_item ever persists" do
+    ticket = create_ticket(event: @event, quantity: 1)
+    buyer = create_user
+
+    # Force participant.save! itself to fail, before ticket_item.save! ever runs.
+    # minitest-mock has no any_instance stub, so patch the instance method directly.
+    original = Participant.instance_method(:save!)
+    Participant.define_method(:save!) { raise ActiveRecord::RecordInvalid.new(self) }
+    begin
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    ensure
+      Participant.define_method(:save!, original)
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal 1, ticket.reload.quantity, "quantity must be released — nothing was actually persisted"
+  end
+
   test "rsvp on a paid stripe ticket above the waiver threshold stays pending" do
     ticket = create_ticket(event: @event)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)

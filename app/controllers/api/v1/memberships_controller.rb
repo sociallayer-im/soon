@@ -16,13 +16,11 @@ class Api::V1::MembershipsController < Api::BaseController
 
     user = User.find(params[:user_id])
     membership = @group.add_member(user.id, params[:role].presence || "member")
-    if membership.persisted?
-      render json: MembershipBlueprint.render(membership), status: :created
-    else
-      render_error(membership.errors.full_messages.join(", "))
-    end
+    render json: MembershipBlueprint.render(membership), status: :created
   rescue ActiveRecord::RecordNotFound
     render_not_found
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # PATCH /api/v1/groups/:group_id/memberships/:id

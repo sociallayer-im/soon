@@ -22,6 +22,27 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "member", group.memberships.find_by(user: target).role
   end
 
+  test "create with an invalid role renders 422, not a misleading success" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "superadmin" }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_not group.memberships.exists?(user: target)
+  end
+
+  test "create with an invalid role on an EXISTING member does not report success while leaving the role unchanged" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: target, group: group, role: "member")
+
+    post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "superadmin" }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_equal "member", group.memberships.find_by(user: target).role
+  end
+
   test "create 404s for an unknown user_id" do
     owner = create_user
     group = create_group(owner: owner)

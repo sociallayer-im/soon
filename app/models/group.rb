@@ -15,12 +15,15 @@ class Group < ApplicationRecord
 
   validates :name, presence: true
 
+  # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
+  # of silently returning a membership whose write didn't actually persist —
+  # every caller must be able to trust that a returned membership is saved.
   def add_member(user_id, role)
     membership = memberships.find_by(user_id: user_id)
     if membership
-      membership.update(role: role)
+      membership.update!(role: role)
     else
-      membership = memberships.create(user_id: user_id, role: role, active: true)
+      membership = memberships.create!(user_id: user_id, role: role, active: true)
       increment!(:memberships_count)
     end
     membership

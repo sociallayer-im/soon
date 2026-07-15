@@ -89,7 +89,11 @@ class Api::V1::TicketsController < Api::BaseController
 
     render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   rescue ActiveRecord::RecordInvalid => e
-    @ticket&.release!
+    # Only give the reservation back if the ticket_item never actually persisted —
+    # a failure after ticket_item.save! (e.g. a bad form answer, or the group
+    # auto-join below) means the reservation was genuinely consumed and must stand,
+    # or `quantity` silently drifts upward relative to real outstanding reservations.
+    @ticket.release! unless ticket_item&.persisted?
     render_error(e.record.errors.full_messages.join(", "))
   end
 

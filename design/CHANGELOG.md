@@ -2,6 +2,53 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-07-16 (latest) — fixes from an /code-review pass on the constraints/test-suite commit
+
+A multi-angle code review of the previous entry's commit surfaced 5 confirmed bugs (4 correctness,
+1 efficiency), all fixed with regression tests added:
+
+- **`Group#add_member` silently swallowed validation failures.** It used non-bang `create`/`update`
+  and always returned the membership object regardless of success, so three different bugs fell
+  out of this one root cause:
+  - `MembershipsController#create` checked `membership.persisted?` (true for any already-existing
+    row, regardless of whether *this* update succeeded) instead of the actual write outcome —
+    updating an existing member to an invalid role rendered a misleading `201 Created` with a role
+    that was never saved.
+  - The create-branch's `increment!(:memberships_count)` ran unconditionally after
+    `memberships.create`, permanently corrupting the counter whenever the create failed validation.
+  - `GroupInvitesController`'s `accept`/`accept_request`/`accept_with_code` (and `send_invite_to`'s
+    role-update branch) all called `add_member` and rendered success without checking the result —
+    accepting an invite with an invalid role silently failed to grant membership while still
+    returning 200.
+  
+  Fixed by making `add_member` raise `ActiveRecord::RecordInvalid` on failure (bang semantics), and
+  adding proper rescues at every call site (a controller-level `rescue_from` in
+  `GroupInvitesController`, an inline rescue in `MembershipsController#create`, and a local rescue
+  in `send_invite_to` since it needs per-address error reporting rather than aborting the whole
+  batch).
+- **`GroupInvite#role` allowed `"manager"`, a value `Membership#role` doesn't accept.** Since an
+  invite's role is passed straight through to `add_member` on acceptance, this mismatch was exactly
+  the trigger for the bug above — reconciled `GroupInvite#role`'s validation to match `Membership`'s
+  vocabulary (`member|admin|owner`) exactly, so a bad role is now rejected at invite-creation time
+  with immediate feedback instead of failing silently later at accept time.
+- **`TicketsController#rsvp`'s failure-cleanup released ticket inventory even when the reservation
+  had already been genuinely consumed.** The trailing `rescue ActiveRecord::RecordInvalid` called
+  `@ticket.release!` unconditionally, but if the failure happened *after* `ticket_item.save!` had
+  already committed (e.g. a bad form answer, or the group auto-join failing later in the method —
+  neither of which is wrapped in a shared transaction with the reservation), the already-persisted
+  `TicketItem` still legitimately held that unit of inventory while `quantity` got incremented back
+  anyway — permanently overcounting available tickets. Fixed by only releasing when
+  `ticket_item&.persisted?` is false, i.e. when nothing was actually saved.
+- **`VouchersController#use`'s `@voucher.reload` inside `with_lock` was a redundant query** —
+  `with_lock` already reloads the record under lock (via `lock!`) before yielding to the block, so
+  the explicit reload just repeated the same read on a concurrency-sensitive redemption path.
+  Removed.
+
+10 new regression tests added (`test/models/group_test.rb`, `test/models/group_invite_test.rb`,
+`test/controllers/api/v1/memberships_controller_test.rb`,
+`test/controllers/api/v1/group_invites_controller_test.rb`,
+`test/controllers/api/v1/tickets_controller_test.rb`) — 321 tests, 811 assertions, 0 failures.
+
 ## 2026-07-16 (later) — constraints, application-logic gaps, and a full test suite
 
 Closed the gaps `ARCHITECTURE.md` had flagged as design-vs-implementation mismatches, and built a

@@ -25,6 +25,24 @@ class GroupTest < ActiveSupport::TestCase
     assert_equal "admin", group.memberships.find_by(user: user).role
   end
 
+  test "add_member raises on an invalid role and does not increment memberships_count" do
+    group = Group.create!(name: "Test Group 3")
+    user = create_user
+
+    assert_raises(ActiveRecord::RecordInvalid) { group.add_member(user.id, "bogus") }
+    assert_equal 0, group.reload.memberships_count
+    assert_not group.memberships.exists?(user: user)
+  end
+
+  test "add_member raises on an invalid role for an existing membership without changing its role" do
+    group = Group.create!(name: "Test Group 4")
+    user = create_user
+    group.add_member(user.id, "member")
+
+    assert_raises(ActiveRecord::RecordInvalid) { group.add_member(user.id, "bogus") }
+    assert_equal "member", group.memberships.find_by(user: user).role
+  end
+
   test "name presence validation" do
     group = Group.new(name: "")
     assert_not group.valid?

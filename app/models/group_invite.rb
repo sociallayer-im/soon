@@ -6,7 +6,10 @@ class GroupInvite < ApplicationRecord
   belongs_to :badge, optional: true
   belongs_to :ticket, optional: true
 
-  validates :role, inclusion: { in: %w(member manager owner) }
+  # Must match Membership's role vocabulary exactly — an invite's role is passed
+  # straight through to Group#add_member on acceptance, so any value valid here
+  # but not there would silently fail to grant membership.
+  validates :role, inclusion: { in: %w(member admin owner) }
 
   enum :status, { sending: "sending", requesting: "requesting", accepted: "accepted", cancelled: "cancelled", revoked: "revoked" }
 

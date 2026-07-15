@@ -68,6 +68,32 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_match "invalid receiver handle", result["message"]
   end
 
+  test "create with an invalid role reports a per-address error instead of silently failing" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_no_difference "GroupInvite.count" do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: ["nobody@test.com"], role: "manager" }, headers: auth_headers(owner)
+    end
+    result = json_response["results"].first
+    assert_equal "error", result["result"]
+    assert_match "Role", result["message"]
+  end
+
+  test "create with an invalid role for a known-user role upgrade reports an error and does not change the role" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: target, group: group, role: "member")
+
+    post "/api/v1/groups/#{group.id}/group_invites",
+      params: { receivers: [target.handle], role: "manager" }, headers: auth_headers(owner)
+    result = json_response["results"].first
+    assert_equal "error", result["result"]
+    assert_equal "member", group.memberships.find_by(user: target).role
+  end
+
   test "create requires group admin" do
     owner = create_user
     outsider = create_user
