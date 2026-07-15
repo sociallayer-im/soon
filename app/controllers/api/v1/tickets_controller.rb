@@ -5,6 +5,9 @@ class Api::V1::TicketsController < Api::BaseController
 
   STRIPE_MIN_CENTS = 400
 
+  # Raised when a coupon is exhausted between quoting and checkout; rolls back rsvp.
+  class CouponUnavailable < StandardError; end
+
   # POST /api/v1/events/:event_id/tickets
   def create
     authorize @event, :update?
@@ -40,6 +43,11 @@ class Api::V1::TicketsController < Api::BaseController
       return render_error("exceed venue capacity")
     end
     return render_not_found unless @ticket
+    return render_error("ticket is not on sale") unless @ticket.status == "normal"
+    return render_error("ticket sale has ended") if @ticket.end_time && @ticket.end_time < Time.current
+    if @ticket.check_badge_class_id.present? && !holds_required_badge?(@ticket)
+      return render_error("this ticket requires a badge you do not hold", status: :forbidden)
+    end
     return render_error("run out of ticket") unless @ticket.reserve!
 
     participant = Participant.find_by(event: @event, user: current_user)
@@ -59,41 +67,28 @@ class Api::V1::TicketsController < Api::BaseController
       @ticket.release!
       return
     end
-
-    participant.save!
-    @event.increment!(:participant_count)
     ticket_item.group_id = @ticket.group_id if ticket_item.ticket_type == "group"
-    ticket_item.save!
-    participant.update(ticket_id: ticket_item.ticket_id)
 
-    if params[:answers].present? && @event.form_id
-      submission = FormSubmission.find_or_initialize_by(form_id: @event.form_id, user_id: current_user.id)
-      submission.status = "pending"
-      submission.submitted_at = Time.current
-      submission.save!
-      FormAnswer.where(form_submission_id: submission.id).delete_all
-      valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
-      Array(params[:answers]).each do |a|
-        next unless valid_field_ids.include?(a[:field_id].to_s)
-        FormAnswer.create!(form_submission_id: submission.id, form_field_id: a[:field_id], value: a[:value])
-      end
-    end
-
-    if ticket_item.status == "succeeded" && participant.payment_status != "succeeded"
-      participant.update(payment_status: "succeeded")
-      if ticket_item.ticket_type == "group" && !@event.group.memberships.exists?(user_id: current_user.id)
-        @event.group.add_member(current_user.id, "member")
-      end
-      ticket_item.notify_group_owner
+    # Everything that must succeed-or-fail together lives in one transaction:
+    # a rollback undoes the participant, the count bump, and the coupon usage.
+    # The ticket reservation is committed separately (reserve!), so it is the
+    # only thing we must hand back on failure.
+    ActiveRecord::Base.transaction do
+      participant.save!
+      @event.increment!(:participant_count)
+      ticket_item.save!
+      participant.update!(ticket_id: ticket_item.ticket_id)
+      consume_coupon!(ticket_item)
+      save_form_submission! if params[:answers].present? && @event.form_id
+      ticket_item.confirm_payment! if ticket_item.status == "succeeded"
     end
 
     render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+  rescue CouponUnavailable
+    @ticket.release!
+    render_error("coupon is not available")
   rescue ActiveRecord::RecordInvalid => e
-    # Only give the reservation back if the ticket_item never actually persisted —
-    # a failure after ticket_item.save! (e.g. a bad form answer, or the group
-    # auto-join below) means the reservation was genuinely consumed and must stand,
-    # or `quantity` silently drifts upward relative to real outstanding reservations.
-    @ticket.release! unless ticket_item&.persisted?
+    @ticket.release!
     render_error(e.record.errors.full_messages.join(", "))
   end
 
@@ -108,22 +103,12 @@ class Api::V1::TicketsController < Api::BaseController
     end
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
 
-    if ticket_item.amount.to_i > 0 && ticket_item.chain != "stripe"
-      return render_error("txhash is required for crypto payments") if params[:txhash].blank?
-      pm = ticket_item.payment_method
-      return render_error("payment_method not found") unless pm
-
-      result = EvmPaymentVerifier.verify(
-        txhash: params[:txhash], chain: ticket_item.chain,
-        token_address: pm.token_address_for_chain(ticket_item.chain),
-        receiver_address: pm.receiver_address, amount: ticket_item.amount,
-        product_id: ticket_item.event_id, item_id: ticket_item.id
-      )
-      return render_error("tx verification failed: #{result.error}") unless result.success
+    if ticket_item.amount.to_i > 0
+      return unless payment_proof_ok?(ticket_item, chain: ticket_item.chain, txhash: params[:txhash])
     end
 
-    mark_ticket_item_paid!(ticket_item, txhash: params[:txhash], sender_address: params[:sender_address])
-    render json: { result: "ok", participant: ParticipantBlueprint.render_as_hash(ticket_item.reload.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    ticket_item.confirm_payment!(txhash: params[:txhash], sender_address: params[:sender_address])
+    render json: { result: "ok", participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
   # POST /api/v1/tickets/cancel_unpaid_item
@@ -139,39 +124,42 @@ class Api::V1::TicketsController < Api::BaseController
 
   # POST /api/v1/tickets/set_payment_status  (webhook-style, shared-secret auth)
   def set_payment_status
-    return render_error("invalid next token", status: :forbidden) unless ActiveSupport::SecurityUtils.secure_compare(params[:next_token].to_s, ENV.fetch("NEXT_TOKEN", ""))
+    token = ENV["NEXT_TOKEN"].to_s
+    # An unset NEXT_TOKEN must not authorize anyone — secure_compare("", "") is
+    # true, so guard the blank case explicitly rather than relying on the compare.
+    if token.blank? || !ActiveSupport::SecurityUtils.secure_compare(params[:next_token].to_s, token)
+      return render_error("invalid next token", status: :forbidden)
+    end
 
     ticket_item = find_ticket_item_by_order
     return render_error("ticket_item not found") unless ticket_item
     return render json: { result: "ok", message: "skip verify succeeded ticket_item" } if ticket_item.status == "succeeded"
     return render_error("amount invalid") if params[:amount].to_i < ticket_item.amount.to_i
 
-    if ticket_item.payment_method.present? && params[:txhash].present?
-      result = EvmPaymentVerifier.verify(
-        txhash: params[:txhash], chain: params[:chain],
-        token_address: ticket_item.payment_method.token_address_for_chain(params[:chain]),
-        receiver_address: ticket_item.payment_method.receiver_address, amount: ticket_item.amount,
-        product_id: ticket_item.event_id, item_id: ticket_item.id
-      )
-      return render_error("tx verification failed: #{result.error}") unless result.success
+    if ticket_item.amount.to_i > 0 && ticket_item.chain != "stripe"
+      return unless payment_proof_ok?(ticket_item, chain: params[:chain].presence || ticket_item.chain, txhash: params[:txhash])
     end
 
-    mark_ticket_item_paid!(ticket_item, txhash: params[:txhash], sender_address: params[:sender_address])
-    render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.reload.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    ticket_item.confirm_payment!(txhash: params[:txhash], sender_address: params[:sender_address])
+    render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
   # POST /api/v1/tickets/stripe_callback  (Stripe webhook)
   def stripe_callback
-    if stripe_event_verified? && params[:type] == "charge.succeeded"
-      intent_id = params.dig(:data, :object, :payment_intent)
-      status = params.dig(:data, :object, :status)
-      ticket_item = TicketItem.find_by(txhash: intent_id)
-      if ticket_item && %w[pending unbounded succeeded cancelled timeout].include?(status)
-        ticket_item.update(status: status)
-        if ticket_item.participant && ticket_item.participant.payment_status != "succeeded"
-          ticket_item.participant.update(payment_status: status)
-        end
-        ticket_item.notify_group_owner
+    return render json: { result: "ignored" } unless stripe_event_verified?
+
+    intent_id = params.dig(:data, :object, :payment_intent)
+    ticket_item = intent_id.present? && TicketItem.find_by(txhash: intent_id)
+    # Only pending items transition, so a late webhook can't resurrect a
+    # cancelled/timed-out item (which would oversell against released quantity).
+    if ticket_item && ticket_item.status == "pending"
+      case params[:type]
+      when "charge.succeeded"
+        # Funnel through confirm_payment! so the group auto-join / participant
+        # flip / notify side effects match every other payment path.
+        ticket_item.confirm_payment! if params.dig(:data, :object, :status) == "succeeded"
+      when "charge.failed", "charge.expired", "payment_intent.canceled"
+        ticket_item.cancel # releases the reserved quantity and coupon usage
       end
     end
     render json: { result: "ok" }
@@ -316,26 +304,107 @@ class Api::V1::TicketsController < Api::BaseController
     TicketItem.find_by(chain: params[:chain], event_id: params[:product_id], id: params[:item_id])
   end
 
-  def mark_ticket_item_paid!(ticket_item, txhash:, sender_address:)
-    ticket_item.update!(status: "succeeded", txhash: txhash, sender_address: sender_address)
+  def holds_required_badge?(ticket)
+    Badge.where(badge_class_id: ticket.check_badge_class_id, owner_id: current_user.id)
+         .where.not(status: "burned").exists?
+  end
 
-    if ticket_item.ticket_type == "group" && !ticket_item.group.memberships.exists?(user_id: ticket_item.user_id)
-      ticket_item.group.add_member(ticket_item.user_id, "member")
+  # Consumes one coupon usage for a persisted ticket_item, re-checking
+  # availability under a row lock so concurrent RSVPs can't over-redeem the
+  # last unit. Raises CouponUnavailable (rolling back the enclosing rsvp
+  # transaction) if the coupon was exhausted between quoting and checkout.
+  def consume_coupon!(ticket_item)
+    return unless ticket_item.coupon_id
+
+    coupon = ticket_item.coupon
+    coupon.with_lock do
+      raise CouponUnavailable unless coupon.available?
+      coupon.increment!(:order_usage_count)
+    end
+  end
+
+  def save_form_submission!
+    submission = FormSubmission.find_or_initialize_by(form_id: @event.form_id, user_id: current_user.id)
+    submission.status = "pending"
+    submission.submitted_at = Time.current
+    submission.save!
+    FormAnswer.where(form_submission_id: submission.id).delete_all
+    valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
+    Array(params[:answers]).each do |a|
+      next unless valid_field_ids.include?(a[:field_id].to_s)
+      FormAnswer.create!(form_submission_id: submission.id, form_field_id: a[:field_id], value: a[:value])
+    end
+  end
+
+  # Verifies that a payment actually settled, per the item's rail. Returns true
+  # when confirmed; on a hard failure it renders the error itself and returns
+  # false, so callers just `return unless payment_proof_ok?(...)`.
+  def payment_proof_ok?(ticket_item, chain:, txhash:)
+    if ticket_item.chain == "stripe"
+      return true if stripe_payment_confirmed?(ticket_item)
+      render_error("stripe payment not confirmed")
+      return false
     end
 
-    if ticket_item.participant && ticket_item.participant.payment_status != "succeeded"
-      ticket_item.participant.update(payment_status: "succeeded")
+    if txhash.blank?
+      render_error("txhash is required for crypto payments")
+      return false
+    end
+    # A single on-chain transfer must not be replayed across multiple orders.
+    if TicketItem.where(txhash: txhash, status: "succeeded").where.not(id: ticket_item.id).exists?
+      render_error("this transaction was already used for another ticket")
+      return false
+    end
+    pm = ticket_item.payment_method
+    unless pm
+      render_error("payment_method not found")
+      return false
     end
 
-    ticket_item.notify_group_owner
+    result = EvmPaymentVerifier.verify(
+      txhash: txhash, chain: chain,
+      token_address: pm.token_address_for_chain(chain),
+      receiver_address: pm.receiver_address, amount: ticket_item.amount,
+      product_id: ticket_item.event_id, item_id: ticket_item.id
+    )
+    unless result.success
+      render_error("tx verification failed: #{result.error}")
+      return false
+    end
+    true
+  end
+
+  # Confirms a Stripe PaymentIntent server-side (the item stores the intent id in
+  # txhash). Any Stripe/API error is treated as "not confirmed".
+  def stripe_payment_confirmed?(ticket_item)
+    return false if ticket_item.txhash.blank?
+
+    intent = Stripe::PaymentIntent.retrieve(ticket_item.txhash)
+    intent.status == "succeeded" && intent.amount.to_i >= ticket_item.amount.to_i
+  rescue Stripe::StripeError
+    false
   end
 
   def build_paid_ticket_item(participant)
     paymethod = PaymentMethod.find_by(id: params[:payment_method_id], item_type: "Ticket", item_id: @ticket.id)
     unless paymethod
-      render json: { result: "error", message: "payment_method not found" }
+      render_error("payment_method not found")
       return nil
     end
+
+    # Resolve the chain first: the coupon amount-scaling depends on it, and for
+    # multi-chain methods paymethod.chain is blank.
+    selected_chain =
+      if paymethod.chains.present?
+        requested = params[:chain].to_s
+        unless paymethod.chains.include?(requested)
+          render_error("chain not supported by this payment method")
+          return nil
+        end
+        requested
+      else
+        paymethod.chain
+      end
 
     amount = paymethod.price
     coupon_id = nil
@@ -345,31 +414,18 @@ class Api::V1::TicketsController < Api::BaseController
     if params[:coupon].present?
       coupon = Coupon.find_by(selector_type: "code", event_id: @event.id, code: params[:coupon])
       unless coupon
-        render json: { result: "error", message: "coupon not found" }
+        render_error("coupon not found")
         return nil
       end
-      if coupon.expires_at < Time.current || coupon.max_allowed_usages <= coupon.order_usage_count
-        render json: { result: "error", message: "coupon is not available" }
+      unless coupon.available?
+        render_error("coupon is not available")
         return nil
       end
-      amount, discount_value, discount_data = coupon.get_discounted_price(amount, paymethod)
-      if discount_value
-        coupon.increment!(:order_usage_count)
-        coupon_id = coupon.id
-      end
+      amount, discount_value, discount_data = coupon.get_discounted_price(amount, paymethod, chain: selected_chain)
+      # Record the coupon on the item; usage is consumed only once the item
+      # actually persists (see consume_coupon!), never on an aborted request.
+      coupon_id = coupon.id if discount_value
     end
-
-    selected_chain =
-      if paymethod.chains.present?
-        requested = params[:chain].to_s
-        unless paymethod.chains.include?(requested)
-          render json: { result: "error", message: "chain not supported by this payment method" }
-          return nil
-        end
-        requested
-      else
-        paymethod.chain
-      end
 
     amount = 0 if selected_chain == "stripe" && amount < STRIPE_MIN_CENTS
     status = amount.zero? ? "succeeded" : "pending"
@@ -382,8 +438,17 @@ class Api::V1::TicketsController < Api::BaseController
     )
   end
 
+  # Verifies the Stripe-Signature header when a signing secret is configured.
+  # Without a secret we fail *closed* in production (an unverified webhook must
+  # not flip a real order to paid) but stay open in dev/test for local testing.
   def stripe_event_verified?
-    true # TODO: verify Stripe-Signature header once a webhook signing secret is configured
+    secret = ENV["STRIPE_WEBHOOK_SECRET"]
+    return !Rails.env.production? if secret.blank?
+
+    Stripe::Webhook.construct_event(request.raw_post, request.headers["Stripe-Signature"], secret)
+    true
+  rescue Stripe::SignatureVerificationError, JSON::ParserError
+    false
   end
 
   def ticket_params

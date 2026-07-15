@@ -6,27 +6,35 @@ class Coupon < ApplicationRecord
 
   before_save :assign_defaults
 
+  # Single source of truth for redeemability. max_allowed_usages is nullable
+  # (nil == unlimited); guarding it here prevents `nil <= count` NoMethodErrors.
+  def available?
+    return false if expires_at && expires_at < Time.current
+    return false if max_allowed_usages && order_usage_count >= max_allowed_usages
+    true
+  end
+
   # Discount math, preserved exactly from sails/:
   # - ratio discount is basis points of 10000 (discount: 500 == 5%), not 0-100
   # - amount discount is scaled x10000 for non-stripe chains vs used as-is for stripe
-  def get_discounted_price(amount, paymethod)
+  #
+  # `chain` is the chain actually selected for this order (for multi-chain payment
+  # methods paymethod.chain is blank, so the amount-scaling must key off the
+  # resolved chain, not paymethod.chain).
+  def get_discounted_price(amount, paymethod, chain: nil)
     amount = amount.to_i
     original_amount = amount
+    chain ||= paymethod&.chain
 
-    if expires_at < Time.current || max_allowed_usages <= order_usage_count
-      return [amount, nil, nil]
-    end
+    return [amount, nil, nil] unless available?
 
     if discount_type == "ratio"
       return [amount, nil, nil] if discount > 10_000 || discount < 0
       amount = amount * discount / 10_000
     elsif discount_type == "amount"
-      discount_value =
-        if paymethod
-          paymethod.chain == "stripe" ? discount : discount * 10_000
-        else
-          discount
-        end
+      # stripe amounts are already in the smallest unit (cents); crypto amounts
+      # are scaled x10000. Unknown chain (no payment context) → use as-is.
+      discount_value = (chain == "stripe" || chain.nil?) ? discount : discount * 10_000
       discount_value = amount if discount_value > amount
       amount -= discount_value
     end

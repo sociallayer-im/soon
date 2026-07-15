@@ -35,21 +35,32 @@ class TicketItem < ApplicationRecord
   end
 
   def cancel
-    if participant&.payment_status == "pending"
-      participant.update(payment_status: "cancelled", status: "cancelled")
-    end
-    update(status: "cancelled", participant_id: nil)
-    coupon&.increment!(:order_usage_count)
-    ticket.release!
+    close!("cancelled")
   end
 
   def timeout
-    if participant&.payment_status == "pending"
-      participant.update(payment_status: "cancelled", status: "cancelled")
+    close!("timeout")
+  end
+
+  # Confirms payment on every rail (crypto verify_payment, webhook
+  # set_payment_status, and stripe_callback all funnel through here) so the
+  # succeed-side effects can't drift between paths. Verification of the payment
+  # itself happens in the controller before this is called.
+  def confirm_payment!(txhash: nil, sender_address: nil)
+    attrs = { status: "succeeded" }
+    attrs[:txhash] = txhash if txhash.present?
+    attrs[:sender_address] = sender_address if sender_address.present?
+
+    transaction do
+      update!(attrs)
+      if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
+        group.add_member(user_id, "member")
+      end
+      if participant && participant.payment_status != "succeeded"
+        participant.update!(payment_status: "succeeded")
+      end
     end
-    update(status: "timeout", participant_id: nil)
-    coupon&.increment!(:order_usage_count)
-    ticket.release!
+    notify_group_owner
   end
 
   def notify_group_owner
@@ -59,5 +70,23 @@ class TicketItem < ApplicationRecord
     return unless group_owner&.email.present?
 
     # TODO: wire to a GroupMailer once soon/'s mail setup exists.
+  end
+
+  private
+
+  # Shared teardown for cancel/timeout: releases the reserved ticket unit,
+  # refunds the coupon usage consumed at RSVP, and undoes the participant_count
+  # bump so a capacity-limited event doesn't drift toward "full" on abandoned
+  # checkouts.
+  def close!(new_status)
+    transaction do
+      if participant&.payment_status == "pending"
+        participant.update!(payment_status: "cancelled", status: "cancelled")
+      end
+      event&.decrement!(:participant_count) if event && event.participant_count.to_i > 0
+      update!(status: new_status, participant_id: nil)
+      coupon&.decrement!(:order_usage_count) if coupon && coupon.order_usage_count.to_i > 0
+    end
+    ticket.release!
   end
 end

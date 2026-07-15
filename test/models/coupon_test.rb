@@ -90,6 +90,33 @@ class CouponTest < ActiveSupport::TestCase
     assert_in_delta explicit_expiry.to_i, coupon.expires_at.to_i, 2
   end
 
+  test "available? treats a nil max_allowed_usages as unlimited instead of raising" do
+    coupon = create_coupon(event: @event, discount_type: "amount", discount: 100, max_allowed_usages: nil, order_usage_count: 999)
+    assert coupon.available?
+    # and get_discounted_price must not blow up on the nil comparison
+    amount, discount_value, = coupon.get_discounted_price(1000, nil)
+    assert_equal 900, amount
+    assert_equal 100, discount_value
+  end
+
+  test "amount scaling follows the selected chain, not paymethod.chain, for multi-chain methods" do
+    ticket = create_ticket(event: @event)
+    # multi-chain method: paymethod.chain is blank, the chain is chosen per-order
+    multi_pm = create_payment_method(item: ticket, chain: nil, kind: "crypto", price: 1000,
+      chains: ["base", "stripe"], token_address: "0xAAA", receiver_address: "0xBBB")
+    coupon = create_coupon(event: @event, discount_type: "amount", discount: 100, max_allowed_usages: 10)
+
+    # stripe leg: used as-is (no x10000), so a $10 stripe ticket only drops by $1
+    amount_stripe, discount_stripe, = coupon.get_discounted_price(1000, multi_pm, chain: "stripe")
+    assert_equal 900, amount_stripe
+    assert_equal 100, discount_stripe
+
+    # crypto leg of the same method: scaled x10000
+    amount_crypto, discount_crypto, = coupon.get_discounted_price(2_000_000, multi_pm, chain: "base")
+    assert_equal 1_000_000, discount_crypto
+    assert_equal 1_000_000, amount_crypto
+  end
+
   test "selector_type and discount_type inclusion validations" do
     coupon = Coupon.new(event: @event, selector_type: "invalid", discount_type: "invalid", discount: 100, max_allowed_usages: 10)
     assert_not coupon.valid?

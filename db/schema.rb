@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_16_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -139,6 +139,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000001) do
     t.string "selector_type", comment: "code | email | badge"
     t.string "ticket_item_ids", array: true
     t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_coupons_on_code"
     t.index ["event_id"], name: "index_coupons_on_event_id"
   end
 
@@ -434,6 +435,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000001) do
     t.index ["participant_id"], name: "index_ticket_items_on_participant_id"
     t.index ["payment_method_id"], name: "index_ticket_items_on_payment_method_id"
     t.index ["ticket_id"], name: "index_ticket_items_on_ticket_id"
+    t.index ["txhash"], name: "index_ticket_items_on_txhash_unique", unique: true, where: "(txhash IS NOT NULL)"
     t.index ["user_id", "status"], name: "index_ticket_items_on_user_id_and_status"
     t.index ["user_id"], name: "index_ticket_items_on_user_id"
   end

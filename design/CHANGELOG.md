@@ -2,7 +2,65 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — fixes from an /code-review pass on the constraints/test-suite commit
+## 2026-07-16 (latest) — fixes from a focused code review of the ticket/payment/coupon/badge flow
+
+A second code review scoped to ticket creation, payment, group tickets, coupons, ticket-badge
+gating, and payment methods surfaced 8 confirmed findings (payment-verification bypasses, coupon
+accounting bugs, an unenforced gate). All fixed with regression tests; suite is green at 334 runs.
+
+### Payment confirmation — verify against the rail, never trust the caller
+- **`verify_payment` marked Stripe items paid with no verification.** The crypto-verify branch was
+  guarded by `chain != "stripe"`, so a pending Stripe item skipped verification entirely and was
+  marked succeeded — a free paid ticket. All three confirm paths (`verify_payment`,
+  `set_payment_status`, `stripe_callback`) now funnel through a new `TicketItem#confirm_payment!`,
+  and payment proof is checked per rail via `payment_proof_ok?` (Stripe → `Stripe::PaymentIntent`
+  retrieve + status/amount check; crypto → `EvmPaymentVerifier` with a required txhash).
+- **`set_payment_status` skipped verification when `txhash` was absent, and opened up entirely if
+  `NEXT_TOKEN` was unset** (`secure_compare("", "")` is `true`). Now rejects a blank token outright
+  and requires on-chain verification for crypto items with `amount > 0`.
+- **`stripe_callback` was forgeable and diverged from every other path.** `stripe_event_verified?`
+  now does a real `Stripe::Webhook.construct_event` signature check when `STRIPE_WEBHOOK_SECRET` is
+  set and **fails closed in production** when it isn't. Success now goes through `confirm_payment!`
+  (so group-ticket buyers are actually added to the group — previously skipped), only `pending`
+  items transition (no resurrecting a cancelled item), and failure/expiry webhooks release the
+  reserved quantity via `TicketItem#cancel`.
+- **On-chain payment replay.** One transfer could redeem many tickets (TSID string PKs stringify to
+  `0`, so the PayHub id-binding never matched and fell through to a generic Transfer match). Added
+  an app-level "txhash already consumed by another succeeded item" check plus a partial unique index
+  on `ticket_items.txhash`.
+
+### Coupons
+- **`nil max_allowed_usages` raised `NoMethodError` (500).** The column is nullable and the param is
+  optional; `nil <= count` blew up on the unauthenticated `coupon_price` endpoint and mid-RSVP.
+  Centralized redeemability into `Coupon#available?` (nil == unlimited), used by both the model and
+  the controller.
+- **Usage counter moved in the wrong direction on cancel/timeout.** `TicketItem#cancel`/`#timeout`
+  *incremented* `order_usage_count` (burning a second usage on release); now they decrement to
+  refund the usage consumed at RSVP. `cancel`/`timeout` are de-duplicated into a shared `close!`.
+- **Usage was consumed before the item persisted and never rolled back.** The increment happened
+  mid-`build_paid_ticket_item`, so a failed request (bad chain, validation error) permanently burned
+  a usage. Now the coupon is consumed only after the item persists, inside the RSVP transaction and
+  under a row lock (`consume_coupon!`), re-checking availability to prevent over-redemption.
+- **Amount-discount chain scaling** keyed off `paymethod.chain` instead of the chain actually
+  selected at checkout, so a Stripe leg of a multi-chain method got the ×10000 crypto scaling.
+  `get_discounted_price` now takes the resolved `chain:`.
+
+### Gates & integrity
+- **`check_badge_class_id` (badge-gated tickets) was enforced nowhere** — any user could claim a
+  members-only ticket. `rsvp` now requires the user to hold a non-burned badge of that class, and
+  also honors ticket `status` (`nosale`/`inactive`/`hidden`) and `end_time` sale cutoff.
+- **`participant_count` leaked upward.** It was incremented on every RSVP but never decremented on
+  cancel/timeout, so capacity-limited events drifted toward "full" on abandoned checkouts. `close!`
+  now decrements it. The RSVP mutation is wrapped in one transaction so a mid-flight failure rolls
+  back the participant, count bump, coupon usage, and ticket_item atomically (only the separately
+  committed reservation is handed back).
+- **Error-shape consistency.** `build_paid_ticket_item` rendered `{result:"error"}` at HTTP 200;
+  it now uses `render_error` (4xx `{error:...}`) like the rest of the API.
+
+Added a Stripe initializer (`config/initializers/stripe.rb`) and migration
+`20260316000002` (unique `txhash` index + `coupons.code` index).
+
+## 2026-07-16 — fixes from an /code-review pass on the constraints/test-suite commit
 
 A multi-angle code review of the previous entry's commit surfaced 5 confirmed bugs (4 correctness,
 1 efficiency), all fixed with regression tests added:

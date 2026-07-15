@@ -254,17 +254,24 @@ non-obvious business rules, not simplifications:
 
 ### 4.7 Payment confirmation paths
 
-Three ways a `pending` `TicketItem` becomes `succeeded`, all converging on the private
-`mark_ticket_item_paid!` helper (sets `status: succeeded`, `txhash`, `sender_address`, auto-joins
-group-ticket groups, syncs `participant.payment_status`, calls `notify_group_owner`):
+Three ways a `pending` `TicketItem` becomes `succeeded`, all converging on the model method
+`TicketItem#confirm_payment!` (sets `status: succeeded`, optionally `txhash`/`sender_address`,
+auto-joins group-ticket groups, syncs `participant.payment_status`, calls `notify_group_owner` — all
+in one transaction). **Verification is always done per-rail before confirming**, via the controller's
+`payment_proof_ok?`: Stripe items are checked against `Stripe::PaymentIntent` (status + amount),
+crypto items against `EvmPaymentVerifier` with a required, non-replayed `txhash`.
 1. **`verify_payment`** — user-initiated, self-only (`ticket_item.user_id == current_user.id`).
-   For non-Stripe chains, calls `EvmPaymentVerifier.verify` (`lib/evm_payment_verifier.rb`, `eth`
-   gem) against the transaction receipt logs before marking paid.
+   Runs the per-rail proof check for any `amount > 0` item (including Stripe — there is no longer a
+   Stripe bypass).
 2. **`set_payment_status`** — server-to-server webhook-style endpoint, authenticated by a shared
-   secret (`ActiveSupport::SecurityUtils.secure_compare` against `ENV["NEXT_TOKEN"]`), not a user
-   token at all. Same `EvmPaymentVerifier` check when a `txhash` is supplied.
-3. **`stripe_callback`** — Stripe webhook receiver for `charge.succeeded` events, matches the
-   `TicketItem` by `txhash == payment_intent_id`.
+   secret (`secure_compare` against `ENV["NEXT_TOKEN"]`, which must be **non-blank** — an unset
+   token is rejected). Crypto items with `amount > 0` still require an `EvmPaymentVerifier` pass.
+3. **`stripe_callback`** — Stripe webhook receiver. `stripe_event_verified?` does a real
+   `Stripe::Webhook.construct_event` signature check when `STRIPE_WEBHOOK_SECRET` is configured and
+   **fails closed in production** otherwise. Only `pending` items transition; `charge.succeeded`
+   confirms via `confirm_payment!`, and failure/cancel events release the reservation via `cancel`.
+   A replay guard (app-level check + partial unique index on `ticket_items.txhash`) stops one
+   payment from redeeming multiple orders.
 
 ### 4.8 Activity — typed notification/audit log
 
@@ -475,23 +482,25 @@ from scratch:
 lookup by (selector_type: "code", event_id, code) ──▶ not found ──▶ inline error, no ticket_item created
         │ found
         ▼
-expired? OR order_usage_count >= max_allowed_usages ──▶ yes ──▶ inline error, no ticket_item created
-        │ no
-        ▼
-Coupon#get_discounted_price(amount, paymethod)  (see §4.6 for the exact math)
-        │
-        ▼
-discount_value truthy? ──▶ no  ──▶ ticket_item created at full price, coupon.order_usage_count NOT incremented
+Coupon#available? (nil max_allowed_usages == unlimited) ──▶ no ──▶ inline error, no ticket_item created
         │ yes
         ▼
-coupon.increment!(:order_usage_count)  +  ticket_item.coupon_id = coupon.id
+Coupon#get_discounted_price(amount, paymethod, chain:)  (see §4.6 for the exact math)
+        │
+        ▼
+discount_value truthy? ──▶ no  ──▶ ticket_item created at full price, coupon NOT consumed
+        │ yes
+        ▼
+ticket_item.coupon_id = coupon.id  ──▶ (after the item persists) consume_coupon! increments
+                                        order_usage_count under a row lock, inside the RSVP txn
 ```
 
-- **⚠️ `order_usage_count` is incremented again on `cancel`/`timeout`** (§8.2) — meaning a single
-  successful-then-cancelled redemption consumes **two** usage slots against `max_allowed_usages`,
-  not one. This is a deliberately preserved business rule (anti-abuse), not a bug — but it means
-  `order_usage_count` is *not* "number of currently-active redemptions," it's closer to "number of
-  redemption attempts that got far enough to apply the discount."
+- **`order_usage_count` is consumed only once, after the item persists**, inside the RSVP
+  transaction and under a row lock (`consume_coupon!`) — an aborted request (bad chain, validation
+  failure) no longer burns a usage, and concurrent RSVPs can't over-redeem the last unit.
+- **`cancel`/`timeout` refund the usage** (`decrement!`) so a successful-then-cancelled order nets
+  zero, matching the reservation being released. `order_usage_count` therefore tracks
+  currently-consumed redemptions.
 - **⚠️ No uniqueness/idempotency guard** on which `TicketItem` used a coupon beyond the counter —
   nothing stops the *same* user from using the same code-strategy coupon multiple times across
   separate RSVPs (as long as `max_allowed_usages` isn't exhausted), since the strategy match is
@@ -604,12 +613,10 @@ in earlier revisions of this doc are closed.
 - **Mailers**: `TicketItem#notify_group_owner`, `Comment#create`'s feedback-type notification, and
   `GroupInvite`'s email-invite delivery are all stubbed (`# TODO` comments in the source) pending
   soon/'s mail setup (`resend` gem is in the Gemfile but not yet wired to a mailer class).
-- **Stripe webhook signature verification**: `TicketsController#stripe_callback` does not yet call
-  `Stripe::Webhook.construct_event` — the endpoint currently trusts the payload as-is
-  (`stripe_event_verified?` is a stub returning `true`).
-- **Ticket quantity race condition**: `Ticket#quantity` is decremented via a plain
-  `decrement!`, not a locked/atomic check-and-decrement — concurrent RSVPs against the last unit
-  could oversell. Same caveat inherited from the source design, not newly introduced.
+- **Stripe webhook signature verification** *(now implemented)*: `stripe_event_verified?` calls
+  `Stripe::Webhook.construct_event` when `STRIPE_WEBHOOK_SECRET` is set and **fails closed in
+  production** when it is not. The only remaining deferral is provisioning that secret per
+  environment; without it, production simply rejects Stripe webhooks rather than trusting them.
 - **Group-ticket claim-on-signup**: `add_group_ticket_item`'s `"unbounded"` placeholder
   `TicketItem` (for emails without an account yet) has no corresponding "claim on signup" hook —
   `AuthController#request_code`/`verify_code` don't check for pending unbounded ticket items.
