@@ -1,0 +1,160 @@
+Gemfile
+  s_366b4800ea8f42::t_b9156904367d88 39-48
+  s_366b4800ea8f42::t_ca3c57f6de3dc7 36-38
+  s_366b4800ea8f42::t_fac420c32ba5ae 49-51
+  s_366b4800ea8f42::t_5a4c4202cd45f8 1-35,52-72
+Gemfile.lock
+  s_366b4800ea8f42::t_1c917cff44ef93 1-574
+.dockerignore
+  s_366b4800ea8f42::t_27d61e1306f42b 1-47
+.gitattributes
+  s_366b4800ea8f42::t_34d0470ed09872 1-12
+.github/dependabot.yml
+  s_366b4800ea8f42::t_84a5cc6faddf84 1-12
+.github/workflows/ci.yml
+  s_366b4800ea8f42::t_f8adf0ddee4ed4 1-145
+.gitignore
+  s_366b4800ea8f42::t_410a4468cfa5c6 1-40
+.rubocop.yml
+  s_366b4800ea8f42::t_231baa91e734e3 1-8
+.ruby-version
+  s_366b4800ea8f42::t_b0016d7ba942ba 1
+Dockerfile
+  s_366b4800ea8f42::t_1f80f79b4d9e32 1-87
+Procfile.dev
+  s_366b4800ea8f42::t_ccb6d4dd597c83 1-3
+README.md
+  s_366b4800ea8f42::t_03eb652de48f71 1-24
+Rakefile
+  s_366b4800ea8f42::t_e01acd20287848 1-6
+app/assets/stylesheets/application.tailwind.css
+  s_366b4800ea8f42::t_1e588d5a444b3e 1
+app/controllers/application_controller.rb
+  s_366b4800ea8f42::t_f0ce486a0826f4 1-4
+app/helpers/application_helper.rb
+  s_366b4800ea8f42::t_18166565f1c752 1-2
+app/javascript/application.js
+  s_366b4800ea8f42::t_8e040637bcc513 1-3
+app/javascript/controllers/application.js
+  s_366b4800ea8f42::t_2dee6e83354698 1-9
+app/javascript/controllers/hello_controller.js
+  s_366b4800ea8f42::t_c889071ca28c31 1-7
+app/javascript/controllers/index.js
+  s_366b4800ea8f42::t_00ab90f5957982 1-8
+app/jobs/application_job.rb
+  s_366b4800ea8f42::t_af87edf7173e63 1-7
+app/mailers/application_mailer.rb
+  s_366b4800ea8f42::t_c10cb4b84a5797 1-4
+app/models/application_record.rb
+  s_366b4800ea8f42::t_6079f97e73bdcd 1-3
+app/views/layouts/application.html.erb
+  s_366b4800ea8f42::t_550168bd56ba9e 1-29
+app/views/layouts/mailer.html.erb
+  s_366b4800ea8f42::t_9fb911078e5562 1-13
+app/views/layouts/mailer.text.erb
+  s_366b4800ea8f42::t_7f42f319a7a3db 1
+app/views/pwa/manifest.json.erb
+  s_366b4800ea8f42::t_b4f424c37dc9e7 1-22
+app/views/pwa/service-worker.js
+  s_366b4800ea8f42::t_773e1259db1964 1-26
+bin/brakeman
+  s_366b4800ea8f42::t_ec1a255add6ef5 1-7
+bin/bundler-audit
+  s_366b4800ea8f42::t_5db59117824cb5 1-6
+bin/ci
+  s_366b4800ea8f42::t_0681edfc599a6d 1-6
+bin/dev
+  s_366b4800ea8f42::t_98c1c0d9013b87 1-11
+bin/docker-entrypoint
+  s_366b4800ea8f42::t_0a9d51ea3f170f 1-8
+bin/rails
+  s_366b4800ea8f42::t_291f4edb026782 1-4
+bin/rake
+  s_366b4800ea8f42::t_3460a4ee529981 1-4
+bin/rubocop
+  s_366b4800ea8f42::t_3770bed11e852e 1-8
+bin/setup
+  s_366b4800ea8f42::t_33b542d9534e25 1-38
+bin/thrust
+  s_366b4800ea8f42::t_98c42b9d456446 1-5
+bun.config.js
+  s_366b4800ea8f42::t_8f8373daaee5b1 1-37
+bun.lock
+  s_366b4800ea8f42::t_d89c5a98edfad7 1-168
+config.ru
+  s_366b4800ea8f42::t_2c2427ba58539a 1-6
+config/application.rb
+  s_366b4800ea8f42::t_5c012733200d5d 1-27
+config/boot.rb
+  s_366b4800ea8f42::t_f7350cfda42c2b 1-4
+config/bundler-audit.yml
+  s_366b4800ea8f42::t_cb28125f180824 1-5
+config/cable.yml
+  s_366b4800ea8f42::t_a2c0385cf364cc 1-10
+config/ci.rb
+  s_366b4800ea8f42::t_f4153b66693661 1-23
+config/credentials.yml.enc
+  s_366b4800ea8f42::t_25a414af8d6aca 1
+config/database.yml
+  s_366b4800ea8f42::t_c3874d5b0f41ff 1-85
+config/environment.rb
+  s_366b4800ea8f42::t_90db89a7e8d7e4 1-5
+config/environments/development.rb
+  s_366b4800ea8f42::t_617d6674c9b246 1-78
+config/environments/production.rb
+  s_366b4800ea8f42::t_df135485229f11 1-89
+config/environments/test.rb
+  s_366b4800ea8f42::t_8cdb77696eb750 1-53
+config/initializers/assets.rb
+  s_366b4800ea8f42::t_41b050109cf29e 1-7
+config/initializers/content_security_policy.rb
+  s_366b4800ea8f42::t_9d428a2d358d26 1-29
+config/initializers/filter_parameter_logging.rb
+  s_366b4800ea8f42::t_3ddf002b4cd7f0 1-8
+config/initializers/inflections.rb
+  s_366b4800ea8f42::t_9d630dde3fc0b3 1-16
+config/locales/en.yml
+  s_366b4800ea8f42::t_a9b58ce9ac80b8 1-31
+config/puma.rb
+  s_366b4800ea8f42::t_cecb00a2873620 1-39
+config/routes.rb
+  s_366b4800ea8f42::t_8e5eb5c3b78f1c 1-14
+config/storage.yml
+  s_366b4800ea8f42::t_9dc556029f71bd 1-27
+db/seeds.rb
+  s_366b4800ea8f42::t_d102aa3ddc1650 1-9
+package.json
+  s_366b4800ea8f42::t_15c0a1f8fe83b8 1-14
+public/400.html
+  s_366b4800ea8f42::t_817d3e7bb1bff9 1-135
+public/404.html
+  s_366b4800ea8f42::t_6e58e949e91ab3 1-135
+public/406-unsupported-browser.html
+  s_366b4800ea8f42::t_432533b0505c27 1-135
+public/422.html
+  s_366b4800ea8f42::t_44a31ea5de94c5 1-135
+public/500.html
+  s_366b4800ea8f42::t_a3c13e46392065 1-135
+public/icon.svg
+  s_366b4800ea8f42::t_6321abcad005ee 1-3
+public/robots.txt
+  s_366b4800ea8f42::t_1f7a42b6211057 1
+test/test_helper.rb
+  s_366b4800ea8f42::t_d7ca3c515481c7 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b9c88352b21177d820797248538dd241e15c431f",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
