@@ -1,0 +1,19 @@
+config/initializers/cors.rb
+  s_366b4800ea8f42::t_dc99d2b2d433f4 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "318e5ed24a31f5767a2c7cb195627fbbec08e44c",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
