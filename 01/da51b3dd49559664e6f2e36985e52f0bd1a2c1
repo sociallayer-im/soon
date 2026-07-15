@@ -1,0 +1,203 @@
+db/migrate/20260312000009_add_form_id_to_events.rb
+  s_366b4800ea8f42::t_a38f4d7a6a02e1 1-5
+design/SAILS_COMPARISON.md
+  s_366b4800ea8f42::t_e3f8f45ed5473d 7-18
+  s_366b4800ea8f42::t_f775fd04ea9aa3 1-6,19-150
+app/models/group.rb
+  s_366b4800ea8f42::t_b7daa824a2ee5e 13
+  s_366b4800ea8f42::t_85a92f76178b08 14
+  s_366b4800ea8f42::t_d7443e3fb2e263 12,17-27
+app/policies/badge_class_policy.rb
+  s_366b4800ea8f42::t_e731280d2bf428 1-14
+app/blueprints/badge_blueprint.rb
+  s_366b4800ea8f42::t_7678155ff16e9c 1-10
+db/migrate/20260312000005_create_forms.rb
+  s_366b4800ea8f42::t_8ea048d4905f37 1-16
+db/migrate/20260312000014_create_payment_methods.rb
+  s_366b4800ea8f42::t_a24614e3071c22 1-20
+app/blueprints/activity_blueprint.rb
+  s_366b4800ea8f42::t_d38f276d940b99 1-7
+app/models/participant.rb
+  s_366b4800ea8f42::t_b31500df1f118b 8
+  s_366b4800ea8f42::t_e143bee9520135 4-6
+app/blueprints/comment_blueprint.rb
+  s_366b4800ea8f42::t_23a210c34909ca 1-8
+app/models/voucher.rb
+  s_366b4800ea8f42::t_a6774c854d7556 1-14
+app/models/form_answer.rb
+  s_366b4800ea8f42::t_c016d9f9e2e322 1-4
+app/policies/ticket_policy.rb
+  s_366b4800ea8f42::t_a21ab80c1a53c1 1-7
+db/migrate/20260312000007_create_form_submissions.rb
+  s_366b4800ea8f42::t_5effc9b6038f4d 1-16
+app/blueprints/ticket_item_blueprint.rb
+  s_366b4800ea8f42::t_2586cf261e65b9 1-12
+app/blueprints/coupon_blueprint.rb
+  s_366b4800ea8f42::t_d9e85374c8a444 1-10
+db/migrate/20260312000006_create_form_fields.rb
+  s_366b4800ea8f42::t_df858d1f29583b 1-16
+db/migrate/20260312000016_add_ticket_foreign_key_to_group_invites.rb
+  s_366b4800ea8f42::t_933f3587e3c814 1-5
+app/models/group_invite.rb
+  s_366b4800ea8f42::t_5ed5d06128de45 1-18
+app/controllers/api/v1/vouchers_controller.rb
+  s_366b4800ea8f42::t_1fee535e10c890 126
+  s_366b4800ea8f42::t_de2353907a8754 1-91,93-109,111-125,127-130,132-148,150-166,168-210
+  s_366b4800ea8f42::t_60072e014ca82e 92
+  s_366b4800ea8f42::t_cbfe29e6549c9e 131
+  s_366b4800ea8f42::t_aad3b9f7af81a8 149
+  s_366b4800ea8f42::t_372df2e6299877 167
+  s_366b4800ea8f42::t_63a3665f03c7a2 110
+db/migrate/20260312000015_create_ticket_items.rb
+  s_366b4800ea8f42::t_3ec866f2f7ba49 1-32
+app/controllers/api/v1/activities_controller.rb
+  s_366b4800ea8f42::t_5cade5030a8cb7 1-17
+app/policies/voucher_policy.rb
+  s_366b4800ea8f42::t_fe7b0318385918 1-4
+app/policies/group_invite_policy.rb
+  s_366b4800ea8f42::t_316bbe437c8e6b 1-5
+app/controllers/api/v1/forms_controller.rb
+  s_366b4800ea8f42::t_f11f7262b25128 1-27,30-93
+  s_366b4800ea8f42::t_d1e78647fc2f1a 28-29
+Gemfile
+  s_366b4800ea8f42::t_67dc9169d9ec9d 46-47
+app/models/user.rb
+  s_366b4800ea8f42::t_a0c856b1c819a3 12-14
+app/policies/coupon_policy.rb
+  s_366b4800ea8f42::t_fd85472a6bb51d 1-7
+lib/evm_payment_verifier.rb
+  s_366b4800ea8f42::t_0519e44654032a 1-146
+app/models/comment.rb
+  s_366b4800ea8f42::t_8948728353a626 1-11
+config/routes.rb
+  s_366b4800ea8f42::t_ac3b5eca240514 24-25,28-39
+  s_366b4800ea8f42::t_2e4873335b47c7 45-50
+  s_366b4800ea8f42::t_0434b34a61e110 92-108
+  s_366b4800ea8f42::t_9b3239dfbe1b4f 78-91
+  s_366b4800ea8f42::t_b3cb92a20c9516 109-114
+  s_366b4800ea8f42::t_cea7225c384f2c 60-77
+  s_366b4800ea8f42::t_9af962c925dc64 51-53
+  s_366b4800ea8f42::t_b5856e4f446153 115-124
+app/controllers/api/v1/badges_controller.rb
+  s_366b4800ea8f42::t_2d26a69d163da9 51,61
+  s_366b4800ea8f42::t_93c73836686451 86
+  s_366b4800ea8f42::t_7baa5e8c4b9150 1-50,52-60,62-85,87-99
+app/controllers/api/v1/participants_controller.rb
+  s_366b4800ea8f42::t_c42e3e2740b23c 11-20,22-48
+app/models/ticket.rb
+  s_366b4800ea8f42::t_45da44891e7c89 18
+  s_366b4800ea8f42::t_85124f8de93699 1-17,19-22
+app/models/badge.rb
+  s_366b4800ea8f42::t_621eb307a1ee00 1-19
+app/controllers/api/v1/group_invites_controller.rb
+  s_366b4800ea8f42::t_070baa8ff7e5df 1-107,109,112-135,137-140,143-157
+  s_366b4800ea8f42::t_1749dd887567d0 136,141-142
+  s_366b4800ea8f42::t_68cf1bca3f206c 108,110-111
+app/models/form.rb
+  s_366b4800ea8f42::t_1f2b3da941bbdb 1-12
+app/models/form_submission.rb
+  s_366b4800ea8f42::t_6cce1529b6a492 1-5
+app/models/coupon.rb
+  s_366b4800ea8f42::t_0680a057499b56 1-45
+app/models/event.rb
+  s_366b4800ea8f42::t_40c74cba32d433 8
+  s_366b4800ea8f42::t_ad312485763c26 12-16
+app/blueprints/voucher_blueprint.rb
+  s_366b4800ea8f42::t_e85b1daf3602bc 1-17
+app/controllers/api/v1/tickets_controller.rb
+  s_366b4800ea8f42::t_fbe44a027e7a96 60
+  s_366b4800ea8f42::t_19282fffc8c40a 38
+  s_366b4800ea8f42::t_ab9006a0bec55e 68
+  s_366b4800ea8f42::t_e97038c127c5c9 4
+  s_366b4800ea8f42::t_1f987cae28d0ed 29,195
+  s_366b4800ea8f42::t_78747f54cc6068 1-3,5-28,30-37,39-59,61-67,69-194,196-399
+db/migrate/20260312000004_add_badge_foreign_keys_to_group_invites.rb
+  s_366b4800ea8f42::t_4d0a72e1bc024c 1-6
+db/migrate/20260312000018_create_activities.rb
+  s_366b4800ea8f42::t_19ebd72394e66e 1-20
+app/blueprints/badge_class_blueprint.rb
+  s_366b4800ea8f42::t_089bbd84ca9efd 1-9
+app/models/badge_class.rb
+  s_366b4800ea8f42::t_93c00bcab7610a 1-12
+db/migrate/20260312000013_create_coupons.rb
+  s_366b4800ea8f42::t_56de4f5c86945a 1-21
+app/models/ticket_item.rb
+  s_366b4800ea8f42::t_908cea55969426 1-61
+app/models/form_field.rb
+  s_366b4800ea8f42::t_d40a1807215671 1-3
+app/blueprints/ticket_blueprint.rb
+  s_366b4800ea8f42::t_032be2e5dcc5f1 1-11
+db/migrate/20260312000019_create_comments.rb
+  s_366b4800ea8f42::t_aa412a4a71d9ba 1-25
+app/controllers/api/v1/comments_controller.rb
+  s_366b4800ea8f42::t_172d45ec16b4ab 1-58
+app/blueprints/form_blueprint.rb
+  s_366b4800ea8f42::t_65cf5ec5c56da1 1-13
+db/migrate/20260312000002_create_badge_classes.rb
+  s_366b4800ea8f42::t_867f7286204ac9 1-27
+db/migrate/20260312000017_add_ticket_fields_to_participants.rb
+  s_366b4800ea8f42::t_8f14c7f53964b2 1-14
+app/blueprints/payment_method_blueprint.rb
+  s_366b4800ea8f42::t_8dab00480609fa 1-5
+app/models/activity.rb
+  s_366b4800ea8f42::t_6ea5590bf1d4e3 1-10
+design/CHANGELOG.md
+  s_366b4800ea8f42::t_d0084adf393c23 5-53
+app/policies/badge_policy.rb
+  s_366b4800ea8f42::t_4c96371e4a21ed 1-12
+app/controllers/api/v1/badge_classes_controller.rb
+  s_366b4800ea8f42::t_80c979712103d0 1-66
+db/migrate/20260312000000_add_handle_to_users.rb
+  s_366b4800ea8f42::t_61270675694fca 1-6
+db/migrate/20260312000003_create_badges.rb
+  s_366b4800ea8f42::t_6e4d8a29188d18 1-26
+app/blueprints/form_submission_blueprint.rb
+  s_366b4800ea8f42::t_51b4cfe146bf22 1-12
+db/migrate/20260312000010_create_vouchers.rb
+  s_366b4800ea8f42::t_bcd36adf86cc37 1-24
+app/blueprints/group_invite_blueprint.rb
+  s_366b4800ea8f42::t_a2b4fa8d3e5e2e 1-9
+db/migrate/20260312000011_add_voucher_foreign_key_to_badges.rb
+  s_366b4800ea8f42::t_18b27ba2f4c121 1-5
+db/migrate/20260312000012_create_tickets.rb
+  s_366b4800ea8f42::t_60eae7ce7346a4 1-26
+app/models/payment_method.rb
+  s_366b4800ea8f42::t_55ab523fbea078 1-26
+app/blueprints/participant_blueprint.rb
+  s_366b4800ea8f42::t_d64a3c2840335a 4
+design/ARCHITECTURE.md
+  s_366b4800ea8f42::t_d343ad425318e6 290-291,294-297
+  s_366b4800ea8f42::t_8b7b2f583a6ec5 1-14,16-209,211-215,217-230,232-289,292-293,298-357,582-583,586,597-615
+  s_366b4800ea8f42::t_bcb764315efd74 584-585,587-596
+  s_366b4800ea8f42::t_c1bfd0e87a5233 358-581
+  s_366b4800ea8f42::t_903ea38c8bcd9b 15
+  s_366b4800ea8f42::t_1d05c199239f2a 210
+  s_366b4800ea8f42::t_ff48c1f2210da4 216
+  s_366b4800ea8f42::t_c5b60a5408e8a9 231
+db/migrate/20260312000001_create_group_invites.rb
+  s_366b4800ea8f42::t_5f033dd72ae816 1-24
+app/policies/group_policy.rb
+  s_366b4800ea8f42::t_04000f56a7b232 7
+db/migrate/20260312000008_create_form_answers.rb
+  s_366b4800ea8f42::t_aed19b56ab9ac2 1-11
+Gemfile.lock
+  s_366b4800ea8f42::t_d068e4ebf98a57 83,85-87,121,124-134,143-146,149-150,183-184,202,238,255,317-320,368-371,381-383,434,453,475,477,495,498,507-508,510,524-525,535,553,565,586,600-601,605
+db/schema.rb
+  s_366b4800ea8f42::t_cc3e28c43368b9 13,17-32,54-144,175,203,211-282,353,356-358,360,363,369-385,407-462,495,507,536-570,572,578-588,594,596,598-608,615-617
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "01da51b3dd49559664e6f2e36985e52f0bd1a2c1",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
