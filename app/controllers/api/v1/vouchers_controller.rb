@@ -51,32 +51,41 @@ class Api::V1::VouchersController < Api::BaseController
       return render_error("voucher is not for this user") unless @voucher.receiver_address == current_user.email
     end
 
-    if Badge.where(voucher_id: @voucher.id, owner_id: current_user.id).exists?
-      return render_error("user has already claimed voucher")
-    end
+    badge = nil
+    badge_class = nil
+    @voucher.with_lock do
+      @voucher.reload
 
-    badge_class = @voucher.badge_class
-    badge = Badge.new(
-      index: badge_class.counter,
-      content: @voucher.badge_content || @voucher.message || badge_class.content,
-      metadata: badge_class.metadata,
-      status: "minted",
-      badge_class_id: badge_class.id,
-      creator_id: @voucher.sender_id,
-      owner_id: current_user.id,
-      voucher_id: @voucher.id
-    )
-    badge.title = @voucher.badge_title || badge_class.title
-    badge.image_url = @voucher.badge_image || badge_class.image_url
-    if @voucher.data.present?
-      badge.value = @voucher.data["value"] if @voucher.data["value"]
-      badge.start_time = @voucher.data["start_time"] if @voucher.data["start_time"]
-      badge.end_time = @voucher.data["end_time"] if @voucher.data["end_time"]
-    end
-    badge.save!
+      if @voucher.invalid?
+        return render_error("invalid voucher")
+      end
+      if Badge.where(voucher_id: @voucher.id, owner_id: current_user.id).exists?
+        return render_error("user has already claimed voucher")
+      end
 
-    badge_class.increment!(:counter)
-    @voucher.decrement!(:counter)
+      badge_class = @voucher.badge_class
+      badge = Badge.new(
+        index: badge_class.counter,
+        content: @voucher.badge_content || @voucher.message || badge_class.content,
+        metadata: badge_class.metadata,
+        status: "minted",
+        badge_class_id: badge_class.id,
+        creator_id: @voucher.sender_id,
+        owner_id: current_user.id,
+        voucher_id: @voucher.id
+      )
+      badge.title = @voucher.badge_title || badge_class.title
+      badge.image_url = @voucher.badge_image || badge_class.image_url
+      if @voucher.data.present?
+        badge.value = @voucher.data["value"] if @voucher.data["value"]
+        badge.start_time = @voucher.data["start_time"] if @voucher.data["start_time"]
+        badge.end_time = @voucher.data["end_time"] if @voucher.data["end_time"]
+      end
+      badge.save!
+
+      badge_class.increment!(:counter)
+      @voucher.decrement!(:counter)
+    end
 
     if @voucher.strategy == "event"
       Participant.find_by(voucher_id: @voucher.id)&.update(badge_id: badge.id)

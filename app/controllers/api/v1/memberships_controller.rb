@@ -7,19 +7,30 @@ class Api::V1::MembershipsController < Api::BaseController
   end
 
   # POST /api/v1/groups/:group_id/memberships
+  #
+  # Admin-only direct add — membership can otherwise only be gained via GroupInvite
+  # (see Api::V1::GroupInvitesController), not self-service.
   def create
-    membership = @group.memberships.new(user: current_user, role: "member")
-    if membership.save
+    authorize_group_admin!
+    return if performed?
+
+    user = User.find(params[:user_id])
+    membership = @group.add_member(user.id, params[:role].presence || "member")
+    if membership.persisted?
       render json: MembershipBlueprint.render(membership), status: :created
     else
       render_error(membership.errors.full_messages.join(", "))
     end
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
   end
 
   # PATCH /api/v1/groups/:group_id/memberships/:id
   def update
     membership = @group.memberships.find(params[:id])
     authorize_group_admin!
+    return if performed?
+
     if membership.update(role: params.dig(:membership, :role))
       render json: MembershipBlueprint.render(membership)
     else
@@ -33,6 +44,8 @@ class Api::V1::MembershipsController < Api::BaseController
   def destroy
     membership = @group.memberships.find(params[:id])
     authorize_leave!(membership)
+    return if performed?
+
     membership.destroy
     head :no_content
   rescue ActiveRecord::RecordNotFound

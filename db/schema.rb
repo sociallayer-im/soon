@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_12_000019) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -458,6 +458,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_12_000019) do
     t.index ["event_id", "status"], name: "index_tickets_on_event_id_and_status"
     t.index ["event_id"], name: "index_tickets_on_event_id"
     t.index ["group_id", "status"], name: "index_tickets_on_group_id_and_status"
+    t.check_constraint "quantity IS NULL OR quantity >= 0", name: "tickets_quantity_non_negative"
   end
 
   create_table "track_roles", id: :string, force: :cascade do |t|
@@ -483,6 +484,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_12_000019) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["group_id"], name: "index_tracks_on_group_id"
+    t.index ["name"], name: "index_tracks_on_name", unique: true
   end
 
   create_table "users", id: :string, force: :cascade do |t|

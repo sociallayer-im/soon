@@ -12,6 +12,25 @@ class Ticket < ApplicationRecord
 
   before_save :inherit_group_ticket_type
 
+  # Atomically claims one unit of quantity. Returns true if reserved (or unlimited),
+  # false if sold out — never lets quantity go negative under concurrent callers.
+  def reserve!
+    return true if quantity.nil?
+
+    with_lock do
+      return false if quantity <= 0
+      decrement!(:quantity)
+    end
+    true
+  end
+
+  # Inverse of reserve! — releases one unit back (cancel/timeout).
+  def release!
+    return if quantity.nil?
+
+    with_lock { increment!(:quantity) }
+  end
+
   private
 
   def inherit_group_ticket_type

@@ -1,0 +1,250 @@
+require "test_helper"
+
+class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
+  test "create directly adds a known user by handle, no invite row" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+
+    assert_no_difference "GroupInvite.count" do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: [target.handle], role: "member" }, headers: auth_headers(owner)
+    end
+    assert_response :success
+    assert_equal "added", json_response["results"].first["result"]
+    assert group.memberships.exists?(user: target, role: "member")
+  end
+
+  test "create upgrades an existing member's role without creating an invite" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: target, group: group, role: "member")
+
+    assert_no_difference "GroupInvite.count" do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: [target.handle], role: "admin" }, headers: auth_headers(owner)
+    end
+    assert_equal "role_updated", json_response["results"].first["result"]
+    assert_equal "admin", group.memberships.find_by(user: target).role
+  end
+
+  test "create errors when the known user is already a member at an equal/higher role" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: target, group: group, role: "admin")
+
+    post "/api/v1/groups/#{group.id}/group_invites",
+      params: { receivers: [target.handle], role: "member" }, headers: auth_headers(owner)
+    result = json_response["results"].first
+    assert_equal "error", result["result"]
+    assert_match "membership exists", result["message"]
+  end
+
+  test "create makes a real GroupInvite for an unmatched email" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_difference "GroupInvite.count", 1 do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: ["nobody@test.com"], role: "member" }, headers: auth_headers(owner)
+    end
+    assert_equal "invited", json_response["results"].first["result"]
+    invite = GroupInvite.last
+    assert_equal "sending", invite.status
+    assert_equal "email", invite.receiver_address_type
+    assert_equal "nobody@test.com", invite.receiver_address
+  end
+
+  test "create errors on an unmatched non-email handle" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/group_invites",
+      params: { receivers: ["not-a-handle-or-email"], role: "member" }, headers: auth_headers(owner)
+    result = json_response["results"].first
+    assert_equal "error", result["result"]
+    assert_match "invalid receiver handle", result["message"]
+  end
+
+  test "create requires group admin" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/group_invites",
+      params: { receivers: ["x@test.com"] }, headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "accept flips an email invite to accepted and grants membership" do
+    owner = create_user
+    invitee = create_user(email: "invitee@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "invitee@test.com", expires_at: 30.days.from_now)
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(invitee)
+    assert_response :success
+    assert_equal "accepted", invite.reload.status
+    assert group.memberships.exists?(user: invitee)
+  end
+
+  test "accept rejects a mismatched email" do
+    owner = create_user
+    invitee = create_user(email: "invitee@test.com")
+    other = create_user(email: "someone-else@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "invitee@test.com", expires_at: 30.days.from_now)
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(other)
+    assert_response :unprocessable_entity
+    assert_not group.memberships.exists?(user: other)
+  end
+
+  test "accept rejects an expired invite" do
+    owner = create_user
+    invitee = create_user(email: "invitee@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "invitee@test.com", expires_at: 1.day.ago)
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(invitee)
+    assert_response :unprocessable_entity
+  end
+
+  test "destroy cancels an invite (sender or admin)" do
+    owner = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    delete "/api/v1/groups/#{group.id}/group_invites/#{invite.id}", headers: auth_headers(owner)
+    assert_response :no_content
+    assert_equal "cancelled", invite.reload.status
+  end
+
+  test "revoke also works to reject a pending join request" do
+    owner = create_user
+    requester = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, receiver_id: requester.id, status: "requesting")
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/revoke", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "revoked", invite.reload.status
+    assert_not group.memberships.exists?(user: requester)
+  end
+
+  test "revoke forbids a non-sender, non-admin" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/revoke", headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "request_invite creates a requesting invite" do
+    user = create_user
+    group = create_group
+
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite",
+      params: { role: "member" }, headers: auth_headers(user)
+    assert_response :created
+    invite = GroupInvite.last
+    assert_equal "requesting", invite.status
+    assert_equal user.id, invite.receiver_id
+  end
+
+  test "request_invite rejects an existing member" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite", headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+  end
+
+  test "request_invite rejects a duplicate pending request" do
+    user = create_user
+    group = create_group
+
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite", headers: auth_headers(user)
+    assert_response :created
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite", headers: auth_headers(user)
+    assert_response :unprocessable_entity
+  end
+
+  test "accept_request lets an admin approve a join request" do
+    owner = create_user
+    requester = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, receiver_id: requester.id, status: "requesting")
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept_request", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "accepted", invite.reload.status
+    assert group.memberships.exists?(user: requester)
+  end
+
+  test "accept_request requires group admin" do
+    owner = create_user
+    requester = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, receiver_id: requester.id, status: "requesting")
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept_request", headers: auth_headers(requester)
+    assert_response :forbidden
+  end
+
+  test "send_with_code + accept_with_code — code stays reusable (never flips to accepted)" do
+    owner = create_user
+    joiner1 = create_user
+    joiner2 = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/group_invites/send_with_code",
+      params: { role: "member" }, headers: auth_headers(owner)
+    assert_response :created
+    code = json_response["receiver_address"]
+
+    post "/api/v1/groups/#{group.id}/group_invites/accept_with_code",
+      params: { code: code }, headers: auth_headers(joiner1)
+    assert_response :success
+    assert group.memberships.exists?(user: joiner1)
+
+    post "/api/v1/groups/#{group.id}/group_invites/accept_with_code",
+      params: { code: code }, headers: auth_headers(joiner2)
+    assert_response :success
+    assert group.memberships.exists?(user: joiner2)
+
+    invite = GroupInvite.find_by(receiver_address: code)
+    assert_equal "sending", invite.status
+  end
+
+  test "accept_with_code rejects an invalid code" do
+    owner = create_user
+    joiner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/groups/#{group.id}/group_invites/accept_with_code",
+      params: { code: "NOPE" }, headers: auth_headers(joiner)
+    assert_response :unprocessable_entity
+  end
+
+  test "pending lists only sending-status email invites matching the current user's email" do
+    owner = create_user
+    invitee = create_user(email: "pending-invitee@test.com")
+    group = create_group(owner: owner)
+    create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "pending-invitee@test.com", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/pending", headers: auth_headers(invitee)
+    assert_response :success
+    assert_equal 1, json_response.size
+  end
+end

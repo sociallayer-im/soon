@@ -40,11 +40,7 @@ class Api::V1::TicketsController < Api::BaseController
       return render_error("exceed venue capacity")
     end
     return render_not_found unless @ticket
-
-    if @ticket.quantity
-      return render_error("run out of ticket") if @ticket.quantity <= 0
-      @ticket.decrement!(:quantity)
-    end
+    return render_error("run out of ticket") unless @ticket.reserve!
 
     participant = Participant.find_by(event: @event, user: current_user)
     if participant.nil?
@@ -59,7 +55,10 @@ class Api::V1::TicketsController < Api::BaseController
       else
         TicketItem.new(ticket_type: @ticket.ticket_type, status: "succeeded", user: current_user, ticket: @ticket, event: @event, participant: participant, amount: 0, original_price: 0)
       end
-    return if performed? # an inline error was already rendered by build_paid_ticket_item
+    if performed? # an inline error was already rendered by build_paid_ticket_item
+      @ticket.release!
+      return
+    end
 
     participant.save!
     @event.increment!(:participant_count)
@@ -90,6 +89,7 @@ class Api::V1::TicketsController < Api::BaseController
 
     render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   rescue ActiveRecord::RecordInvalid => e
+    @ticket&.release!
     render_error(e.record.errors.full_messages.join(", "))
   end
 

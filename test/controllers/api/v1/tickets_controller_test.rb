@@ -1,0 +1,626 @@
+require "test_helper"
+
+class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
+  def setup
+    @owner = create_user
+    @group = create_group(owner: @owner, nickname: "group-#{unique_suffix}")
+    @event = create_event(group: @group, owner: @owner)
+  end
+
+  # ---------------------------------------------------------------- rsvp
+
+  test "rsvp on a free ticket succeeds immediately with amount 0" do
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal "succeeded", json_response["ticket_item"]["status"]
+    assert_equal 0, json_response["ticket_item"]["amount"]
+    assert_equal "attending", json_response["participant"]["status"]
+    assert_equal "succeeded", json_response["participant"]["payment_status"]
+  end
+
+  test "rsvp on a paid stripe ticket above the waiver threshold stays pending" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal "pending", json_response["ticket_item"]["status"]
+    assert_equal 1000, json_response["ticket_item"]["amount"]
+  end
+
+  test "rsvp waives stripe amounts under $4 (400 cents) to free" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 350)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal "succeeded", json_response["ticket_item"]["status"]
+    assert_equal 0, json_response["ticket_item"]["amount"]
+  end
+
+  test "rsvp coupon ratio discount: discount is basis points of 10000, final = amount * discount / 10000" do
+    ticket = create_ticket(event: @event)
+    # Price kept well above the $4 stripe-waiver threshold so the waiver doesn't also kick in.
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 10_000)
+    coupon = create_coupon(event: @event, code: "RATIO20", discount_type: "ratio", discount: 2000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "RATIO20" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    # 10000 * 2000 / 10000 = 2000 — NOT "20% off" (8000 remaining), the discount field IS the
+    # resulting fraction to charge, not the fraction removed.
+    assert_equal 2000, json_response["ticket_item"]["amount"]
+    assert_equal 8000, json_response["ticket_item"]["discount_value"]
+    assert_equal 1, coupon.reload.order_usage_count
+  end
+
+  test "rsvp coupon amount discount used as-is on stripe" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    create_coupon(event: @event, code: "AMT10", discount_type: "amount", discount: 300)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "AMT10" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal 700, json_response["ticket_item"]["amount"]
+    assert_equal 300, json_response["ticket_item"]["discount_value"]
+  end
+
+  test "rsvp coupon amount discount scaled x10000 on a non-stripe chain" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1_000_000, chains: ["base"])
+    create_coupon(event: @event, code: "AMTCRYPTO", discount_type: "amount", discount: 30)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base", coupon: "AMTCRYPTO" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    # discount 30 * 10_000 = 300_000
+    assert_equal 700_000, json_response["ticket_item"]["amount"]
+    assert_equal 300_000, json_response["ticket_item"]["discount_value"]
+  end
+
+  test "rsvp coupon amount discount clamps to the item price, never goes negative" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 100)
+    create_coupon(event: @event, code: "HUGE", discount_type: "amount", discount: 10_000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "HUGE" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal 0, json_response["ticket_item"]["amount"]
+    assert_equal 100, json_response["ticket_item"]["discount_value"]
+  end
+
+  # Note: this differs from Coupon#get_discounted_price's own behavior (silent no-discount
+  # pass-through, see the model test) — the rsvp purchase flow adds its own stricter pre-check
+  # and hard-rejects expired/exhausted coupons instead of silently charging full price.
+  test "rsvp with an expired coupon is rejected outright (no ticket_item created)" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    create_coupon(event: @event, code: "EXPIRED", discount_type: "ratio", discount: 5000, expires_at: 1.day.ago)
+    buyer = create_user
+
+    assert_no_difference "TicketItem.count" do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+        params: { payment_method_id: pm.id, coupon: "EXPIRED" }, headers: auth_headers(buyer)
+    end
+    assert_equal "error", json_response["result"]
+    assert_match "coupon is not available", json_response["message"]
+    assert_equal 5, ticket.reload.quantity # reservation released
+  end
+
+  test "rsvp with a usage-exhausted coupon is rejected outright" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    coupon = create_coupon(event: @event, code: "MAXED", discount_type: "ratio", discount: 5000, max_allowed_usages: 1, order_usage_count: 1)
+    buyer = create_user
+
+    assert_no_difference "TicketItem.count" do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+        params: { payment_method_id: pm.id, coupon: "MAXED" }, headers: auth_headers(buyer)
+    end
+    assert_equal "error", json_response["result"]
+    assert_equal 1, coupon.reload.order_usage_count # unchanged
+    assert_equal 5, ticket.reload.quantity
+  end
+
+  test "rsvp respects ticket quantity and rejects once sold out" do
+    ticket = create_ticket(event: @event, quantity: 1)
+    buyer1 = create_user
+    buyer2 = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer1)
+    assert_response :success
+    assert_equal 0, ticket.reload.quantity
+
+    assert_no_difference "TicketItem.count" do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer2)
+    end
+    assert_response :unprocessable_entity
+    assert_match "run out of ticket", json_response["error"]
+    assert_equal 0, ticket.reload.quantity
+  end
+
+  test "rsvp rejects when the event is closed" do
+    @event.update_column(:status, "closed")
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "event closed", json_response["error"]
+  end
+
+  test "rsvp rejects once venue capacity is exceeded" do
+    place = create_place
+    venue = create_venue(group: @group, owner: @owner, place: place, capacity: 1)
+    @event.update!(venue: venue, participant_count: 1)
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "exceed venue capacity", json_response["error"]
+  end
+
+  test "rsvp revives a cancelled participant instead of creating a duplicate row" do
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+    participant = create_participant(event: @event, user: buyer, status: "cancelled")
+
+    assert_no_difference "Participant.count" do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    end
+    assert_response :success
+    assert_equal "attending", participant.reload.status
+  end
+
+  test "rsvp on a succeeded group ticket auto-joins the buyer to the group" do
+    @event.update_column(:kind, "group_ticket")
+    ticket = create_ticket(event: @event) # free -> succeeds immediately, inherits ticket_type group
+    buyer = create_user
+
+    assert_not @group.memberships.exists?(user: buyer)
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal "group", json_response["ticket_item"]["ticket_type"]
+    assert @group.memberships.exists?(user: buyer)
+  end
+
+  test "rsvp 404s for an unknown ticket" do
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/does-not-exist/rsvp", headers: auth_headers(buyer)
+    assert_response :not_found
+  end
+
+  test "rsvp releases the reserved quantity when payment_method_id doesn't match" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: "nonexistent" }, headers: auth_headers(buyer)
+
+    assert_equal 5, ticket.reload.quantity # not decremented, or released back
+  end
+
+  test "rsvp releases the reserved quantity when the requested chain isn't supported by the payment method" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: nil, chains: ["base"], price: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "polygon" }, headers: auth_headers(buyer)
+
+    assert_equal 5, ticket.reload.quantity
+  end
+
+  # ---------------------------------------------------------------- verify_payment
+
+  test "verify_payment is self-only" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    other = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item_id = json_response["ticket_item"]["id"]
+
+    post "/api/v1/tickets/verify_payment", params: { ticket_item_id: ticket_item_id, txhash: "0xdead" }, headers: auth_headers(other)
+    assert_response :forbidden
+  end
+
+  test "verify_payment is idempotent when already succeeded" do
+    ticket = create_ticket(event: @event) # free, immediately succeeded
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    ticket_item_id = json_response["ticket_item"]["id"]
+
+    post "/api/v1/tickets/verify_payment", params: { ticket_item_id: ticket_item_id }, headers: auth_headers(buyer)
+    assert_response :success
+  end
+
+  test "verify_payment requires a txhash for pending non-stripe payments" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item_id = json_response["ticket_item"]["id"]
+
+    post "/api/v1/tickets/verify_payment", params: { ticket_item_id: ticket_item_id }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "txhash is required", json_response["error"]
+  end
+
+  test "verify_payment marks succeeded when EvmPaymentVerifier confirms the tx" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item_id = json_response["ticket_item"]["id"]
+
+    verify_result = OpenStruct.new(success: true, error: nil)
+    EvmPaymentVerifier.stub :verify, verify_result do
+      post "/api/v1/tickets/verify_payment", params: { ticket_item_id: ticket_item_id, txhash: "0xdead" }, headers: auth_headers(buyer)
+    end
+    assert_response :success
+    assert_equal "succeeded", TicketItem.find(ticket_item_id).status
+  end
+
+  test "verify_payment rejects when EvmPaymentVerifier fails" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item_id = json_response["ticket_item"]["id"]
+
+    verify_result = OpenStruct.new(success: false, error: "bad tx")
+    EvmPaymentVerifier.stub :verify, verify_result do
+      post "/api/v1/tickets/verify_payment", params: { ticket_item_id: ticket_item_id, txhash: "0xdead" }, headers: auth_headers(buyer)
+    end
+    assert_response :unprocessable_entity
+    assert_equal "pending", TicketItem.find(ticket_item_id).status
+  end
+
+  # ---------------------------------------------------------------- cancel_unpaid_item
+
+  test "cancel_unpaid_item only works on pending items, releases quantity, and re-increments coupon usage" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    coupon = create_coupon(event: @event, code: "CANCELCOUPON", discount_type: "amount", discount: 100)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "CANCELCOUPON" }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_equal "pending", ticket_item.status
+    assert_equal 4, ticket.reload.quantity
+    assert_equal 1, coupon.reload.order_usage_count
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id },
+      headers: auth_headers(buyer)
+    assert_response :success
+
+    assert_equal "cancelled", ticket_item.reload.status
+    assert_equal 5, ticket.reload.quantity # released back
+    assert_equal 2, coupon.reload.order_usage_count # incremented again, not refunded (anti-abuse, by design)
+  end
+
+  test "cancel_unpaid_item is self-only" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+    other = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id },
+      headers: auth_headers(other)
+    assert_response :forbidden
+  end
+
+  test "cancel_unpaid_item no-ops (ok) for a non-pending item" do
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer) # free, succeeded
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id },
+      headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal "only for pending ticket_item", json_response["message"]
+    assert_equal "succeeded", ticket_item.reload.status
+  end
+
+  # ---------------------------------------------------------------- set_payment_status
+
+  test "set_payment_status requires the correct NEXT_TOKEN" do
+    ENV["NEXT_TOKEN"] = "test-secret"
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/set_payment_status",
+      params: { next_token: "wrong", chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id, amount: 1000 }
+    assert_response :forbidden
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "set_payment_status marks succeeded with the correct token and sufficient amount" do
+    ENV["NEXT_TOKEN"] = "test-secret"
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/set_payment_status",
+      params: { next_token: "test-secret", chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id, amount: 1000 }
+    assert_response :success
+    assert_equal "succeeded", ticket_item.reload.status
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "set_payment_status rejects an amount below the recorded amount" do
+    ENV["NEXT_TOKEN"] = "test-secret"
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "base", kind: "crypto", price: 1000, chains: ["base"], token_address: "0xAAA", receiver_address: "0xBBB")
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "base" }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/set_payment_status",
+      params: { next_token: "test-secret", chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id, amount: 500 }
+    assert_response :unprocessable_entity
+    assert_equal "pending", ticket_item.reload.status
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "set_payment_status is idempotent when already succeeded" do
+    ENV["NEXT_TOKEN"] = "test-secret"
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer) # free -> succeeded
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/set_payment_status",
+      params: { next_token: "test-secret", chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id, amount: 0 }
+    assert_response :success
+    assert_equal "skip verify succeeded ticket_item", json_response["message"]
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  # ---------------------------------------------------------------- add_group_ticket_item / list_group_ticket_types
+
+  test "add_group_ticket_item immediately succeeds and grants membership for a known email" do
+    @group.update!(group_ticket_event_id: @event.id)
+    ticket = create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+    known_user = create_user(email: "known@test.com")
+
+    post "/api/v1/tickets/add_group_ticket_item",
+      params: { group_id: @group.nickname, email: "known@test.com", title: "Yearly Pass" },
+      headers: auth_headers(@owner)
+    assert_response :success
+
+    ti = TicketItem.find_by(ticket: ticket, selector_address: "known@test.com")
+    assert_equal "succeeded", ti.status
+    assert_equal known_user.id, ti.user_id
+    assert @group.memberships.exists?(user: known_user)
+  end
+
+  test "add_group_ticket_item creates an unbounded placeholder for an unknown email" do
+    @group.update!(group_ticket_event_id: @event.id)
+    create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+
+    post "/api/v1/tickets/add_group_ticket_item",
+      params: { group_id: @group.nickname, email: "unknown@test.com", title: "Yearly Pass" },
+      headers: auth_headers(@owner)
+    assert_response :success
+
+    ti = TicketItem.find_by(selector_address: "unknown@test.com")
+    assert_equal "unbounded", ti.status
+    assert_nil ti.user_id
+  end
+
+  test "add_group_ticket_item requires group admin" do
+    @group.update!(group_ticket_event_id: @event.id)
+    create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+    outsider = create_user
+
+    post "/api/v1/tickets/add_group_ticket_item",
+      params: { group_id: @group.nickname, email: "x@test.com", title: "Yearly Pass" },
+      headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "list_group_ticket_types is public and resolves by nickname or id" do
+    ticket = create_ticket(event: @event, group_id: @group.id, ticket_type: "group")
+
+    get "/api/v1/tickets/list_group_ticket_types", params: { group_id: @group.nickname }
+    assert_response :success
+    assert_equal [ticket.id], json_response.map { |t| t["id"] }
+
+    get "/api/v1/tickets/list_group_ticket_types", params: { group_id: @group.id }
+    assert_response :success
+    assert_equal [ticket.id], json_response.map { |t| t["id"] }
+  end
+
+  # ---------------------------------------------------------------- coupons / set_coupon / check_coupon / get_coupon / coupon_price
+
+  test "set_coupon bulk-creates coupons on an event via nested attributes, manager-only" do
+    outsider = create_user
+    post "/api/v1/tickets/set_coupon",
+      params: { event_id: @event.id, coupons: [{ selector_type: "code", discount_type: "ratio", discount: 1000, max_allowed_usages: 5 }] },
+      headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    assert_difference "Coupon.count", 1 do
+      post "/api/v1/tickets/set_coupon",
+        params: { event_id: @event.id, coupons: [{ selector_type: "code", discount_type: "ratio", discount: 1000, max_allowed_usages: 5 }] },
+        headers: auth_headers(@owner)
+    end
+    assert_response :success
+  end
+
+  test "check_coupon is public and looks up by event_id + code" do
+    coupon = create_coupon(event: @event, code: "PUBLICCODE")
+    get "/api/v1/tickets/check_coupon", params: { event_id: @event.id, code: "PUBLICCODE" }
+    assert_response :success
+    assert_equal coupon.id, json_response["coupon"]["id"]
+    assert_equal "PUBLICCODE", json_response["coupon"]["code"]
+  end
+
+  test "check_coupon returns nil for no match" do
+    get "/api/v1/tickets/check_coupon", params: { event_id: @event.id, code: "NOPE" }
+    assert_response :success
+    assert_nil json_response["coupon"]
+  end
+
+  test "get_coupon requires manager and returns only id + code" do
+    coupon = create_coupon(event: @event, code: "SECRETCODE")
+    outsider = create_user
+
+    get "/api/v1/tickets/get_coupon", params: { id: coupon.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/tickets/get_coupon", params: { id: coupon.id }, headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal coupon.id, json_response["coupon_id"]
+    assert_equal "SECRETCODE", json_response["code"]
+  end
+
+  test "coupon_price previews the discount without incrementing usage" do
+    coupon = create_coupon(event: @event, code: "PREVIEW", discount_type: "ratio", discount: 5000)
+
+    get "/api/v1/tickets/coupon_price", params: { code: "PREVIEW", amount: 1000 }
+    assert_response :success
+    assert_equal 500, json_response["amount"]
+    assert_equal 0, coupon.reload.order_usage_count
+  end
+
+  test "coupon_price 404-equivalents for an unknown code" do
+    get "/api/v1/tickets/coupon_price", params: { code: "NOPE", amount: 1000 }
+    assert_response :unprocessable_entity
+  end
+
+  test "coupons index is manager-only" do
+    create_coupon(event: @event)
+    outsider = create_user
+
+    get "/api/v1/tickets/coupons", params: { event_id: @event.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/tickets/coupons", params: { event_id: @event.id }, headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal 1, json_response.size
+    # base view must never leak the redemption code
+    assert_not json_response.first.key?("code")
+  end
+
+  test "coupon show is manager-only" do
+    coupon = create_coupon(event: @event)
+    outsider = create_user
+
+    get "/api/v1/tickets/coupon", params: { id: coupon.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/tickets/coupon", params: { id: coupon.id }, headers: auth_headers(@owner)
+    assert_response :success
+  end
+
+  test "coupon_usage is manager-only and lists ticket_items with profile info" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    coupon = create_coupon(event: @event, code: "USAGECODE", discount_type: "amount", discount: 100)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "USAGECODE" }, headers: auth_headers(buyer)
+
+    outsider = create_user
+    get "/api/v1/tickets/coupon_usage", params: { coupon_id: coupon.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/tickets/coupon_usage", params: { coupon_id: coupon.id }, headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal 1, json_response.size
+    assert_equal buyer.id, json_response.first["user"]["id"]
+  end
+
+  # ---------------------------------------------------------------- list (purchase history)
+
+  test "list is self-only or event-manager-only" do
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+
+    outsider = create_user
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal 1, json_response.size
+
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(@owner)
+    assert_response :success
+  end
+
+  # ---------------------------------------------------------------- stripe_callback / stripe_config
+
+  test "stripe_callback marks a matching ticket_item succeeded on charge.succeeded and requires no auth" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+    ticket_item.update!(txhash: "pi_test123")
+
+    post "/api/v1/tickets/stripe_callback", params: {
+      type: "charge.succeeded",
+      data: { object: { payment_intent: "pi_test123", status: "succeeded" } }
+    }
+    assert_response :success
+    assert_equal "succeeded", ticket_item.reload.status
+  end
+
+  test "stripe_config is public" do
+    get "/api/v1/tickets/stripe_config"
+    assert_response :success
+  end
+end

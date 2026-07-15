@@ -2,6 +2,61 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-07-16 (later) — constraints, application-logic gaps, and a full test suite
+
+Closed the gaps `ARCHITECTURE.md` had flagged as design-vs-implementation mismatches, and built a
+Minitest suite (Rails' built-in framework, matching sails/'s own testing approach — integration
+tests hitting real routes, no fixtures since soon/'s TSID PKs are callback-generated and fixture
+loading bypasses callbacks; `test/support/factory_helpers.rb` provides `create_user`/`create_group`/etc.
+instead). **311 tests, 786 assertions, 0 failures**, stable across repeated runs.
+
+**Constraints/application-logic added** (Part A):
+- `Membership#role` now validates inclusion in `member|admin|owner` (was previously unchecked).
+- `tracks.name` gained a DB-level unique index backing the existing model validation.
+- `MembershipsController#create` is now **admin-only direct-add** (`user_id` param,
+  `authorize @group, :manage?`) — closes a real self-join hole where any authenticated user could
+  join any group directly, completely bypassing `GroupInvite`'s invite/request flow.
+- Added `Api::V1::ParticipantsController#approve` (`POST .../participants/:id/approve`) — the
+  event owner or a group admin/owner can move a `pending` (requires-approval) participant to
+  `attending`. This was previously undocumented-missing: `require_approval`/`need_approval`
+  expressed intent with no way to act on it.
+- `Ticket#reserve!`/`#release!` — atomic (row-locked) quantity claim/refund, replacing a
+  non-atomic `decrement!` that could oversell under concurrent RSVPs. `TicketItem#cancel`/`#timeout`
+  now call `release!`. A DB `CHECK (quantity IS NULL OR quantity >= 0)` constraint backs it.
+- `VouchersController#use` — the double-claim check, badge minting, and counter decrement are now
+  wrapped in `voucher.with_lock`, with `invalid?`/double-claim re-checked *inside* the lock — closes
+  a concurrent-over-redemption race on high-`counter` vouchers.
+
+**Real bugs found and fixed while building test coverage** (not part of Part A's plan — surfaced
+by actually exercising every flow):
+- `MembershipsController#update`/`#destroy` and `EventRolesController#create`/`#update`/`#destroy`
+  — inline `authorize_*!` helpers rendered a 403 but didn't halt execution, so the action continued
+  and hit Rails' `DoubleRenderError`. Added `return if performed?` after each.
+- `EventRole#item_type` inclusion validation checked lowercase `"user"|"group"`, but Rails'
+  polymorphic `belongs_to` needs the real constant name (`User`/`Group`) to resolve — any code path
+  touching `.item` risked a `NameError`. Fixed the validation list; added a `valid_item_type?` guard
+  in the controller so bad input now gets a clean `422` instead of crashing.
+- `BadgeClassesController#create` had an **authorization bypass**: it checked `params[:group_id]`
+  (top-level) to decide whether to run the group-admin check, but `group_id` is only ever sent
+  nested under `params[:badge_class][:group_id]` like every other controller — so a normally-shaped
+  request skipped the `authorize` call entirely. Fixed to read from the permitted params.
+- `BadgeClassesController#index`'s `group_handle` filter joined a nonexistent `groups.handle`
+  column (should be `groups.nickname`, same mistake already made and fixed once this session in
+  `TicketsController`).
+- `Participant#status` inclusion validation was missing `"cancelled"` — `TicketItem#cancel`/`#timeout`
+  call `participant.update(status: "cancelled", ...)` (non-bang), which was silently failing
+  validation and no-opping, so a cancelled ticket purchase never actually marked its participant
+  cancelled.
+
+**Confirmed-as-designed, not changed** (flagged during test-writing, correctly left alone):
+- `MarkersController` still has no `authorize` calls despite `MarkerPolicy` defining real rules —
+  pre-existing gap from the original sonnet/ port, out of scope for this pass.
+- `TicketPolicy`/`CouponPolicy` are currently dead code — `TicketsController` always authorizes via
+  `EventPolicy` through the parent event, never instantiates these two classes.
+- `Coupon#get_discounted_price`'s lenient silent-no-discount behavior (expired/exhausted → full
+  price, no error) vs. `TicketsController#rsvp`'s stricter hard-rejection of expired/exhausted
+  coupons before charging — a deliberate two-tier policy, not an inconsistency.
+
 ## 2026-07-16
 
 Ported the next tier of sails/ functionality into soon/, per the scoping decisions in

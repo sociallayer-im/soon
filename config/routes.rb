@@ -40,7 +40,11 @@ Rails.application.routes.draw do
       end
 
       resources :events do
-        resources :participants, only: %i[index create update destroy]
+        resources :participants, only: %i[index create update destroy] do
+          member do
+            post :approve
+          end
+        end
         resources :event_roles,  only: %i[index create update destroy]
 
         get    "form",             to: "forms#get_event_form"

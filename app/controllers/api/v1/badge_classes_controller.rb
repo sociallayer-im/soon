@@ -3,12 +3,13 @@ class Api::V1::BadgeClassesController < Api::BaseController
 
   # POST /api/v1/badge_classes
   def create
-    if params[:group_id].present?
-      group = Group.find(params[:group_id])
+    permitted = badge_class_params
+    if permitted[:group_id].present?
+      group = Group.find(permitted[:group_id])
       authorize group, :manage?, policy_class: GroupPolicy
     end
 
-    badge_class = BadgeClass.new(badge_class_params.merge(creator: current_user))
+    badge_class = BadgeClass.new(permitted.merge(creator: current_user))
     if badge_class.save
       render json: BadgeClassBlueprint.render(badge_class), status: :created
     else
@@ -29,7 +30,7 @@ class Api::V1::BadgeClassesController < Api::BaseController
     scope = scope.where(group_id: params[:group_id]) if params[:group_id].present?
     scope = scope.where(badge_type: params[:badge_type]) if params[:badge_type].present?
     scope = scope.joins(:creator).where(users: { handle: params[:creator_handle] }) if params[:creator_handle].present?
-    scope = scope.joins(:group).where(groups: { handle: params[:group_handle] }) if params[:group_handle].present?
+    scope = scope.joins(:group).where(groups: { nickname: params[:group_handle] }) if params[:group_handle].present?
     render_collection scope, blueprint: BadgeClassBlueprint
   end
 

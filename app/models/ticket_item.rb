@@ -40,6 +40,7 @@ class TicketItem < ApplicationRecord
     end
     update(status: "cancelled", participant_id: nil)
     coupon&.increment!(:order_usage_count)
+    ticket.release!
   end
 
   def timeout
@@ -48,6 +49,7 @@ class TicketItem < ApplicationRecord
     end
     update(status: "timeout", participant_id: nil)
     coupon&.increment!(:order_usage_count)
+    ticket.release!
   end
 
   def notify_group_owner

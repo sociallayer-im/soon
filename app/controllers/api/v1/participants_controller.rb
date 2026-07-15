@@ -75,6 +75,20 @@ class Api::V1::ParticipantsController < Api::BaseController
     render_not_found
   end
 
+  # POST /api/v1/events/:event_id/participants/:id/approve
+  #
+  # Event owner or group admin/owner moves a pending (requires-approval) participant to attending.
+  def approve
+    authorize @event, :update?
+    participant = @event.participants.find(params[:id])
+    return render_error("participant is not pending") unless participant.status == "pending"
+
+    participant.update!(status: "attending")
+    render json: ParticipantBlueprint.render(participant)
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
+  end
+
   private
 
   def set_event

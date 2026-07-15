@@ -5,7 +5,13 @@ being built as a leaner replacement for `sails/`. See `SAILS_COMPARISON.md` for 
 from where and why, and `CHANGELOG.md` for a chronological log of changes. This document is the
 synchronic view — how the system is actually built, independent of its migration history.
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-16 (later revision — constraints/logic gaps closed, test suite added).
+
+**Testing**: Rails Minitest (`bin/rails test`), no fixtures (soon/'s TSID PKs are callback-generated;
+`test/support/factory_helpers.rb` provides `create_user`/`create_group`/etc. instead), one
+`test/controllers/api/v1/*_controller_test.rb` per controller plus `test/models/*_test.rb` for the
+validations/constraints called out in §8. 311 tests, 786 assertions, 0 failures as of this
+revision.
 
 ## 1. Architecture overview
 
@@ -213,8 +219,11 @@ that grants a group-ticket tier to someone by email: if they already have an acc
 
 `TicketsController#rsvp` is the central purchase/reservation flow:
 1. Guard on event closed/ended and venue capacity.
-2. Decrement `ticket.quantity` if it's set (no row-level locking — see §9 for the known
-   overselling race).
+2. `@ticket.reserve!` — atomically (row-locked via `with_lock`) claims one unit of `quantity`, or
+   is a no-op that always succeeds if `quantity` is `nil` (unlimited). Returns `false` (→ "run out
+   of ticket") if sold out. Fixed 2026-07-16 — previously a raw `decrement!` with no locking, which
+   could oversell under concurrent RSVPs against the last unit. Any abort later in `rsvp` (payment
+   method not found, coupon error, `RecordInvalid`) calls `@ticket.release!` to give the unit back.
 3. Find-or-create-or-revive the caller's `Participant` for this event (one row per user per
    event; a cancelled participant re-RSVPing gets its fields reset rather than a new row).
 4. **If the ticket has `payment_methods`**: resolve the requested `PaymentMethod`, apply a coupon
@@ -375,12 +384,11 @@ transition, race condition) — not a hypothetical, something that could bite a 
               ▼                                 ▼
           [pending]                       [attending]
               │
-              │  ⚠️ no manager-side "approve" action exists — a pending
-              │     participant can only change their own status via
-              │     PATCH (self-only), never promoted to attending by
-              │     an event manager/admin. The `need_approval` intent
-              │     on Ticket and `require_approval` on Event currently
-              │     have no corresponding approval endpoint.
+              │  POST .../participants/:id/approve — event owner or group
+              │  admin/owner only (EventPolicy#update?), added 2026-07-16.
+              │  Only transitions FROM "pending"; 422 otherwise. Fixed the
+              │  gap where require_approval/need_approval expressed intent
+              │  with no way to act on it.
               ▼
      [attending | declined | maybe]   ← reachable via self-service PATCH
                                           from ANY prior status, including
@@ -440,12 +448,11 @@ unless the caller cleans those up separately).
                               [timeout]  (same coupon-increment side effect as cancel)
 ```
 
-- **⚠️ `Ticket#quantity` decrement** (`decrement!`, no row lock) happens *before* payment is
-  confirmed, at `rsvp` time — two concurrent requests against the last unit can both succeed in
-  decrementing (a classic non-atomic check-then-write race). Not new to `soon/`, inherited as-is.
-- **⚠️ No state transition back from `pending` to available inventory on cancel/timeout** —
-  `Ticket#quantity` is never incremented back when a `TicketItem` is cancelled or times out. A
-  cancelled reservation permanently consumes one unit of `quantity`.
+- **Fixed 2026-07-16**: `Ticket#quantity` claim/release is now atomic (`Ticket#reserve!`/`#release!`,
+  row-locked via `with_lock`, backed by a DB `CHECK (quantity IS NULL OR quantity >= 0)` constraint)
+  and symmetric — `TicketItem#cancel`/`#timeout` call `ticket.release!` to give the unit back, so a
+  cancelled reservation no longer permanently consumes inventory. Previously a raw `decrement!` with
+  no lock and no refund path (both flagged as risks in an earlier revision of this doc).
 - **Terminal states**: `succeeded`, `cancelled`, `timeout` are all effectively terminal — no
   controller action transitions *out* of them. A `succeeded` item can never be refunded/reversed
   through this API surface.
@@ -492,37 +499,30 @@ coupon.increment!(:order_usage_count)  +  ticket_item.coupon_id = coupon.id
 
 ### 8.4 Group membership — adding members and promoting admins
 
-Two independent, unrelated entry points exist for becoming a member — this is the one place
-where "workflow" is really "two workflows that don't know about each other":
+**Fixed 2026-07-16**: membership can now only be gained through `GroupInvite` (Path B below) —
+there is no self-join path anymore. `POST /groups/:id/memberships` used to have zero authorization
+(any authenticated user could join any group directly); it's now admin-only direct-add
+(`authorize @group, :manage?`, `user_id` param), which is really just Path B's "known-user direct
+add" branch exposed as its own endpoint for a manager who already knows who they want to add.
 
 ```
-Path A — self-service join (direct, no approval):
-  POST /groups/:id/memberships  →  Membership.create(user: current_user, role: "member")
-  ⚠️ NO AUTHORIZATION CHECK on this action at all — any authenticated user can join any
-     group at will, regardless of the group's own can_join_event-style settings (which,
-     note, govern *event* joining, not group joining — there is no analogous
-     can_join_group setting enforced here).
-
-Path B — invite-mediated (see §4.2 for full detail):
+POST /groups/:id/memberships (admin/owner only) OR invite-mediated (see §4.2 for full detail):
   known user  → Group#add_member called directly by an admin/owner (no invite record)
   unknown email → GroupInvite[sending] → accept → Group#add_member
   reusable code → GroupInvite[sending, permanent] → accept_with_code → Group#add_member
   join request  → GroupInvite[requesting] → accept_request (admin/owner only) → Group#add_member
-                  ⚠️ no reject/decline action exists for a "requesting" invite — it can only
-                     be left pending indefinitely or accepted, never explicitly declined
-                     (the generic cancel/revoke actions operate on sending-status invites
-                     in the GroupInvitesController flow, not requesting-status ones — verify
-                     before assuming they cover this case)
+                  Confirmed: the generic revoke action (POST .../group_invites/:id/revoke) also
+                  works on "requesting"-status invites as a reject/decline — no separate action
+                  was needed. group_admin? gates it since a request has no sender_id.
 ```
 
 **Role promotion** (`member → admin/owner` or any other role change) is a single, separate,
 non-workflow action: `PATCH /groups/:id/memberships/:id` with `{ membership: { role: "..." } }`,
 gated by `authorize_group_admin!` (must already be `admin`/`owner`). There's no request/approve
 cycle for promotions — an admin can unilaterally set anyone's role to anything.
-⚠️ **`Membership#role` has no `inclusion` validation** — the schema comment documents
-`member | admin | owner` but nothing stops `PATCH` from writing an arbitrary string, which would
-then silently fail every `role: %w[admin owner]` check downstream (i.e., a typo'd role value
-doesn't error, it just quietly locks that membership out of admin-gated actions).
+**Fixed 2026-07-16**: `Membership#role` now validates `inclusion: { in: %w(member admin owner) }` —
+previously any string silently passed and would quietly break every `role: %w[admin owner]` check
+downstream.
 
 **Leaving**: `DELETE /groups/:id/memberships/:id`, self or admin/owner
 (`authorize_leave!`) — no distinct "removed by admin" vs. "left voluntarily" state, both just
@@ -563,11 +563,12 @@ Badge[minted]              (terminal —       two Badge rows; both stay
 ```
 
 - **Voucher-side guards**, evaluated in order on every `use` call: `voucher.invalid?`
-  (`counter == 0 || expired`) → strategy match → per-user double-claim check. **⚠️ the
-  double-claim check is per-`(voucher_id, owner_id)`, not global** — a `counter: 10` code voucher
-  is correctly claimable by 10 *different* users, but nothing stops those 10 claims from
-  happening concurrently past the `counter` cap (same non-atomic `decrement!` pattern as
-  `Ticket#quantity`, §8.2) — ⚠️ possible over-redemption under concurrent load.
+  (`counter == 0 || expired`) → strategy match → per-user double-claim check. The double-claim
+  check is per-`(voucher_id, owner_id)`, not global — a `counter: 10` code voucher is correctly
+  claimable by 10 *different* users. **Fixed 2026-07-16**: the double-claim re-check, badge
+  creation, and counter decrement now all happen inside `voucher.with_lock` (row-locked), with
+  `invalid?`/double-claim re-verified after acquiring the lock — closes what was previously a
+  non-atomic race allowing over-redemption past the `counter` cap under concurrent claims.
 - **`badge_class.counter`** (the running mint index used as `Badge#index`) is captured *before*
   increment, so the first badge minted from a class gets `index == badge_class.counter`'s value
   at call time, not `+1` — off-by-one-looking but intentional (see the source comment in
@@ -582,18 +583,24 @@ Badge[minted]              (terminal —       two Badge rows; both stay
 
 These are not oversights to silently fix — they're deliberate stopping points, listed here so
 they're not mistaken for bugs during review. §8 flags additional risk points inline with ⚠️ at the
-exact state-machine step they affect — the three most severe are pulled up here too:
+exact state-machine step they affect.
 
-- **`MembershipsController#create` has no authorization check** — any authenticated user can join
-  any group at will (§8.4). If group privacy/approval is an intended feature, this needs a policy
-  before it ships, not just documentation.
-- **No manager-approval action for `pending` participants** — `Event#require_approval` and
-  `Ticket#need_approval` both express *intent* to gate registration, but no controller action
-  lets a manager move a participant from `pending` to `attending`; only the registrant's own
-  self-service `PATCH` can change their status (§8.1).
-- **`Membership#role` has no `inclusion` validation** — `PATCH /memberships/:id` accepts any
-  string as `role`, silently breaking every downstream `role: %w[admin owner]` check for a
-  typo'd value instead of raising a `422` (§8.4).
+**Closed 2026-07-16** (previously listed here as the three most severe gaps — see
+`CHANGELOG.md`'s 2026-07-16 "constraints, application-logic gaps" entry for full detail):
+`MembershipsController#create`'s missing authorization, the missing manager-approval action for
+`pending` participants (now `ParticipantsController#approve`), and `Membership#role`'s missing
+`inclusion` validation.
+
+Also fixed in the same pass, and covered by a new 311-test Minitest suite
+(`test/controllers/api/v1/`, `test/models/`) built at the same time: two `DoubleRenderError`-causing
+missing `return`s (`MembershipsController`, `EventRolesController`), `EventRole#item_type`'s
+lowercase-vs-constant-name validation mismatch, an authorization bypass in
+`BadgeClassesController#create` (checked the wrong params key), a `groups.handle`-vs-`nickname`
+column mistake in `BadgeClassesController#index`, and `Participant#status` missing `"cancelled"`
+from its inclusion list (silently broke ticket-cancellation's participant sync). `Ticket#quantity`
+and `Voucher#counter` are now both atomic/row-locked (§8.2, §8.5) — the concurrency races flagged
+in earlier revisions of this doc are closed.
+
 - **Mailers**: `TicketItem#notify_group_owner`, `Comment#create`'s feedback-type notification, and
   `GroupInvite`'s email-invite delivery are all stubbed (`# TODO` comments in the source) pending
   soon/'s mail setup (`resend` gem is in the Gemfile but not yet wired to a mailer class).
