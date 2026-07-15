@@ -11,4 +11,29 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  namespace :api do
+    namespace :v1 do
+      # Auth (no JWT required)
+      post "auth/request_code", to: "auth#request_code"
+      post "auth/verify_code",  to: "auth#verify_code"
+
+      # Resources
+      resources :users, only: %i[show update]
+
+      resources :groups do
+        resources :memberships, only: %i[index create update destroy]
+      end
+
+      resources :events do
+        resources :participants, only: %i[index create update destroy]
+        resources :event_roles,  only: %i[index create update destroy]
+      end
+
+      resources :places,   only: %i[index show]
+      resources :venues,   only: %i[index show]
+      resources :tracks,   only: %i[index show]
+      resources :markers,  only: %i[index show create update destroy]
+    end
+  end
 end

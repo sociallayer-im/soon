@@ -1,0 +1,15 @@
+class User < ApplicationRecord
+  has_many :memberships, dependent: :delete_all
+  has_many :groups, through: :memberships
+  has_many :events, foreign_key: "owner_id", dependent: :destroy
+  has_many :participants, dependent: :destroy
+  has_many :participated_events, through: :participants, source: :event
+  has_many :markers, foreign_key: "owner_id", dependent: :destroy
+  has_many :venues, foreign_key: "owner_id", dependent: :destroy
+  has_many :track_roles, dependent: :destroy
+  has_many :tracks, through: :track_roles
+  has_many :domains, as: :item, dependent: :destroy
+
+  validates :email, presence: true, uniqueness: true
+  validates :name, presence: true
+end

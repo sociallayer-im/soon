@@ -1,0 +1,6 @@
+require "tsid"
+
+# Use string primary keys by default in all migrations
+Rails.application.config.generators do |g|
+  g.orm :active_record, primary_key_type: :string
+end
