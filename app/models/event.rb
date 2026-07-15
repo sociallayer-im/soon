@@ -5,9 +5,15 @@ class Event < ApplicationRecord
   belongs_to :track, optional: true
   belongs_to :venue, optional: true
   belongs_to :recurring, optional: true
+  belongs_to :form, optional: true
   has_many :participants, dependent: :destroy
   has_many :participant_users, through: :participants, source: :user
   has_many :event_roles, dependent: :destroy
+  has_many :tickets, dependent: :destroy
+  has_many :ticket_items, dependent: :destroy
+  has_many :coupons, dependent: :destroy
+
+  accepts_nested_attributes_for :coupons, allow_destroy: true
 
   validates :title, presence: true
   validates :start_time, presence: true

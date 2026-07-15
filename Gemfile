@@ -43,6 +43,8 @@ gem "oga"
 gem "resend"
 gem "icalendar"
 gem "httpx"
+gem "eth"
+gem "stripe"
 
 group :development, :test do
   # Loads environment variables from .env [https://github.com/bkeepers/dotenv]

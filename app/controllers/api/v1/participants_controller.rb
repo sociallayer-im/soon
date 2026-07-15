@@ -8,12 +8,44 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # POST /api/v1/events/:event_id/participants
   def create
-    participant = @event.participants.new(user: current_user, status: params.dig(:participant, :status) || "attending")
-    if participant.save
-      render json: ParticipantBlueprint.render(participant), status: :created
-    else
-      render_error(participant.errors.full_messages.join(", "))
+    if @event.form_id
+      required_field_ids = FormField.where(form_id: @event.form_id, required: true, for_admin: false).pluck(:id)
+      if required_field_ids.any?
+        answers = Array(params[:form_answers])
+        missing = required_field_ids.reject do |fid|
+          answer = answers.find { |a| a[:field_id].to_s == fid.to_s }
+          answer && answer[:value].present?
+        end
+        return render_error("missing required form fields") if missing.any?
+      end
     end
+
+    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[admin owner])
+    status = params.dig(:participant, :status) || "attending"
+    status = "pending" if (@event.require_approval || @event.form_id.present?) && !is_manager
+
+    participant = @event.participants.new(user: current_user, status: status)
+
+    ActiveRecord::Base.transaction do
+      participant.save!
+
+      if @event.form_id && params[:form_answers].present?
+        valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
+        submission = FormSubmission.find_or_initialize_by(form_id: @event.form_id, user_id: current_user.id)
+        submission.status = "pending"
+        submission.submitted_at = Time.current
+        submission.save!
+        FormAnswer.where(form_submission_id: submission.id).delete_all
+        Array(params[:form_answers]).each do |answer|
+          next unless valid_field_ids.include?(answer[:field_id].to_s)
+          FormAnswer.create!(form_submission_id: submission.id, form_field_id: answer[:field_id], value: answer[:value])
+        end
+      end
+    end
+
+    render json: ParticipantBlueprint.render(participant), status: :created
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # PATCH /api/v1/events/:event_id/participants/:id

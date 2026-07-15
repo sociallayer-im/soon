@@ -4,4 +4,5 @@ class GroupPolicy < ApplicationPolicy
   def create?  = !user.nil?
   def update?  = group_admin?(record)
   def destroy? = group_admin?(record)
+  def manage?  = group_admin?(record)
 end

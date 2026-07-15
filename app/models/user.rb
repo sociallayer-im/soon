@@ -9,6 +9,9 @@ class User < ApplicationRecord
   has_many :track_roles, dependent: :destroy
   has_many :tracks, through: :track_roles
   has_many :domains, as: :item, dependent: :destroy
+  has_many :created_badge_classes, class_name: "BadgeClass", foreign_key: "creator_id", dependent: :destroy
+  has_many :owned_badges, class_name: "Badge", foreign_key: "owner_id", dependent: :destroy
+  has_many :created_badges, class_name: "Badge", foreign_key: "creator_id", dependent: :destroy
 
   validates :email, presence: true, uniqueness: true
   validates :name, presence: true
