@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -500,12 +500,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000002) do
     t.string "permissions", default: [], array: true
     t.string "phone"
     t.jsonb "social_links", default: {}
+    t.string "sol"
     t.string "telegram_id"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["eth"], name: "index_users_on_eth", unique: true
     t.index ["name"], name: "index_users_on_name", unique: true
     t.index ["phone"], name: "index_users_on_phone", unique: true
+    t.index ["sol"], name: "index_users_on_sol", unique: true
   end
 
   create_table "venues", id: :string, force: :cascade do |t|

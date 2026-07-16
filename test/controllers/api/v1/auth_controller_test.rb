@@ -11,9 +11,9 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Code sent", json_response["message"]
   end
 
-  test "request_code returns a uniform response for an unknown email (no enumeration) and mints no code" do
-    assert_no_difference "AuthCode.count" do
-      post "/api/v1/auth/request_code", params: { email: "nobody@test.com" }
+  test "request_code mints a code for an unknown email too — first login is signup" do
+    assert_difference "AuthCode.count", 1 do
+      post "/api/v1/auth/request_code", params: { email: "newcomer@test.com" }
     end
     assert_response :success
     assert_equal "Code sent", json_response["message"]
@@ -87,9 +87,23 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
-  test "verify_code rejects unknown email" do
+  test "verify_code rejects an email that was never sent a code" do
     post "/api/v1/auth/verify_code", params: { email: "nobody@test.com", code: "ABC123" }
     assert_response :unauthorized
+  end
+
+  test "verify_code creates the account on first login (signup)" do
+    AuthCode.create!(recipient: "newcomer@test.com", recipient_type: "email", context: "login", code: "ABC123")
+
+    assert_difference "User.count", 1 do
+      post "/api/v1/auth/verify_code", params: { email: "Newcomer@Test.com", code: "ABC123" }
+    end
+    assert_response :success
+    user = User.find_by(email: "newcomer@test.com")
+    assert user, "user should be created with the normalized email"
+    assert_nil user.name
+    assert json_response["token"].present?
+    assert_equal user.id, json_response["user"]["id"]
   end
 
   test "the returned JWT authenticates subsequent requests" do
@@ -111,12 +125,13 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_nil json_response["code"]
   end
 
-  test "request_code with a blank email is a uniform no-op" do
+  test "request_code rejects a malformed email" do
     assert_no_difference "AuthCode.count" do
       post "/api/v1/auth/request_code", params: { email: "" }
+      assert_response :unprocessable_entity
+      post "/api/v1/auth/request_code", params: { email: "not-an-email" }
+      assert_response :unprocessable_entity
     end
-    assert_response :success
-    assert_equal "Code sent", json_response["message"]
   end
 
   test "verify_code stamps last_signin_at on success" do

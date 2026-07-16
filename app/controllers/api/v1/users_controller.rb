@@ -26,6 +26,12 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   def update
+    # The model allows a nil name (wallet users pre-registration), but you
+    # can't blank out a name you already picked — it's your public identity.
+    if params[:user]&.key?(:name) && params[:user][:name].blank?
+      return render_error("name can't be blank")
+    end
+
     if current_user.update(user_params)
       render json: UserBlueprint.render(current_user, view: :self)
     else

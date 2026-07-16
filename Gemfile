@@ -44,6 +44,7 @@ gem "resend"
 gem "icalendar"
 gem "httpx"
 gem "eth"
+gem "siwe" # Sign-In with Ethereum message parsing/verification
 gem "stripe"
 
 group :development, :test do

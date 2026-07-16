@@ -13,10 +13,21 @@ class User < ApplicationRecord
   has_many :owned_badges, class_name: "Badge", foreign_key: "owner_id", dependent: :destroy
   has_many :created_badges, class_name: "Badge", foreign_key: "creator_id", dependent: :destroy
 
-  validates :email, presence: true, uniqueness: true
+  normalizes :email, with: ->(e) { e.strip.downcase }
+  normalizes :eth,   with: ->(a) { a.strip.downcase }
+
+  # A user signs in via at least one identity: email (code login / Google),
+  # eth (SIWE wallet), or sol (Solana wallet). Wallet-first accounts have no
+  # email until they bind one, and no name until they register one.
+  validates :email, uniqueness: true, allow_nil: true
+  validates :eth,   uniqueness: true, allow_nil: true
+  validates :sol,   uniqueness: true, allow_nil: true
+  validate  :has_login_identity
+
   # `name` is the user's unique identifier/username (the handle concept). It must
-  # be a well-formed slug and unique (the column is uniquely indexed).
-  validates :name, presence: true, uniqueness: true
+  # be a well-formed slug and unique (the column is uniquely indexed). It is nil
+  # until the user picks one on the register screen.
+  validates :name, uniqueness: true, allow_nil: true
   validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
     allow_blank: true
 
@@ -24,6 +35,10 @@ class User < ApplicationRecord
   # cross-group content: homepage featured/top tags, popup-city removal.
   def platform_admin?
     permissions.include?("admin")
+  end
+
+  private def has_login_identity
+    errors.add(:base, "must have an email, eth, or sol identity") if email.blank? && eth.blank? && sol.blank?
   end
 
   # Looks a user up by primary key OR unique username — API paths accept either

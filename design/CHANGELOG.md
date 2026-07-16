@@ -2,7 +2,35 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — platform-admin curation + polish (frontend migration G)
+## 2026-07-16 (latest) — wallet & third-party auth (seastar-auth migration H)
+
+Suite green at 528 runs.
+
+- **SIWE wallet login**: `GET /auth/nonce` mints a single-use nonce (stored as
+  an AuthCode, context `siwe_nonce`); `POST /auth/verify_wallet` verifies the
+  EIP-4361 message + signature (new `siwe` gem) against that nonce — replay of
+  a signed message is rejected — and signs in `find_or_create_by(eth:)`
+  (addresses normalized to lowercase). sails never stored its nonces, so any
+  self-consistent message verified; soon requires a server-minted nonce.
+- **Trusted signin**: `POST /auth/trusted_signin` for the auth service's
+  server-verified flows (Google OAuth → `email`, Solana signature →
+  `sol_address`), gated by the `NEXT_TOKEN` shared secret (secure_compare;
+  endpoint disabled when the env var is unset). New `users.sol` column
+  (unique).
+- **Email signup**: `request_code`/`verify_code` now serve unknown emails too —
+  first login creates the account (`find_or_create_by(email:)`), matching
+  sails' signin_with_email. Malformed emails get a 422 instead of the old
+  silent uniform no-op.
+- **Bind email**: `POST /auth/request_code` with `context=bind_email` +
+  `POST /auth/bind_email` (authed) attach a code-verified email to a
+  wallet-first account. Bind codes and login codes are separate contexts and
+  can't be replayed across flows; email is set-once and must be unused.
+- **User model**: email/name are now optional (wallet-first accounts have
+  neither until bind/register); a user must have at least one of email/eth/sol;
+  email+eth normalized to lowercase; users#update rejects blanking-out an
+  existing name.
+
+## 2026-07-16 — platform-admin curation + polish (frontend migration G)
 
 Suite green at 508 runs.
 

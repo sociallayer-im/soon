@@ -14,9 +14,13 @@ Rails.application.routes.draw do
 
   namespace :api do
     namespace :v1 do
-      # Auth (no JWT required)
-      post "auth/request_code", to: "auth#request_code"
-      post "auth/verify_code",  to: "auth#verify_code"
+      # Auth (no JWT required, except bind_email)
+      post "auth/request_code",   to: "auth#request_code"
+      post "auth/verify_code",    to: "auth#verify_code"
+      get  "auth/nonce",          to: "auth#nonce"
+      post "auth/verify_wallet",  to: "auth#verify_wallet"
+      post "auth/trusted_signin", to: "auth#trusted_signin"
+      post "auth/bind_email",     to: "auth#bind_email"
 
       # Image upload (Cloudflare Images)
       post "upload/image", to: "uploads#image"

@@ -23,10 +23,11 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     assert_equal "Your Social Layer sign-in code", mail.subject
   end
 
-  test "request_code for an unknown email sends nothing" do
-    assert_no_difference -> { ActionMailer::Base.deliveries.size } do
+  test "request_code for an unknown email sends a code too — first login is signup" do
+    assert_difference -> { ActionMailer::Base.deliveries.size }, 1 do
       post "/api/v1/auth/request_code", params: { email: "ghost@test.com" }
     end
+    assert_equal ["ghost@test.com"], ActionMailer::Base.deliveries.last.to
   end
 
   # ---- group invite (deliver_later) ----
