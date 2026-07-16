@@ -32,6 +32,9 @@ Rails.application.routes.draw do
       get "group_invites/pending", to: "group_invites#pending"
 
       resources :groups do
+        member do
+          post :freeze
+        end
         resources :memberships, only: %i[index create update destroy]
         resources :group_invites, only: %i[index create destroy] do
           member do

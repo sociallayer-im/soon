@@ -179,14 +179,13 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_not group.memberships.exists?(user: owner2)
   end
 
-  test "index requires membership and does not leak member email" do
+  test "index is public and does not leak member email" do
     owner = create_user
-    outsider = create_user
     group = create_group(owner: owner)
 
-    # A non-member, non-manager cannot view the roster.
-    get "/api/v1/groups/#{group.id}/memberships", headers: auth_headers(outsider)
-    assert_response :forbidden
+    # The roster is public — group pages show members without login.
+    get "/api/v1/groups/#{group.id}/memberships"
+    assert_response :success
 
     # The roster never exposes member email (UserBlueprint default view).
     get "/api/v1/groups/#{group.id}/memberships", headers: auth_headers(owner)

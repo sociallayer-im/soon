@@ -4,7 +4,7 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
   test "create makes the creator the owner" do
     user = create_user
     assert_difference "Group.count", 1 do
-      post "/api/v1/groups", params: { group: { name: "My Group" } }, headers: auth_headers(user)
+      post "/api/v1/groups", params: { group: { name: "my_group" } }, headers: auth_headers(user)
     end
     assert_response :created
     group = Group.find(json_response["id"])
@@ -43,12 +43,12 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     outsider = create_user
     group = create_group(owner: owner)
 
-    patch "/api/v1/groups/#{group.id}", params: { group: { name: "Renamed" } }, headers: auth_headers(outsider)
+    patch "/api/v1/groups/#{group.id}", params: { group: { name: "renamed" } }, headers: auth_headers(outsider)
     assert_response :forbidden
 
-    patch "/api/v1/groups/#{group.id}", params: { group: { name: "Renamed" } }, headers: auth_headers(owner)
+    patch "/api/v1/groups/#{group.id}", params: { group: { name: "renamed" } }, headers: auth_headers(owner)
     assert_response :success
-    assert_equal "Renamed", group.reload.name
+    assert_equal "renamed", group.reload.name
   end
 
   test "destroy requires group admin/owner" do
@@ -65,7 +65,7 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
 
   test "create sets memberships_count to 1 via the owner membership" do
     user = create_user
-    post "/api/v1/groups", params: { group: { name: "Counted" } }, headers: auth_headers(user)
+    post "/api/v1/groups", params: { group: { name: "counted" } }, headers: auth_headers(user)
     assert_response :created
     assert_equal 1, Group.find(json_response["id"]).memberships_count
   end

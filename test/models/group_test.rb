@@ -2,7 +2,7 @@ require "test_helper"
 
 class GroupTest < ActiveSupport::TestCase
   test "add_member creates a new membership and increments memberships_count" do
-    group = Group.create!(name: "Test Group")
+    group = Group.create!(name: "test_group")
     user = create_user
 
     assert_difference "group.memberships.count", 1 do
@@ -13,7 +13,7 @@ class GroupTest < ActiveSupport::TestCase
   end
 
   test "add_member on an existing membership updates role without a duplicate or extra count increment" do
-    group = Group.create!(name: "Test Group 2")
+    group = Group.create!(name: "test_group_2")
     user = create_user
     group.add_member(user.id, "member")
     assert_equal 1, group.reload.memberships_count
@@ -26,7 +26,7 @@ class GroupTest < ActiveSupport::TestCase
   end
 
   test "add_member raises on an invalid role and does not increment memberships_count" do
-    group = Group.create!(name: "Test Group 3")
+    group = Group.create!(name: "test_group_3")
     user = create_user
 
     assert_raises(ActiveRecord::RecordInvalid) { group.add_member(user.id, "bogus") }
@@ -35,7 +35,7 @@ class GroupTest < ActiveSupport::TestCase
   end
 
   test "add_member raises on an invalid role for an existing membership without changing its role" do
-    group = Group.create!(name: "Test Group 4")
+    group = Group.create!(name: "test_group_4")
     user = create_user
     group.add_member(user.id, "member")
 

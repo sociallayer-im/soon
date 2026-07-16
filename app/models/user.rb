@@ -19,4 +19,10 @@ class User < ApplicationRecord
   validates :name, presence: true, uniqueness: true
   validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
     allow_blank: true
+
+  # Looks a user up by primary key OR unique username — API paths accept either
+  # (/users/0GA2... or /users/alice). Raises RecordNotFound like find.
+  def self.resolve!(identifier)
+    find_by(id: identifier) || find_by!(name: identifier)
+  end
 end

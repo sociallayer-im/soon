@@ -23,6 +23,18 @@ class Api::BaseController < ActionController::API
     render json: { error: "Unauthorized" }, status: :unauthorized
   end
 
+  # For public endpoints that personalize when a token IS present (e.g. event
+  # lists with attendance flags): sets current_user on a valid token, stays
+  # anonymous otherwise — never 401s. Pair with skip_before_action :authenticate!.
+  def authenticate_optional!
+    token = request.headers["Authorization"]&.split(" ")&.last
+    return if token.blank?
+    payload = JwtService.decode(token)
+    @current_user = User.find_by(id: payload["user_id"])
+  rescue JwtService::Error
+    @current_user = nil
+  end
+
   def current_user
     @current_user
   end

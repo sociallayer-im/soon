@@ -1,4 +1,8 @@
 class Api::V1::EventsController < Api::BaseController
+  # Event pages are public — EventPolicy#show? still hides drafts/private events
+  # from anonymous viewers.
+  skip_before_action :authenticate!, only: :show
+  before_action :authenticate_optional!, only: :show
   before_action :set_event, only: %i[show update destroy]
 
   def index
@@ -8,7 +12,7 @@ class Api::V1::EventsController < Api::BaseController
 
   def show
     authorize @event
-    render json: EventBlueprint.render(@event)
+    render json: EventBlueprint.render(@event, view: :extended)
   end
 
   def create

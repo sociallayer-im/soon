@@ -2,7 +2,37 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — iCalendar redesign + timezone correctness
+## 2026-07-16 (latest) — public reads, by-name lookups, richer blueprints (frontend migration A)
+
+First backend chunk of the seastar-app → soon migration. Suite green at 474 runs.
+
+### Identifiers
+- `User.resolve!` / `Group.resolve!`: API paths accept a TSID **or** the unique
+  name slug (`/users/alice`, `/groups/edge-city`) — powers `/profile/[name]` and
+  `/group/[name]` frontend routes.
+- Group `name` is now a validated unique slug (`/\A[a-z0-9_-]{3,30}\z/`, unique
+  index added) — same handle concept as `User#name`, hyphens additionally allowed.
+
+### Public reads (anonymous, server-rendered pages)
+- `authenticate_optional!` in `Api::BaseController`: sets `current_user` from a
+  valid Bearer token, stays anonymous otherwise — public endpoints can personalize.
+- Public now: `users#show` (email only for self/"me"), `groups#show`,
+  `memberships#index` (roster), `events#show` (EventPolicy still hides
+  drafts/private from anonymous viewers).
+
+### Blueprints
+- `GroupBlueprint` default gains `nickname/image_url/logo_url`; new `:detail` view
+  emits the full group page payload (bio, banners, social_links, tags, timezone,
+  dates, can_*_event, counts, parent/children, tracks, venues, memberships).
+- `UserBlueprint` new `:profile` view (bio, eth, social_links); `:self` includes it.
+- `EventBlueprint` gains `image_url/recurring_id/form_id` + `owner`/`track`
+  associations; `:extended` adds `tickets`; `events#show` now renders `:extended`.
+
+### Group freeze
+- `POST /groups/:id/freeze` deactivates (`active: false`) without destroying —
+  **owner-only** (`GroupPolicy#freeze?`); admins cannot take a group offline.
+
+## 2026-07-16 — iCalendar redesign + timezone correctness
 
 Redesigned event calendar generation and fixed the timezone bugs it depended on.
 Suite green at 459 runs.

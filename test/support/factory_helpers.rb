@@ -14,7 +14,7 @@ module FactoryHelpers
 
   def create_group(owner: nil, **attrs)
     n = unique_suffix
-    group = Group.create!({ name: "Group #{n}" }.merge(attrs))
+    group = Group.create!({ name: "group_#{n}" }.merge(attrs))
     group.add_member(owner.id, "owner") if owner
     group
   end

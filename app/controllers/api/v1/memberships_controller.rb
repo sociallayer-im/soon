@@ -1,9 +1,10 @@
 class Api::V1::MembershipsController < Api::BaseController
+  # The member roster is public — group pages show members without login.
+  skip_before_action :authenticate!, only: :index
   before_action :set_group
 
   # GET /api/v1/groups/:group_id/memberships
   def index
-    authorize @group, :members?
     render_collection @group.memberships.includes(:user), blueprint: MembershipBlueprint
   end
 
@@ -58,7 +59,7 @@ class Api::V1::MembershipsController < Api::BaseController
   private
 
   def set_group
-    @group = Group.find(params[:group_id])
+    @group = Group.resolve!(params[:group_id])
   end
 
   def can_remove?(membership)

@@ -6,6 +6,10 @@ class GroupPolicy < ApplicationPolicy
   def destroy? = manages?(record)
   def manage?  = manages?(record)
 
+  # Freezing (deactivating) a group is owner-only — admins manage content,
+  # but only an owner can take the whole group offline.
+  def freeze?  = user ? user.memberships.exists?(group: record, role: "owner") : false
+
   # Who may view the member roster: members of the group, or a manager
   # (including a parent-group manager).
   def members? = group_member?(record) || manages?(record)

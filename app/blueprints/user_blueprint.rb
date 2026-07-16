@@ -5,8 +5,14 @@ class UserBlueprint < Blueprinter::Base
   # member lists, badge owner/creator, participants, etc.
   fields :name, :nickname, :image_url, :created_at
 
+  # Public profile page: bio and public identifiers (wallet, social links).
+  view :profile do
+    fields :bio, :eth, :social_links
+  end
+
   # Private fields, only rendered for the user viewing their own record.
   view :self do
+    include_view :profile
     fields :email
   end
 

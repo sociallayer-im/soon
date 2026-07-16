@@ -1,12 +1,24 @@
 class Api::V1::GroupsController < Api::BaseController
-  before_action :set_group, only: %i[show update destroy]
+  # Group pages are public.
+  skip_before_action :authenticate!, only: :show
+  before_action :set_group, only: %i[update destroy freeze]
 
   def index
     render_collection current_user.groups, blueprint: GroupBlueprint
   end
 
+  # :id accepts a TSID or the group's slug (Group.resolve!).
   def show
-    render json: GroupBlueprint.render(@group)
+    group = Group.resolve!(params[:id])
+    render json: GroupBlueprint.render(group, view: :detail)
+  end
+
+  # POST /api/v1/groups/:id/freeze
+  # Freezing deactivates a group without destroying anything — owner only.
+  def freeze
+    authorize @group
+    @group.update!(active: false)
+    render json: GroupBlueprint.render(@group, view: :detail)
   end
 
   def create

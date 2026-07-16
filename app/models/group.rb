@@ -13,7 +13,18 @@ class Group < ApplicationRecord
   has_many :badge_classes, dependent: :destroy
   has_many :tickets, dependent: :nullify
 
-  validates :name, presence: true
+  # `name` is the group's unique slug (the handle concept) — it appears in URLs
+  # (/group/<name>) so it must be well-formed and unique. Unlike user names,
+  # group slugs also allow hyphens ("edge-city").
+  validates :name, presence: true, uniqueness: true
+  validates :name, format: { with: /\A[a-z0-9_-]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, underscores, or hyphens" },
+    allow_blank: true
+
+  # Looks a group up by primary key OR unique slug — API paths accept either
+  # (/groups/0GA2... or /groups/edge-city). Raises RecordNotFound like find.
+  def self.resolve!(identifier)
+    find_by(id: identifier) || find_by!(name: identifier)
+  end
 
   # Human-facing label — the friendly nickname when set, else the handle-like name.
   def display_name
