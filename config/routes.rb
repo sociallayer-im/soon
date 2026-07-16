@@ -58,9 +58,18 @@ Rails.application.routes.draw do
       end
 
       resources :places,   only: %i[index show]
-      resources :venues,   only: %i[index show]
+      resources :venues,   only: %i[index show create update destroy] do
+        member do
+          post :availability, to: "venues#set_availability"
+        end
+      end
       resources :tracks,   only: %i[index show]
       resources :markers,  only: %i[index show create update destroy]
+
+      post  "recurring",                    to: "recurring#create"
+      get   "recurring/:id",                to: "recurring#show"
+      patch "recurring/:recurring_id",      to: "recurring#update"
+      post  "recurring/:recurring_id/cancel", to: "recurring#cancel"
 
       resources :badge_classes, only: %i[index show create] do
         collection do

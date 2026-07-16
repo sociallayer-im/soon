@@ -14,15 +14,69 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, ids.size
   end
 
-  test "show works for any authenticated user" do
+  test "show returns a public published event to any authenticated user" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
     assert_response :success
     assert_equal event.id, json_response["id"]
+  end
+
+  test "show hides a draft event from a non-manager" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "draft")
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_response :success
+  end
+
+  test "show hides a private event from a non-member but shows it to a member" do
+    owner = create_user
+    member = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "private")
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(member)
+    assert_response :success
+  end
+
+  test "index does not leak draft or private events to ordinary members" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    published = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_event(group: group, owner: owner, status: "draft")
+    create_event(group: group, owner: owner, status: "published", visibility: "private")
+
+    get "/api/v1/events", headers: auth_headers(member)
+    assert_response :success
+    ids = json_response["data"].map { |e| e["id"] }
+    assert_equal [published.id], ids
+  end
+
+  test "index shows a group admin the group's draft and private events" do
+    owner = create_user
+    group = create_group(owner: owner)
+    create_event(group: group, owner: owner, status: "published")
+    create_event(group: group, owner: owner, status: "draft")
+
+    get "/api/v1/events", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal 2, json_response["data"].size
   end
 
   test "show 404s for an unknown id" do
@@ -110,17 +164,123 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Admin Renamed", event.reload.title
   end
 
-  test "destroy requires owner or group admin" do
+  test "destroy soft-cancels (status cancelled) instead of deleting, and keeps participants/tickets" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
+    attendee = create_user
+    participant = create_participant(event: event, user: attendee)
 
     delete "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
     assert_response :forbidden
 
     delete "/api/v1/events/#{event.id}", headers: auth_headers(owner)
     assert_response :no_content
+    assert Event.exists?(event.id), "event row must survive a cancel"
+    assert_equal "cancelled", event.reload.status
+    assert Participant.exists?(participant.id), "participants must not be cascade-deleted"
+  end
+
+  test "create rejects an invalid status" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/events", params: {
+      event: { title: "Bad status", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, status: "totally-made-up" }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+  end
+
+  test "update cannot move an event into another group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    other_group = create_group # attacker is not a member/admin here
+    event = create_event(group: group, owner: owner)
+
+    patch "/api/v1/events/#{event.id}",
+      params: { event: { group_id: other_group.id } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal group.id, event.reload.group_id, "group_id must be immutable on update"
+  end
+
+  # ---------------------------------------------------------------- venue booking
+
+  test "create rejects a venue that belongs to another group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    other_venue = create_venue(group: create_group, owner: create_user)
+
+    post "/api/v1/events", params: {
+      event: { title: "X", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, venue_id: other_venue.id }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+  end
+
+  test "create rejects a double-booking of the same venue" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    start_at = 2.days.from_now.change(hour: 10)
+    create_event(group: group, owner: owner, venue: venue, status: "published",
+                 start_time: start_at, end_time: start_at + 2.hours)
+
+    post "/api/v1/events", params: {
+      event: { title: "Overlap", group_id: group.id, venue_id: venue.id,
+               start_time: start_at + 1.hour, end_time: start_at + 3.hours }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "already booked", json_response["error"]
+  end
+
+  test "create allows a non-overlapping booking of the same venue" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    start_at = 2.days.from_now.change(hour: 10)
+    create_event(group: group, owner: owner, venue: venue, status: "published",
+                 start_time: start_at, end_time: start_at + 2.hours)
+
+    post "/api/v1/events", params: {
+      event: { title: "Later", group_id: group.id, venue_id: venue.id,
+               start_time: start_at + 3.hours, end_time: start_at + 4.hours }
+    }, headers: auth_headers(owner)
+    assert_response :created
+  end
+
+  test "create rejects a booking outside the venue's configured weekly hours" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    # Only open Mondays 09:00-12:00
+    venue.availabilities.create!(day_of_week: "monday", intervals: [["09:00", "12:00"]])
+
+    # Next Monday 15:00 (outside the 09:00-12:00 window)
+    monday = Date.current.next_occurring(:monday)
+    start_at = Time.zone.local(monday.year, monday.month, monday.day, 15, 0)
+
+    post "/api/v1/events", params: {
+      event: { title: "Off-hours", group_id: group.id, venue_id: venue.id, timezone: "UTC",
+               start_time: start_at, end_time: start_at + 1.hour }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "closed", json_response["error"]
+  end
+
+  test "create rejects when event capacity exceeds venue capacity" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, capacity: 20)
+
+    post "/api/v1/events", params: {
+      event: { title: "Too big", group_id: group.id, venue_id: venue.id, max_participant: 100,
+               start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "capacity", json_response["error"]
   end
 
   test "index/show require authentication" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_16_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -516,6 +516,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000002) do
   create_table "venues", id: :string, force: :cascade do |t|
     t.text "about"
     t.string "amenities", default: [], array: true
+    t.boolean "archived", default: false, null: false
     t.integer "capacity"
     t.datetime "created_at", null: false
     t.string "featured_image_url"
@@ -531,6 +532,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000002) do
     t.string "track_ids", default: [], array: true
     t.datetime "updated_at", null: false
     t.string "website"
+    t.index ["archived"], name: "index_venues_on_archived"
     t.index ["group_id"], name: "index_venues_on_group_id"
     t.index ["name"], name: "index_venues_on_name", unique: true
     t.index ["owner_id"], name: "index_venues_on_owner_id"

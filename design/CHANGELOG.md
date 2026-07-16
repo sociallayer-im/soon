@@ -2,7 +2,54 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — fixes from a focused code review of the ticket/payment/coupon/badge flow
+## 2026-07-16 (latest) — event/recurring/venue: build missing features + fix review findings
+
+A code review of the event / recurring / venue / visibility area found two named features
+entirely unbuilt and several authorization/integrity bugs in what existed. This change builds the
+missing pieces and fixes the bugs. Suite green at 362 runs.
+
+### New: recurring event series (`Api::V1::RecurringController`)
+- `POST /recurring` creates a `Recurring` + one `Event` per occurrence (`interval` day|week|month,
+  `event_count`). If a `venue_id` is given, **every** occurrence must pass the venue
+  overlap/availability check before anything is created — the whole series is created in one
+  transaction or not at all.
+- `PATCH /recurring/:recurring_id` updates the series' events; `selector: "after"` (+ `after_event_id`)
+  limits the change to that occurrence onward, otherwise the whole series. Optional
+  `start_time_diff`/`end_time_diff` (seconds) shift each occurrence and re-run the venue check.
+- `POST /recurring/:recurring_id/cancel` soft-cancels the selected occurrences (`status → cancelled`),
+  never destroys. `Recurring has_many :events` is now `dependent: :nullify` so deleting a series row
+  can never cascade away events + attendees.
+
+### New: venue booking & availability
+- `Venue#check_availability(start, end, timezone, event_id = nil)` — the canonical check
+  (overlap against other non-cancelled events, date-override priority over weekly slots,
+  empty-intervals = closed, no-records = open 7×24), mirroring the sails/ design.
+- Wired into `EventsController` create/update and the recurring flow: an event with a `venue_id`
+  is now rejected if it double-books the venue, falls outside configured hours, or its
+  `max_participant` exceeds the venue capacity.
+- `VenuesController` gained `create`/`update`/`destroy` (group-admin) and
+  `POST /venues/:id/availability` to configure `Availability` records (previously a dead model).
+- `Availability` now allows empty intervals (a valid "closed" marker) and validates day_of_week.
+
+### Fixed review findings
+- **Visibility was unenforced.** `EventPolicy#show?` was hardcoded `true` and `show` never called
+  `authorize`, so any authenticated user could read any private/draft event by ID. `show` now
+  authorizes, and `index` filters via a new `Event.visible_to(user)` scope (public+published to all;
+  draft/private only to owner/group-manager).
+- **Cancelling destroyed data.** `EventsController#destroy` did a hard `@event.destroy`, cascading
+  away participants/tickets/coupons. It now soft-cancels (`status: "cancelled"`, row preserved).
+  **Venue `destroy` is likewise a soft delete** — new `venues.archived` flag (migration
+  `20260316000003`), archived venues drop out of `index`, events keep referencing them.
+- **Event could be moved into another group.** `update` no longer accepts `group_id` changes
+  (authorization was checked against the old group).
+- **Cross-group resource attachment.** `venue_id`/`track_id` are validated to belong to the event's
+  group before save.
+- **Missing enum validations.** `Event#status` and `#visibility` now have inclusion validations;
+  `Recurring#interval` is constrained to day|week|month.
+
+Migrations: `20260316000003` (venues.archived).
+
+## 2026-07-16 — fixes from a focused code review of the ticket/payment/coupon/badge flow
 
 A second code review scoped to ticket creation, payment, group tickets, coupons, ticket-badge
 gating, and payment methods surfaced 8 confirmed findings (payment-verification bypasses, coupon
