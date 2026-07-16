@@ -1,0 +1,60 @@
+test/controllers/api/v1/public_reads_test.rb
+  s_f621b7e1fcb97a::t_26158ae28dfa87 1-134
+app/controllers/api/v1/users_controller.rb
+  s_f621b7e1fcb97a::t_8599daa07a897c 2-6,8-10,12-16
+test/controllers/api/v1/memberships_controller_test.rb
+  s_f621b7e1fcb97a::t_73db92404c560b 182,186-188
+app/blueprints/group_blueprint.rb
+  s_f621b7e1fcb97a::t_98f0c717f6b392 4-20
+app/models/user.rb
+  s_f621b7e1fcb97a::t_73a0d109ef48e2 22-27
+app/blueprints/user_blueprint.rb
+  s_f621b7e1fcb97a::t_d9ebc6a850d0df 8-12,15
+app/controllers/api/v1/groups_controller.rb
+  s_f621b7e1fcb97a::t_b2315d422e2483 2-4,10,12-21
+db/migrate/20260716000001_add_unique_index_to_group_names.rb
+  s_f621b7e1fcb97a::t_eeea3b6a9a0449 1-5
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_fdce83fe22d608 2-5
+  s_f621b7e1fcb97a::t_ced75dcf76c780 15
+test/models/group_test.rb
+  s_f621b7e1fcb97a::t_e1349cd4f56659 5,16,29,38
+app/controllers/api/base_controller.rb
+  s_f621b7e1fcb97a::t_5829a82fd5f7d1 26-37
+app/blueprints/event_blueprint.rb
+  s_f621b7e1fcb97a::t_84cefdd7ea6775 6-7,12-13,18
+config/routes.rb
+  s_f621b7e1fcb97a::t_1db9df94a54b10 35-37
+test/support/factory_helpers.rb
+  s_f621b7e1fcb97a::t_b02d1cc899f9e3 17
+app/policies/group_policy.rb
+  s_f621b7e1fcb97a::t_239616312b9380 9-12
+app/models/group.rb
+  s_f621b7e1fcb97a::t_f81c8dbe3abdc9 16-27
+app/controllers/api/v1/memberships_controller.rb
+  s_f621b7e1fcb97a::t_32642fa2b9d027 62
+  s_f621b7e1fcb97a::t_fc2088e7dda21a 2-3
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_d0eea38d7794d7 5-35
+test/controllers/api/v1/groups_controller_test.rb
+  s_f621b7e1fcb97a::t_73db92404c560b 51
+  s_f621b7e1fcb97a::t_e1349cd4f56659 7,46,49,68
+db/schema.rb
+  s_f621b7e1fcb97a::t_398aa3fd582ac0 13,312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "45d4db1caa2a06ac8ded7e65bed547c1e5ee28d3",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
