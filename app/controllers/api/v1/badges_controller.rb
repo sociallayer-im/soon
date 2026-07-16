@@ -8,29 +8,22 @@ class Api::V1::BadgesController < Api::BaseController
 
   # GET /api/v1/badges
   def index
-    badges =
-      if params[:user_id].present?
-        user = User.find(params[:user_id])
-        if params[:owned_badges]
-          user.owned_badges.where(status: "minted")
-        elsif params[:created_badges]
-          user.created_badges.where(status: "minted")
-        else
-          Badge.where(status: "minted")
-        end
-      else
-        Badge.where(status: "minted")
-      end
+    badges = Badge.where(status: "minted")
+    if params[:user_id].present?
+      user = User.find(params[:user_id])
+      badges = badges.where(owner_id: user.id) if params[:owned_badges]
+      badges = badges.where(creator_id: user.id) if params[:created_badges]
+    end
     badges = badges.joins(:owner).where(users: { handle: params[:owner_handle] }) if params[:owner_handle].present?
     badges = badges.where(badge_class_id: params[:badge_class_id]) if params[:badge_class_id].present?
     render_collection badges.includes(:badge_class, :creator, :owner), blueprint: BadgeBlueprint
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
 
   # PATCH /api/v1/badges/:id
   def update
     authorize @badge, :update?, policy_class: BadgePolicy
+    return render_error("invalid display") unless Badge.displays.key?(params[:display].to_s)
+
     if @badge.update(display: params[:display])
       render json: BadgeBlueprint.render(@badge)
     else
@@ -45,7 +38,7 @@ class Api::V1::BadgesController < Api::BaseController
     return render_error("target not found") unless target
     return render_error("cannot transfer to self") if target.id == current_user.id
     return render_error("badge is not transferable") unless @badge.badge_class.transferable
-    return render_error("badge is not owned/accepted") unless %w[minted accepted].include?(@badge.status)
+    return render_error("badge is not owned/accepted") unless @badge.held?
 
     @badge.update(owner_id: target.id)
     Activity.create(item: @badge, initiator: current_user, action: "badge/transfer", receiver: target)
@@ -65,7 +58,7 @@ class Api::V1::BadgesController < Api::BaseController
   # POST /api/v1/badges/:id/swap_code
   def swap_code
     authorize @badge, :own?, policy_class: BadgePolicy
-    return render_error("badge is not owned/accepted") unless %w[minted accepted].include?(@badge.status)
+    return render_error("badge is not owned/accepted") unless @badge.held?
     return render_error("badge is not transferable") unless @badge.badge_class.transferable
 
     token = @badge.gen_swap_code
@@ -75,9 +68,13 @@ class Api::V1::BadgesController < Api::BaseController
   # POST /api/v1/badges/:id/swap
   def swap
     authorize @badge, :own?, policy_class: BadgePolicy
-    target_badge_id = Badge.decode_swap_code(params[:swap_token])
-    target_badge = Badge.find(target_badge_id)
-    return render_error("target badge is not owned/accepted") unless %w[minted accepted].include?(target_badge.status)
+    # Guard the caller's OWN badge too — swap must not move a burned or
+    # non-transferable badge just because the target is transferable.
+    return render_error("badge is not transferable") unless @badge.badge_class.transferable
+    return render_error("badge is not owned/accepted") unless @badge.held?
+
+    target_badge = Badge.find(Badge.decode_swap_code(params[:swap_token]))
+    return render_error("target badge is not owned/accepted") unless target_badge.held?
     return render_error("target badge is not transferable") unless target_badge.badge_class.transferable
 
     previous_owner_id = target_badge.owner_id
@@ -93,7 +90,5 @@ class Api::V1::BadgesController < Api::BaseController
 
   def set_badge
     @badge = Badge.find(params[:id])
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
 end

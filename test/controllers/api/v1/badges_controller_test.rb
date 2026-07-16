@@ -196,6 +196,28 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     # swap_code itself requires transferable: true to issue a token, so the only way
     # target_badge ends up non-transferable at /swap time is if the badge_class is
     # toggled after the token was already issued (tokens are JWTs, valid for 30 days).
+    # The target uses its own badge_class so the caller's badge stays transferable.
+    creator = create_user
+    ownerA = create_user
+    ownerB = create_user
+    bcA = create_badge_class(creator: creator, transferable: true)
+    bcB = create_badge_class(creator: creator, transferable: true)
+    badgeA = create_badge(badge_class: bcA, creator: creator, owner: ownerA)
+    badgeB = create_badge(badge_class: bcB, creator: creator, owner: ownerB)
+
+    post "/api/v1/badges/#{badgeA.id}/swap_code", headers: auth_headers(ownerA)
+    token = json_response["token"]
+
+    bcA.update!(transferable: false)
+
+    post "/api/v1/badges/#{badgeB.id}/swap", params: { swap_token: token }, headers: auth_headers(ownerB)
+    assert_response :unprocessable_entity
+    assert_match "target badge is not transferable", json_response["error"]
+    assert_equal ownerA.id, badgeA.reload.owner_id
+    assert_equal ownerB.id, badgeB.reload.owner_id
+  end
+
+  test "swap rejects when the CALLER's own badge is burned (self-guard)" do
     creator = create_user
     ownerA = create_user
     ownerB = create_user
@@ -206,13 +228,12 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/badges/#{badgeA.id}/swap_code", headers: auth_headers(ownerA)
     token = json_response["token"]
 
-    bc.update!(transferable: false)
+    badgeB.update!(status: "burned") # caller's badge is no longer live
 
     post "/api/v1/badges/#{badgeB.id}/swap", params: { swap_token: token }, headers: auth_headers(ownerB)
     assert_response :unprocessable_entity
-    assert_match "target badge is not transferable", json_response["error"]
-    assert_equal ownerA.id, badgeA.reload.owner_id
-    assert_equal ownerB.id, badgeB.reload.owner_id
+    assert_match "badge is not owned/accepted", json_response["error"]
+    assert_equal ownerA.id, badgeA.reload.owner_id # nothing moved
   end
 
   test "swap fails if the target badge (the one the token was generated from) is no longer minted/accepted" do
@@ -244,5 +265,37 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/badges/#{badge.id}/swap", params: { swap_token: "not-a-real-token" }, headers: auth_headers(owner)
     assert_response :unprocessable_entity
     assert_match "invalid swap token", json_response["error"]
+  end
+
+  test "swap rejects a token that was not minted as a swap code" do
+    creator = create_user
+    owner = create_user
+    other = create_user
+    bc = create_badge_class(creator: creator, transferable: true)
+    badge = create_badge(badge_class: bc, creator: creator, owner: owner)
+    # A normal auth token is a valid JWT but carries no swap auth_type.
+    forged = "Bearer #{JwtService.encode({ 'badge_id' => badge.id })}".split.last
+
+    post "/api/v1/badges/#{badge.id}/swap", params: { swap_token: forged }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "invalid swap token", json_response["error"]
+  end
+
+  test "update rejects an invalid display with 422 (not a 500)" do
+    creator = create_user
+    owner = create_user
+    bc = create_badge_class(creator: creator)
+    badge = create_badge(badge_class: bc, creator: creator, owner: owner)
+
+    patch "/api/v1/badges/#{badge.id}", params: { display: "sideways" }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "invalid display", json_response["error"]
+  end
+
+  test "a not-found badge yields a JSON 404 (base-controller rescue_from)" do
+    user = create_user
+    post "/api/v1/badges/does-not-exist/burn", headers: auth_headers(user)
+    assert_response :not_found
+    assert_equal "Not found", json_response["error"]
   end
 end

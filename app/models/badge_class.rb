@@ -6,7 +6,7 @@ class BadgeClass < ApplicationRecord
 
   validates :name, presence: true
   validates :title, presence: true
+  validates :can_send_badge, inclusion: { in: %w(owner group_member_send) }, allow_nil: true
 
-  enum :status, { active: "active", freezed: "freezed" }
   enum :display, { normal: "normal", hidden: "hidden", pinned: "pinned" }
 end

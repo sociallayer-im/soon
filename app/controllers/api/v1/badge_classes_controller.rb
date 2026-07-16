@@ -15,8 +15,6 @@ class Api::V1::BadgeClassesController < Api::BaseController
     else
       render_error(badge_class.errors.full_messages.join(", "))
     end
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
 
   # GET /api/v1/badge_classes/:id
@@ -39,8 +37,6 @@ class Api::V1::BadgeClassesController < Api::BaseController
     user = User.find_by!(handle: params[:handle])
     group_ids = user.memberships.pluck(:group_id)
     render json: BadgeClassBlueprint.render(BadgeClass.where(group_id: group_ids))
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
 
   # GET /api/v1/badge_classes/:id/invites
@@ -56,12 +52,11 @@ class Api::V1::BadgeClassesController < Api::BaseController
 
   def set_badge_class
     @badge_class = BadgeClass.find(params[:id])
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
 
   def badge_class_params
     params.require(:badge_class).permit(:name, :title, :group_id, :metadata, :image_url,
-      :transferable, :revocable, :weighted, :encrypted, :badge_type, :display, :content)
+      :transferable, :revocable, :weighted, :encrypted, :badge_type, :display, :content,
+      :can_send_badge, permissions: [])
   end
 end

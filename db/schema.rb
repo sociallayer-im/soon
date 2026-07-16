@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_16_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_000004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,16 +59,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000003) do
     t.datetime "created_at", null: false
     t.string "creator_id", null: false
     t.string "display", default: "normal", comment: "normal | hidden | pinned"
-    t.string "domain"
     t.boolean "encrypted", default: false, null: false
     t.string "group_id"
-    t.string "hashtags", array: true
     t.string "image_url"
     t.text "metadata"
     t.string "name", null: false
     t.string "permissions", default: [], array: true
     t.boolean "revocable", default: false, null: false
-    t.string "status", default: "active", comment: "active | freezed"
     t.string "title", null: false
     t.boolean "transferable", default: false, null: false
     t.datetime "updated_at", null: false
@@ -83,13 +80,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000003) do
     t.datetime "created_at", null: false
     t.string "creator_id", null: false
     t.string "display", default: "normal", null: false, comment: "normal | hidden | pinned"
-    t.string "domain"
     t.datetime "end_time"
-    t.string "hashtags", array: true
     t.string "image_url"
     t.integer "index"
-    t.datetime "last_value_used_at"
-    t.text "metadata"
     t.string "owner_id", null: false
     t.datetime "start_time"
     t.string "status", default: "minted", null: false, comment: "minted | burned | accepted"
@@ -551,7 +544,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000003) do
     t.datetime "expires_at"
     t.string "message"
     t.string "receiver_address"
-    t.string "receiver_address_type", comment: "id | email | address"
     t.string "receiver_id"
     t.string "sender_id", null: false
     t.string "strategy", default: "code", comment: "code | account | address | email | event | remember"

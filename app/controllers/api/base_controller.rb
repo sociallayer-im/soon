@@ -7,6 +7,10 @@ class Api::BaseController < ActionController::API
     render json: { error: "Forbidden" }, status: :forbidden
   end
 
+  rescue_from ActiveRecord::RecordNotFound do
+    render_not_found
+  end
+
   PAGY_DEFAULT_LIMIT = 20
 
   private

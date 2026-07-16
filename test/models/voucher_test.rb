@@ -37,16 +37,6 @@ class VoucherTest < ActiveSupport::TestCase
     assert_includes voucher.errors[:strategy], "is not included in the list"
   end
 
-  test "receiver_address_type inclusion validation allows nil" do
-    voucher = Voucher.new(sender: @sender, badge_class: @badge_class, strategy: "code", counter: 1, receiver_address_type: nil)
-    voucher.valid?
-    assert_not_includes voucher.errors[:receiver_address_type], "is not included in the list"
-
-    voucher.receiver_address_type = "carrier_pigeon"
-    voucher.valid?
-    assert_includes voucher.errors[:receiver_address_type], "is not included in the list"
-  end
-
   test "counter must be non-negative" do
     voucher = Voucher.new(sender: @sender, badge_class: @badge_class, strategy: "code", counter: -1)
     assert_not voucher.valid?

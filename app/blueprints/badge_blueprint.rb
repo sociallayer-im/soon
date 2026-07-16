@@ -1,7 +1,7 @@
 class BadgeBlueprint < Blueprinter::Base
   identifier :id
 
-  fields :index, :title, :image_url, :metadata, :content, :status, :display, :hashtags,
+  fields :index, :title, :image_url, :content, :status, :display,
          :value, :start_time, :end_time, :created_at
 
   association :badge_class, blueprint: BadgeClassBlueprint

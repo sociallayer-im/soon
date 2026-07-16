@@ -228,7 +228,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     receiver = create_user
     outsider = create_user
     bc = create_badge_class(creator: creator)
-    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "account", receiver_address_type: "id", receiver_id: receiver.id, counter: 1)
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "account", receiver_id: receiver.id, counter: 1)
 
     post "/api/v1/vouchers/#{voucher.id}/use", headers: auth_headers(outsider)
     assert_response :unprocessable_entity
@@ -245,7 +245,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     owner_of_address = create_user(eth: address)
     outsider = create_user
     bc = create_badge_class(creator: creator)
-    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "address", receiver_address_type: "address", receiver_address: address, counter: 1)
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "address", receiver_address: address, counter: 1)
 
     post "/api/v1/vouchers/#{voucher.id}/use", headers: auth_headers(outsider)
     assert_response :unprocessable_entity
@@ -261,7 +261,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     matching_user = create_user(email: "match-me@test.com")
     outsider = create_user
     bc = create_badge_class(creator: creator)
-    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "email", receiver_address_type: "email", receiver_address: "match-me@test.com", counter: 1)
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "email", receiver_address: "match-me@test.com", counter: 1)
 
     post "/api/v1/vouchers/#{voucher.id}/use", headers: auth_headers(outsider)
     assert_response :unprocessable_entity
@@ -394,7 +394,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     receiver = create_user
     outsider = create_user
     bc = create_badge_class(creator: creator)
-    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "account", receiver_address_type: "id", receiver_id: receiver.id, counter: 1)
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "account", receiver_id: receiver.id, counter: 1)
 
     post "/api/v1/vouchers/#{voucher.id}/reject_badge", headers: auth_headers(outsider)
     assert_response :unprocessable_entity
@@ -456,5 +456,74 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/vouchers/#{voucher.id}", headers: auth_headers(creator)
     assert_response :success
     assert_equal 1, json_response["badges"].size
+  end
+
+  # ---------- regressions (code-review fixes) ----------
+
+  test "send_badge is atomic: one invalid receiver in the batch commits nothing" do
+    creator = create_user
+    valid = create_user
+    bc = create_badge_class(creator: creator)
+
+    assert_no_difference "Voucher.count" do
+      post "/api/v1/vouchers/send_badge",
+        params: { badge_class_id: bc.id, receivers: [valid.handle, "no-such-user"] },
+        headers: auth_headers(creator)
+    end
+    assert_response :unprocessable_entity
+    assert_match "invalid receiver", json_response["error"]
+  end
+
+  test "send_badge_by_address rejects a value for an unweighted badge (guard no longer only on send_badge)" do
+    creator = create_user
+    bc = create_badge_class(creator: creator, weighted: false)
+
+    post "/api/v1/vouchers/send_badge_by_address",
+      params: { badge_class_id: bc.id, receivers: ["0x" + "a" * 40], value: 50 },
+      headers: auth_headers(creator)
+    assert_response :unprocessable_entity
+    assert_match "unweighted", json_response["error"]
+  end
+
+  test "use default-denies a strategy with no eligibility rule (remember)" do
+    creator = create_user
+    claimer = create_user
+    bc = create_badge_class(creator: creator)
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "remember", counter: 1)
+
+    assert_no_difference "Badge.count" do
+      post "/api/v1/vouchers/#{voucher.id}/use", headers: auth_headers(claimer)
+    end
+    assert_response :unprocessable_entity
+    assert_match "cannot be redeemed", json_response["error"]
+  end
+
+  test "use auto-joins the group when badge_class carries group_member_pass" do
+    creator = create_user
+    claimer = create_user
+    group = create_group(owner: creator)
+    bc = create_badge_class(creator: creator, group: group, permissions: ["group_member_pass"])
+    voucher = create_voucher(sender: creator, badge_class: bc, strategy: "code", code: "JOINME", counter: 1)
+
+    post "/api/v1/vouchers/#{voucher.id}/use", params: { code: "JOINME" }, headers: auth_headers(claimer)
+    assert_response :success
+    assert group.memberships.exists?(user: claimer), "claimer should be auto-added to the group"
+  end
+
+  test "use assigns distinct badge indexes across vouchers of the same class" do
+    creator = create_user
+    u1 = create_user
+    u2 = create_user
+    bc = create_badge_class(creator: creator)
+    v1 = create_voucher(sender: creator, badge_class: bc, strategy: "code", code: "C1", counter: 1)
+    v2 = create_voucher(sender: creator, badge_class: bc, strategy: "code", code: "C2", counter: 1)
+
+    post "/api/v1/vouchers/#{v1.id}/use", params: { code: "C1" }, headers: auth_headers(u1)
+    idx1 = json_response["index"]
+    post "/api/v1/vouchers/#{v2.id}/use", params: { code: "C2" }, headers: auth_headers(u2)
+    idx2 = json_response["index"]
+
+    assert_not_equal idx1, idx2
+    assert_equal 3, bc.reload.counter # started at 1, +1 per redemption
   end
 end

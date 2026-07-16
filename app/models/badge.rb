@@ -9,11 +9,19 @@ class Badge < ApplicationRecord
 
   validates :end_time, comparison: { greater_than: :start_time }, allow_nil: true
 
+  # Held == currently owned and live (not burned): the precondition for any move.
+  def held?
+    %w[minted accepted].include?(status)
+  end
+
   def gen_swap_code
     JwtService.encode({ "badge_id" => id, "auth_type" => "swap" })
   end
 
+  # Returns the badge_id only for tokens actually minted as swap codes.
   def self.decode_swap_code(swap_token)
-    JwtService.decode(swap_token)["badge_id"]
+    payload = JwtService.decode(swap_token)
+    raise JwtService::Error, "not a swap token" unless payload["auth_type"] == "swap"
+    payload["badge_id"]
   end
 end

@@ -2,7 +2,42 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — event/recurring/venue: build missing features + fix review findings
+## 2026-07-16 (latest) — badge/voucher: fix review findings + drop redundant columns
+
+A code review of the badge/voucher features fixed 8 findings and removed redundant schema fields.
+Suite green at 373 runs.
+
+### Fixed
+- **Non-atomic batch sends.** `send_badge` / `send_badge_by_address` / `send_badge_by_email` used
+  `return` inside `.map` with no transaction, so a mid-batch invalid receiver left earlier vouchers
+  committed while returning an error (retry → duplicates). Extracted one `issue_vouchers` helper that
+  wraps the batch in a transaction (bad receiver → whole batch rolls back) and applies the
+  unweighted-value guard consistently (it previously existed only on `send_badge`).
+- **swap ignored the caller's own badge.** A burned or non-transferable badge you own could be
+  swapped away (only the target was checked). `swap` now guards `@badge` too. Added `Badge#held?`
+  to dedup the `minted|accepted` check across transfer/swap_code/swap.
+- **swap token type not verified.** `Badge.decode_swap_code` now requires `auth_type == "swap"`, so a
+  generic JWT carrying a badge_id is no longer accepted as a swap token.
+- **`remember` strategy fell through `Voucher#use` with no eligibility check.** The case now
+  default-denies any strategy without an explicit rule.
+- **Dead features made reachable.** `can_send_badge` and `permissions` are now permitted on
+  badge_class create (with a `can_send_badge` inclusion validation), so `group_member_send`
+  authorization and `group_member_pass` auto-join actually work.
+- **Invalid `display` on badge update** returned 500 (enum ArgumentError); now validated → 422.
+- **Badge `index` race.** `index` is allocated under the badge_class row lock (was only the voucher
+  lock), so concurrent redemptions of different vouchers of the same class can't collide.
+- **Repeated RecordNotFound rescues** replaced by one `rescue_from` in `Api::BaseController`
+  (~10 hand-written rescues removed; `badges#swap` keeps its local "invalid swap token" mapping).
+- Extracted `Voucher#build_badge_for(user)` to centralize the voucher-override precedence.
+
+### Removed redundant columns (migration `20260316000004`)
+- `badges`: `last_value_used_at`, `domain`, `hashtags` (never populated), `metadata` (verbatim copy
+  of `badge_classes.metadata` — read it through the association).
+- `badge_classes`: `domain`, `hashtags` (never settable), `status` (`freezed` was never enforced).
+- `vouchers`: `receiver_address_type` (fully derivable from `strategy`). *(The identically-named
+  `group_invites.receiver_address_type` is a different column and was kept.)*
+
+## 2026-07-16 — event/recurring/venue: build missing features + fix review findings
 
 A code review of the event / recurring / venue / visibility area found two named features
 entirely unbuilt and several authorization/integrity bugs in what existed. This change builds the

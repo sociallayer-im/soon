@@ -110,4 +110,41 @@ class Api::V1::BadgeClassesControllerTest < ActionDispatch::IntegrationTest
     assert_nil json_response["badge_class"]["group_id"]
     assert_equal [], json_response["invites"]
   end
+
+  test "create now accepts can_send_badge and permissions (previously unreachable)" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/badge_classes", params: {
+      badge_class: { name: "collab", title: "Collab", group_id: group.id,
+                     can_send_badge: "group_member_send", permissions: ["group_member_pass"] }
+    }, headers: auth_headers(owner)
+    assert_response :created
+
+    bc = BadgeClass.find(json_response["id"])
+    assert_equal "group_member_send", bc.can_send_badge
+    assert_equal ["group_member_pass"], bc.permissions
+  end
+
+  test "group_member_send lets an ordinary member send the badge" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    bc = create_badge_class(creator: owner, group: group, can_send_badge: "group_member_send")
+
+    # A plain member can now issue a code voucher for this class.
+    post "/api/v1/vouchers", params: { badge_class_id: bc.id }, headers: auth_headers(member)
+    assert_response :created
+  end
+
+  test "create rejects an invalid can_send_badge value" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/badge_classes", params: {
+      badge_class: { name: "x", title: "X", group_id: group.id, can_send_badge: "everyone" }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+  end
 end
