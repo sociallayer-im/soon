@@ -837,4 +837,65 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal 0, @event.reload.participant_count, "capacity counter must drop when the reservation is released"
   end
+
+  # ---------------------------------------------------------------- create / index
+
+  test "create adds a ticket type to the event, manager-only" do
+    outsider = create_user
+
+    assert_no_difference -> { @event.tickets.count } do
+      post "/api/v1/events/#{@event.id}/tickets", params: { ticket: { title: "GA", ticket_type: "event" } },
+        headers: auth_headers(outsider)
+    end
+    assert_response :forbidden
+
+    assert_difference -> { @event.tickets.count }, 1 do
+      post "/api/v1/events/#{@event.id}/tickets", params: { ticket: { title: "GA", ticket_type: "event" } },
+        headers: auth_headers(@owner)
+    end
+    assert_response :created
+    assert_equal "GA", json_response["title"]
+  end
+
+  test "create builds nested payment_methods for a paid ticket" do
+    post "/api/v1/events/#{@event.id}/tickets", params: {
+      ticket: {
+        title: "Paid", ticket_type: "event",
+        payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500 }]
+      }
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    ticket = Ticket.find(json_response["id"])
+    assert_equal 1, ticket.payment_methods.count
+    pm = ticket.payment_methods.first
+    assert_equal "stripe", pm.chain
+    assert_equal 2500, pm.price
+  end
+
+  test "create rejects an invalid status with 422" do
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Bad", ticket_type: "event", status: "bogus" } },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+  end
+
+  test "create rejects an invalid ticket_type with 422" do
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Bad", ticket_type: "spaceship" } },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+  end
+
+  test "index lists the event's tickets and 404s for an unknown event" do
+    create_ticket(event: @event, title: "One")
+    create_ticket(event: @event, title: "Two")
+
+    get "/api/v1/events/#{@event.id}/tickets", headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal 2, json_response["data"].size
+
+    get "/api/v1/events/does-not-exist/tickets", headers: auth_headers(@owner)
+    assert_response :not_found
+  end
 end
