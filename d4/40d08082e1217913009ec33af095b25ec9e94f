@@ -1,0 +1,25 @@
+test/controllers/api/v1/users_controller_test.rb
+  s_f621b7e1fcb97a::t_ae622997a61cbc 76-95
+test/controllers/api/v1/auth_controller_test.rb
+  s_f621b7e1fcb97a::t_c4356478695997 104-144
+test/controllers/api/v1/memberships_controller_test.rb
+  s_f621b7e1fcb97a::t_7aee96e6f4b921 197-224
+test/controllers/api/v1/groups_controller_test.rb
+  s_f621b7e1fcb97a::t_15d55f37f9f2d1 101-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d440d08082e1217913009ec33af095b25ec9e94f",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
