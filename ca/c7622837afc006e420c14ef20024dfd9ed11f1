@@ -1,0 +1,64 @@
+app/blueprints/venue_blueprint.rb
+  s_f621b7e1fcb97a::t_b465dc5506b267 5-8
+test/controllers/api/v1/venues_controller_test.rb
+  s_f621b7e1fcb97a::t_ab11c6cdde1ddc 66-177
+app/controllers/api/v1/recurring_controller.rb
+  s_f621b7e1fcb97a::t_c1f6b0bb3cf36d 1-28,30-164
+  s_f621b7e1fcb97a::t_b3cc7223e4f7e3 29
+config/routes.rb
+  s_f621b7e1fcb97a::t_80a24d76327b53 61-65,69-72
+  s_f621b7e1fcb97a::t_f64f84371f8a4f 73
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_ff2b66962ab0d4 5-41,43-49,51-52
+  s_f621b7e1fcb97a::t_2c1ad0dcc98864 42,50
+app/models/event.rb
+  s_f621b7e1fcb97a::t_533b2278ec47e5 18-20,24-25,28-38
+  s_f621b7e1fcb97a::t_960dd489ac7f31 39
+test/controllers/api/v1/events_controller_test.rb
+  s_f621b7e1fcb97a::t_a04cd66e8e1367 17,21,28-79
+  s_f621b7e1fcb97a::t_ae63a255a09c52 167,171-173,180-205
+  s_f621b7e1fcb97a::t_be13e6c8e76189 80,206,208-283
+  s_f621b7e1fcb97a::t_e475696931f001 81
+  s_f621b7e1fcb97a::t_1c38b043d97763 207
+app/models/venue.rb
+  s_f621b7e1fcb97a::t_0b72e6ee5981ce 6,10-61
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_bbf0305ff7f131 5-6,10,17-19,29-36,43-44,47,59-81
+  s_f621b7e1fcb97a::t_3fc0cdf390e878 82-83
+app/policies/event_policy.rb
+  s_f621b7e1fcb97a::t_98cc71b729862b 2-11
+app/blueprints/recurring_blueprint.rb
+  s_f621b7e1fcb97a::t_b2cfd187c12a33 1-9
+app/controllers/api/v1/venues_controller.rb
+  s_f621b7e1fcb97a::t_11a13cce9f6b26 34,37
+  s_f621b7e1fcb97a::t_a3373e3c9ccfcc 2,9-33,35-36,38-54,64-68
+  s_f621b7e1fcb97a::t_939868d60946be 5
+app/models/recurring.rb
+  s_f621b7e1fcb97a::t_3d65a8f9b60668 2-6,9
+test/controllers/api/v1/recurring_controller_test.rb
+  s_f621b7e1fcb97a::t_8c4ba6d9b11f3f 1-142
+app/models/availability.rb
+  s_f621b7e1fcb97a::t_e82c3e77af27a1 4-5,7-19
+db/migrate/20260316000003_add_archived_to_venues.rb
+  s_f621b7e1fcb97a::t_acefaa8c8b5d24 1-6
+app/blueprints/availability_blueprint.rb
+  s_f621b7e1fcb97a::t_e68414ab473d04 1-5
+db/schema.rb
+  s_f621b7e1fcb97a::t_a1ecd067c96850 13,519,535
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "cac7622837afc006e420c14ef20024dfd9ed11f1",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
