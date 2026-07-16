@@ -13,8 +13,11 @@ class Api::V1::TracksControllerTest < ActionDispatch::IntegrationTest
     assert_includes ids, track.id
   end
 
-  test "index requires authentication" do
+  test "index is public but create requires authentication" do
     get "/api/v1/tracks"
+    assert_response :success
+
+    post "/api/v1/tracks", params: { track: { title: "X" } }
     assert_response :unauthorized
   end
 

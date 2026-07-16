@@ -39,11 +39,11 @@ class Api::V1::PlacesControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "latitude and longitude must be within -90..90" do
+  test "latitude is bounded to +/-90 and longitude to +/-180" do
     place = Place.new(name: "Bad Coords", latitude: 200, longitude: -200)
     assert_not place.valid?
     assert_includes place.errors[:latitude], "must be less than or equal to 90"
-    assert_includes place.errors[:longitude], "must be greater than or equal to -90"
+    assert_includes place.errors[:longitude], "must be greater than or equal to -180"
   end
 
   test "latitude and longitude are optional" do

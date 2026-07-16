@@ -78,14 +78,18 @@ Rails.application.routes.draw do
         post "tickets/:ticket_id/rsvp", to: "tickets#rsvp"
       end
 
-      resources :places,   only: %i[index show]
+      resources :places,   only: %i[index show create] do
+        collection do
+          get :search
+        end
+      end
       resources :venues,   only: %i[index show create update destroy] do
         member do
           post :availability, to: "venues#set_availability"
           get :conflict
         end
       end
-      resources :tracks,   only: %i[index show]
+      resources :tracks,   only: %i[index show create update destroy]
       resources :markers,  only: %i[index show create update destroy]
 
       post  "recurring",                    to: "recurring#create"
