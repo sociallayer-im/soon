@@ -1,13 +1,19 @@
 class Api::V1::EventsController < Api::BaseController
-  # Event pages are public — EventPolicy#show? still hides drafts/private events
-  # from anonymous viewers.
-  skip_before_action :authenticate!, only: :show
-  before_action :authenticate_optional!, only: :show
-  before_action :set_event, only: %i[show update destroy]
+  # Event browsing/pages are public — EventPolicy/visible_to still hide
+  # drafts/private events from anonymous viewers.
+  skip_before_action :authenticate!, only: %i[index show]
+  before_action :authenticate_optional!, only: %i[index show]
+  before_action :set_event, only: %i[show update destroy approve]
 
+  # GET /api/v1/events — the browse/schedule listing.
+  # Filters: group_id (TSID or slug), collection (upcoming|past|ongoing),
+  # start_date/end_date (+timezone), search_title, tags, venue_id, track_id,
+  # kind, category, pinned, skip_recurring. Anonymous → public events; with a
+  # token the response also carries is_attending/is_starred/is_owner flags.
   def index
-    scope = Event.where(group_id: current_user.groups).visible_to(current_user)
-    render_collection scope, blueprint: EventBlueprint
+    scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
+    scope = apply_filters(scope)
+    render_collection scope, blueprint: EventBlueprint, **personalization_options
   end
 
   def show
@@ -58,12 +64,87 @@ class Api::V1::EventsController < Api::BaseController
     head :no_content
   end
 
+  # GET /api/v1/events/pending_approval — events awaiting review in groups the
+  # caller manages (the dashboard inbox).
+  def pending_approval
+    managed = current_user.memberships.where(role: %w[admin owner]).select(:group_id)
+    scope = Event.includes(:group, :place, :venue, :owner, :track)
+                 .where(status: "pending", group_id: managed).order(:start_time)
+    render_collection scope, blueprint: EventBlueprint
+  end
+
+  # POST /api/v1/events/:id/approve — group manager publishes a pending event.
+  def approve
+    authorize @event
+    return render_error("event is not pending approval") unless @event.status == "pending"
+    @event.update!(status: "published")
+    render json: EventBlueprint.render(@event)
+  end
+
   private
 
   def set_event
     @event = Event.find(params[:id])
   rescue ActiveRecord::RecordNotFound
     render_not_found
+  end
+
+  # Narrows the browse scope by the request's filter params. Invalid dates are
+  # ignored rather than 422ing — a bad filter degrades to "unfiltered".
+  def apply_filters(scope)
+    if params[:group_id].present?
+      scope = scope.where(group_id: Group.resolve!(params[:group_id]).id)
+    elsif current_user
+      # No group filter: an authenticated caller browses their own groups
+      # (the pre-existing "my events" behavior); anonymous callers see all
+      # public events (feeds/search).
+      scope = scope.where(group_id: current_user.groups.select(:id))
+    end
+
+    now = Time.current
+    scope = case params[:collection]
+    when "upcoming" then scope.where("end_time >= ?", now).order(:start_time)
+    when "past"     then scope.where("end_time < ?", now).order(start_time: :desc)
+    when "ongoing"  then scope.where("start_time <= ? AND end_time >= ?", now, now).order(:start_time)
+    else scope.order(:start_time)
+    end
+
+    scope = scope.where(venue_id: params[:venue_id]) if params[:venue_id].present?
+    scope = scope.where(track_id: params[:track_id]) if params[:track_id].present?
+    scope = scope.where(kind: params[:kind])         if params[:kind].present?
+    scope = scope.where(category: params[:category]) if params[:category].present?
+    scope = scope.where(pinned: true)                if params[:pinned].present?
+    scope = scope.where(recurring_id: nil)           if params[:skip_recurring].present?
+    if params[:search_title].present?
+      scope = scope.where("title ILIKE ?", "%#{Event.sanitize_sql_like(params[:search_title])}%")
+    end
+    if params[:tags].present?
+      scope = scope.where("tags && ARRAY[?]::varchar[]", Array(params[:tags]))
+    end
+
+    # Date-window filter, interpreted in the request's timezone (else UTC) so
+    # "events on the 16th" means the 16th where the viewer/group is.
+    zone = ActiveSupport::TimeZone[params[:timezone].to_s] || Time.zone
+    if params[:start_date].present? && (from = zone.parse(params[:start_date].to_s) rescue nil)
+      scope = scope.where("start_time >= ?", from.beginning_of_day)
+    end
+    if params[:end_date].present? && (to = zone.parse(params[:end_date].to_s) rescue nil)
+      scope = scope.where("start_time <= ?", to.end_of_day)
+    end
+
+    scope
+  end
+
+  # With a token, the listing carries per-event viewer flags. Two plucks total —
+  # the blueprint checks set membership per event (no N+1).
+  def personalization_options
+    return {} unless current_user
+    {
+      viewer_id: current_user.id,
+      attending_ids: current_user.participants.where(status: "attending").pluck(:event_id).to_set,
+      starred_ids: Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Event", removed: false)
+                          .pluck(:item_id).to_set
+    }
   end
 
   # Email every attending participant that the event was cancelled (with an .ics

@@ -105,6 +105,19 @@ class Api::V1::ParticipantsController < Api::BaseController
     render_not_found
   end
 
+  # POST /api/v1/events/:event_id/participants/check_in
+  #
+  # Manager scans an attendee at the door: stamps register_time on their
+  # participant record. Idempotent — re-checking-in just re-stamps.
+  def check_in
+    authorize @event, :update?
+    participant = @event.participants.find_by(user_id: params[:user_id])
+    return render_error("user is not a participant of this event") unless participant
+
+    participant.update!(register_time: Time.current)
+    render json: ParticipantBlueprint.render(participant)
+  end
+
   private
 
   def set_event

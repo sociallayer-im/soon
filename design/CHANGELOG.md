@@ -2,7 +2,31 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — public reads, by-name lookups, richer blueprints (frontend migration A)
+## 2026-07-16 (latest) — public event browsing + event ops (frontend migration B)
+
+Second backend chunk of the seastar-app → soon migration. Suite green at 482 runs.
+
+### Public filtered event list
+- `GET /events` is now public: anonymous callers see public/published events;
+  `visible_to` keeps hiding drafts/private. Filters: `group_id` (TSID or slug),
+  `collection` (upcoming|past|ongoing), `start_date`/`end_date` interpreted in
+  the request `timezone`, `search_title` (ILIKE, sanitized), `tags` (array
+  overlap), `venue_id`, `track_id`, `kind`, `category`, `pinned`,
+  `skip_recurring`. Authenticated callers with no group filter keep the old
+  "my groups" scope.
+- With a token the listing carries `is_attending`/`is_starred`/`is_owner`
+  viewer flags — two plucks total, blueprint checks set membership (no N+1).
+
+### Event ops
+- `GET /events/pending_approval` — review inbox for groups the caller manages.
+- `POST /events/:id/approve` — pending → published; **manager-only**
+  (`EventPolicy#approve?` — owning the event does not let you self-approve).
+- `POST /events/:event_id/participants/check_in` — manager stamps
+  `register_time` on an attendee's participant (door scan); idempotent.
+- `GET /venues/:id/conflict?start_time&end_time[&exclude_event_id]` — first
+  clashing event for the window (event editor pre-submit warning).
+
+## 2026-07-16 — public reads, by-name lookups, richer blueprints (frontend migration A)
 
 First backend chunk of the seastar-app → soon migration. Suite green at 474 runs.
 

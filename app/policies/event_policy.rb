@@ -12,4 +12,8 @@ class EventPolicy < ApplicationPolicy
   def create?  = group_member?(record.group)
   def update?  = owner?(record) || group_admin?(record.group)
   def destroy? = owner?(record) || group_admin?(record.group)
+
+  # Publishing a pending event is a group-manager review action — owning the
+  # event does not let you approve it yourself.
+  def approve? = group_admin?(record.group)
 end

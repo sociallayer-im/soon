@@ -346,8 +346,11 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_match "capacity", json_response["error"]
   end
 
-  test "index/show require authentication" do
+  test "index is public but write actions require authentication" do
     get "/api/v1/events"
+    assert_response :success
+
+    post "/api/v1/events", params: { event: { title: "X" } }
     assert_response :unauthorized
   end
 

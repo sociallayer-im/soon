@@ -1,5 +1,5 @@
 class Api::V1::VenuesController < Api::BaseController
-  before_action :set_venue, only: %i[show update destroy set_availability]
+  before_action :set_venue, only: %i[show update destroy set_availability conflict]
 
   def index
     render_collection Venue.where(archived: false), blueprint: VenueBlueprint
@@ -36,6 +36,21 @@ class Api::V1::VenuesController < Api::BaseController
     authorize @venue.group, :manage?, policy_class: GroupPolicy
     @venue.update(archived: true)
     head :no_content
+  end
+
+  # GET /api/v1/venues/:id/conflict — the first event that would clash with the
+  # given window (used by the event editor to warn before submitting). Pass
+  # exclude_event_id when editing an existing booking.
+  def conflict
+    start_time = Time.zone.parse(params[:start_time].to_s) rescue nil
+    end_time   = Time.zone.parse(params[:end_time].to_s) rescue nil
+    return render_error("invalid start_time/end_time") unless start_time && end_time
+
+    overlap = @venue.events.where("start_time < ? AND end_time > ?", end_time, start_time)
+                    .where.not(status: "cancelled")
+    overlap = overlap.where.not(id: params[:exclude_event_id]) if params[:exclude_event_id].present?
+    event = overlap.order(:start_time).first
+    render json: { event: event && JSON.parse(EventBlueprint.render(event)) }
   end
 
   # POST /api/v1/venues/:id/availability — replaces the venue's availability set.

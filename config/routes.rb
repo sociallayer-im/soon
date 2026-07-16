@@ -51,10 +51,19 @@ Rails.application.routes.draw do
       end
 
       resources :events do
+        collection do
+          get :pending_approval
+        end
+        member do
+          post :approve
+        end
         resources :participants, only: %i[index create update destroy] do
           member do
             post :approve
             post :reject
+          end
+          collection do
+            post :check_in
           end
         end
         resources :event_roles,  only: %i[index create update destroy]
@@ -73,6 +82,7 @@ Rails.application.routes.draw do
       resources :venues,   only: %i[index show create update destroy] do
         member do
           post :availability, to: "venues#set_availability"
+          get :conflict
         end
       end
       resources :tracks,   only: %i[index show]
