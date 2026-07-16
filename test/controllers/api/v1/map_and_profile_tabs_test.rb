@@ -102,6 +102,33 @@ class MapAndProfileTabsTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "event manager can update a ticket; delete retires sold tickets, destroys unsold" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
+    unsold = Ticket.create!(event: event, title: "GA")
+    sold = Ticket.create!(event: event, title: "VIP")
+    TicketItem.create!(ticket: sold, event: event, user: buyer, status: "succeeded")
+
+    patch "/api/v1/events/#{event.id}/tickets/#{unsold.id}",
+      params: { ticket: { title: "GA v2" } }, headers: auth_headers(buyer)
+    assert_response :forbidden
+
+    patch "/api/v1/events/#{event.id}/tickets/#{unsold.id}",
+      params: { ticket: { title: "GA v2" } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "GA v2", unsold.reload.title
+
+    delete "/api/v1/events/#{event.id}/tickets/#{unsold.id}", headers: auth_headers(owner)
+    assert_response :no_content
+    assert_not Ticket.exists?(unsold.id)
+
+    delete "/api/v1/events/#{event.id}/tickets/#{sold.id}", headers: auth_headers(owner)
+    assert_response :no_content
+    assert_equal "inactive", sold.reload.status
+  end
+
   private
 
   def create_user_in(group)

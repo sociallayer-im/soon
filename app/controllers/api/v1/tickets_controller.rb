@@ -1,7 +1,7 @@
 class Api::V1::TicketsController < Api::BaseController
   skip_before_action :authenticate!, only: %i[stripe_callback set_payment_status stripe_config list_group_ticket_types check_coupon coupon_price]
-  before_action :set_event, only: %i[create rsvp]
-  before_action :set_ticket, only: %i[rsvp]
+  before_action :set_event, only: %i[create update destroy rsvp]
+  before_action :set_ticket, only: %i[update destroy rsvp]
 
   STRIPE_MIN_CENTS = 400
 
@@ -17,6 +17,33 @@ class Api::V1::TicketsController < Api::BaseController
     else
       render_error(ticket.errors.full_messages.join(", "))
     end
+  end
+
+  # PATCH /api/v1/events/:event_id/tickets/:ticket_id
+  def update
+    authorize @event, :update?
+    return render_not_found unless @ticket
+
+    if @ticket.update(ticket_params)
+      render json: TicketBlueprint.render(@ticket, view: :extended)
+    else
+      render_error(@ticket.errors.full_messages.join(", "))
+    end
+  end
+
+  # DELETE /api/v1/events/:event_id/tickets/:ticket_id
+  # Sold tickets must stay (ticket_items reference them) — retire with status
+  # "inactive" instead; unsold tickets are destroyed outright.
+  def destroy
+    authorize @event, :update?
+    return render_not_found unless @ticket
+
+    if @ticket.ticket_items.exists?
+      @ticket.update!(status: "inactive")
+    else
+      @ticket.destroy
+    end
+    head :no_content
   end
 
   # GET /api/v1/events/:event_id/tickets

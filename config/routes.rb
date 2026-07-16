@@ -84,6 +84,8 @@ Rails.application.routes.draw do
         get    "form/submissions", to: "forms#list_submissions"
 
         resources :tickets, only: %i[index create]
+        patch  "tickets/:ticket_id", to: "tickets#update"
+        delete "tickets/:ticket_id", to: "tickets#destroy"
         post "tickets/:ticket_id/rsvp", to: "tickets#rsvp"
       end
 
