@@ -1,0 +1,117 @@
+app/views/group_mailer/ticket_purchased.text.erb
+  s_f621b7e1fcb97a::t_68a1f72f188eca 1-7
+app/views/event_mailer/participant_rejected.text.erb
+  s_f621b7e1fcb97a::t_5049ca780ca55f 1-5
+test/mailers/group_mailer_test.rb
+  s_f621b7e1fcb97a::t_a8813d3ed3518b 1-35
+test/services/cloudflare_images_test.rb
+  s_f621b7e1fcb97a::t_c95b2fbac769d4 1-25
+app/views/auth_mailer/login_code.html.erb
+  s_f621b7e1fcb97a::t_f9d489679fdc4c 1-11
+app/views/auth_mailer/login_code.text.erb
+  s_f621b7e1fcb97a::t_ed31b1d2bb830b 1-5
+app/views/group_mailer/invite.html.erb
+  s_f621b7e1fcb97a::t_c72a29d7f0e47b 1-17
+app/views/event_mailer/participant_approved.html.erb
+  s_f621b7e1fcb97a::t_9fed09a3d88788 1-20
+app/views/event_mailer/participant_approved.text.erb
+  s_f621b7e1fcb97a::t_6563d72606ea1d 1-8
+test/mailers/comment_mailer_test.rb
+  s_f621b7e1fcb97a::t_0af939040d9ef9 19,21,25-27
+  s_f621b7e1fcb97a::t_54efc0145ee767 1-18,20,22-24,28-29
+test/integration/email_notifications_test.rb
+  s_f621b7e1fcb97a::t_6f65bf4c723c06 1-38,40-126
+  s_f621b7e1fcb97a::t_c6d5f99c78e643 39
+config/environments/test.rb
+  s_f621b7e1fcb97a::t_f7090e40852ad3 42-45
+app/models/ticket_item.rb
+  s_f621b7e1fcb97a::t_337e6481be6c9e 72
+app/views/group_mailer/ticket_purchased.html.erb
+  s_f621b7e1fcb97a::t_ad815a56b30734 1-23
+config/initializers/resend.rb
+  s_f621b7e1fcb97a::t_e2a8c53e353780 1-6
+app/models/group.rb
+  s_f621b7e1fcb97a::t_fd4af77daadf9b 18-22
+app/views/event_mailer/cancelled.html.erb
+  s_f621b7e1fcb97a::t_70a8ea9b74da03 1-7
+app/mailers/group_mailer.rb
+  s_f621b7e1fcb97a::t_2fce5ed95fc77b 1-18
+app/mailers/comment_mailer.rb
+  s_f621b7e1fcb97a::t_3bf45165a6f4b5 1-19
+.env.example
+  s_f621b7e1fcb97a::t_29439179abad49 1-25
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_dbcd21f2994264 5-41
+.gitignore
+  s_f621b7e1fcb97a::t_0c10b27e63edf1 10,12
+app/views/layouts/mailer.text.erb
+  s_f621b7e1fcb97a::t_d9d878a939785f 2-5
+app/views/layouts/mailer.html.erb
+  s_f621b7e1fcb97a::t_78adb9254fc85d 2,5,7-37
+app/controllers/api/v1/group_invites_controller.rb
+  s_f621b7e1fcb97a::t_b5e76456978cc7 150,156
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_ae78d6781902b1 48
+  s_f621b7e1fcb97a::t_4f2813f0a7728a 60-68
+app/views/event_mailer/cancelled.text.erb
+  s_f621b7e1fcb97a::t_8cd3341b754173 1-5
+app/controllers/api/v1/auth_controller.rb
+  s_f621b7e1fcb97a::t_913d6490fc7bcf 11,15-16
+app/views/comment_mailer/feedback.text.erb
+  s_f621b7e1fcb97a::t_9a06e67bbe9ee4 1-5
+app/controllers/api/v1/participants_controller.rb
+  s_f621b7e1fcb97a::t_ae723ab7f0ad8b 87
+  s_f621b7e1fcb97a::t_22582d0bc3c33c 101
+  s_f621b7e1fcb97a::t_757e2b87a1c5ff 93-100,102
+  s_f621b7e1fcb97a::t_8b5d249c40dec4 88-92
+app/models/event.rb
+  s_f621b7e1fcb97a::t_ec2273d70e2857 40-64
+config/environments/production.rb
+  s_f621b7e1fcb97a::t_5ee786c6db58a9 60-63
+config/routes.rb
+  s_f621b7e1fcb97a::t_c441215d1a312d 21-23
+  s_f621b7e1fcb97a::t_be157c7eefc4dd 49
+test/controllers/api/v1/uploads_controller_test.rb
+  s_f621b7e1fcb97a::t_028c9e78c628d3 1-55
+test/mailers/event_mailer_test.rb
+  s_f621b7e1fcb97a::t_6bea6317076663 1-43
+app/mailers/auth_mailer.rb
+  s_f621b7e1fcb97a::t_e57f6792339859 1-9
+app/controllers/api/v1/comments_controller.rb
+  s_f621b7e1fcb97a::t_2630eae7b0e384 8
+app/mailers/event_mailer.rb
+  s_f621b7e1fcb97a::t_0135f9ff52098c 1-32
+app/views/group_mailer/invite.text.erb
+  s_f621b7e1fcb97a::t_8ff54803ac936c 1-7
+app/views/event_mailer/participant_rejected.html.erb
+  s_f621b7e1fcb97a::t_19e44969237686 1-6
+app/helpers/mailer_helper.rb
+  s_f621b7e1fcb97a::t_d4e5b1f0ec12d9 1-24
+app/mailers/application_mailer.rb
+  s_f621b7e1fcb97a::t_3834103700bba6 2-11,13
+app/views/comment_mailer/feedback.html.erb
+  s_f621b7e1fcb97a::t_fde5393334063c 1-10
+test/mailers/auth_mailer_test.rb
+  s_f621b7e1fcb97a::t_194a0a9d8a8113 9
+  s_f621b7e1fcb97a::t_8c65cfa177c6a6 1-8,10-16
+app/controllers/api/v1/uploads_controller.rb
+  s_f621b7e1fcb97a::t_60685cd0cf5f5a 1-24
+app/services/cloudflare_images.rb
+  s_f621b7e1fcb97a::t_41e5bbbce141f4 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "bfc4512208d723ac26c33c3d3c76160cf2211f28",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
