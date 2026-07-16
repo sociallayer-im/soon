@@ -1,0 +1,42 @@
+config/routes.rb
+  s_f621b7e1fcb97a::t_c23b9c3d8d6e93 85
+  s_f621b7e1fcb97a::t_abc7216a77c1e3 54-59,65-66
+  s_f621b7e1fcb97a::t_97a7f0735b8677 67
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_963f97a59bb44f 2-6,8-12,14-16
+  s_f621b7e1fcb97a::t_d56b6b0e096e67 67-83
+  s_f621b7e1fcb97a::t_fb6378f24b8fee 92-149
+app/controllers/api/v1/venues_controller.rb
+  s_f621b7e1fcb97a::t_5dc81abd235959 2
+  s_f621b7e1fcb97a::t_bd56b5a4feebea 41-55
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_f1b4e231f9ed45 5-29
+test/controllers/api/v1/event_browse_test.rb
+  s_f621b7e1fcb97a::t_b85af0195322c0 1-160
+test/controllers/api/v1/events_controller_test.rb
+  s_f621b7e1fcb97a::t_0925ebbcf11316 349,351-353
+app/blueprints/event_blueprint.rb
+  s_f621b7e1fcb97a::t_20591b361960f9 9-20
+app/policies/event_policy.rb
+  s_f621b7e1fcb97a::t_d634eff6bb276e 15-18
+app/controllers/api/v1/participants_controller.rb
+  s_f621b7e1fcb97a::t_93f3bda4d4feec 108-120
+app/blueprints/participant_blueprint.rb
+  s_f621b7e1fcb97a::t_7cd9b501e0c303 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "92a4f39388aa2c1edcb9a800f8d6c25f8cfe4f5e",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
