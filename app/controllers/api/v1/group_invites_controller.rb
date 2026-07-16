@@ -112,7 +112,8 @@ class Api::V1::GroupInvitesController < Api::BaseController
     existing = @group.memberships.exists?(user_id: current_user.id)
     @group.add_member(current_user.id, invite.role)
     action = existing ? "group_invite/update_role" : "group_invite/add_member"
-    Activity.create(item: invite, initiator: current_user, action: action)
+    Activity.create(item: invite, initiator: current_user, action: action,
+      payload: { group_name: @group.name, group_display_name: @group.display_name })
     render json: GroupInviteBlueprint.render(invite)
   end
 
@@ -137,13 +138,15 @@ class Api::V1::GroupInvitesController < Api::BaseController
       membership = @group.memberships.find_by(user_id: user.id)
       if membership && membership.role == "member" && role != "member"
         membership.update!(role: role)
-        Activity.create(item: membership, initiator: current_user, action: "group_invite/update_role", receiver: user, payload: { message: params[:message] })
+        Activity.create(item: membership, initiator: current_user, action: "group_invite/update_role", receiver: user,
+          payload: { message: params[:message], group_name: @group.name, group_display_name: @group.display_name })
         return { address: address, result: "role_updated" }
       elsif membership
         return { address: address, result: "error", message: "membership exists" }
       else
         membership = @group.add_member(user.id, role)
-        Activity.create(item: membership, initiator: current_user, action: "group_invite/send", receiver: user, payload: { message: params[:message] })
+        Activity.create(item: membership, initiator: current_user, action: "group_invite/send", receiver: user,
+          payload: { message: params[:message], group_name: @group.name, group_display_name: @group.display_name })
         return { address: address, result: "added" }
       end
     elsif address.to_s.include?("@")
