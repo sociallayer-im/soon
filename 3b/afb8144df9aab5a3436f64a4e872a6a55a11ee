@@ -1,0 +1,41 @@
+app/blueprints/place_blueprint.rb
+  s_f621b7e1fcb97a::t_100c2b00c7410b 4
+test/controllers/api/v1/places_controller_test.rb
+  s_f621b7e1fcb97a::t_baf55491baae2d 42,46
+config/routes.rb
+  s_f621b7e1fcb97a::t_100c2b00c7410b 81-85,92
+app/models/place.rb
+  s_f621b7e1fcb97a::t_e13f627f9ff000 6-15
+app/blueprints/track_blueprint.rb
+  s_f621b7e1fcb97a::t_cfefeefaa08ef9 7-10
+test/controllers/api/v1/tracks_controller_test.rb
+  s_f621b7e1fcb97a::t_baf55491baae2d 16,18-20
+app/controllers/api/v1/places_controller.rb
+  s_f621b7e1fcb97a::t_e274f65020d5f6 12-37,45-48
+app/blueprints/track_role_blueprint.rb
+  s_f621b7e1fcb97a::t_04766570e08663 1-6
+db/migrate/20260716000002_add_data_to_places.rb
+  s_f621b7e1fcb97a::t_9c49bbd76e462c 1-5
+app/controllers/api/v1/tracks_controller.rb
+  s_f621b7e1fcb97a::t_910e177668097b 2-4,7-9,13-53,63-89
+test/controllers/api/v1/places_tracks_test.rb
+  s_f621b7e1fcb97a::t_a4d86897c00fb2 1-107
+db/schema.rb
+  s_f621b7e1fcb97a::t_737cf9c68c4d37 13,386
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3bafb8144df9aab5a3436f64a4e872a6a55a11ee",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
