@@ -101,8 +101,9 @@ class Api::V1::GroupsController < Api::BaseController
       social_links: {}, group_tags: [], event_tag_list: [],
       requirement_tag_list: [], venue_tag_list: [])
 
-    # Strip privileged tags a caller tries to add; keep ones the group already has.
-    if permitted[:group_tags]
+    # Strip privileged tags a caller tries to add (platform admins are the
+    # curators and may set them); keep ones the group already has.
+    if permitted[:group_tags] && !current_user.platform_admin?
       existing = @group ? (@group.group_tags & PRIVILEGED_TAGS) : []
       permitted[:group_tags] = (permitted[:group_tags] - PRIVILEGED_TAGS) | existing
     end

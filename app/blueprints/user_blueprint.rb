@@ -13,7 +13,7 @@ class UserBlueprint < Blueprinter::Base
   # Private fields, only rendered for the user viewing their own record.
   view :self do
     include_view :profile
-    fields :email
+    fields :email, :permissions
   end
 
   view :extended do

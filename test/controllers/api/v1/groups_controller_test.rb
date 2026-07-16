@@ -141,4 +141,31 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     # "featured" (privileged) stripped; pre-existing "top" kept
     assert_equal ["popup", "top"].sort, group.group_tags.sort
   end
+
+  test "platform admin can curate featured/top tags and delete any group" do
+    admin = create_user(permissions: ["admin"])
+    owner = create_user
+    group = create_group(owner: owner, start_date: Date.new(2026, 9, 1), location: "Chiang Mai")
+
+    # Curation: privileged tags pass through for a platform admin.
+    patch "/api/v1/groups/#{group.id}", params: { group: { group_tags: ["popup", "featured", "top"] } },
+      headers: auth_headers(admin)
+    assert_response :success
+    assert_equal ["popup", "featured", "top"].sort, group.reload.group_tags.sort
+
+    # Removal: a platform admin can delete a popup city they don't own.
+    delete "/api/v1/groups/#{group.id}", headers: auth_headers(admin)
+    assert_response :no_content
+    assert_not Group.exists?(group.id)
+  end
+
+  test "own record exposes permissions so the UI can gate admin actions" do
+    admin = create_user(permissions: ["admin"])
+    get "/api/v1/users/me", headers: auth_headers(admin)
+    assert_equal ["admin"], json_response["permissions"]
+
+    # Not leaked on public profiles.
+    get "/api/v1/users/#{admin.name}"
+    assert_not json_response.key?("permissions")
+  end
 end

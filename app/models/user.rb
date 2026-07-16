@@ -20,6 +20,12 @@ class User < ApplicationRecord
   validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
     allow_blank: true
 
+  # Platform administrators (users.permissions includes "admin") curate
+  # cross-group content: homepage featured/top tags, popup-city removal.
+  def platform_admin?
+    permissions.include?("admin")
+  end
+
   # Looks a user up by primary key OR unique username — API paths accept either
   # (/users/0GA2... or /users/alice). Raises RecordNotFound like find.
   def self.resolve!(identifier)
