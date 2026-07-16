@@ -1,0 +1,43 @@
+config/routes.rb
+  s_f621b7e1fcb97a::t_7a8e55b83a6d92 17-23
+app/models/user.rb
+  s_f621b7e1fcb97a::t_71fedf26f71c0f 40-43
+  s_f621b7e1fcb97a::t_316f49d56217e0 16-26,28-30
+test/controllers/api/v1/auth_controller_test.rb
+  s_f621b7e1fcb97a::t_a86326589c226b 14-16,90,95-108,128,131-133
+test/controllers/api/v1/wallet_auth_test.rb
+  s_f621b7e1fcb97a::t_7878451027e899 1-215
+app/controllers/api/v1/users_controller.rb
+  s_f621b7e1fcb97a::t_835c14f30c7a4d 29-34
+db/migrate/20260716000003_add_sol_to_users.rb
+  s_f621b7e1fcb97a::t_50088bc56f4437 1-6
+test/integration/email_notifications_test.rb
+  s_f621b7e1fcb97a::t_d1b53a4ccaf71b 26-27,30
+Gemfile
+  s_f621b7e1fcb97a::t_9ae6438be466c8 47
+app/controllers/api/v1/auth_controller.rb
+  s_f621b7e1fcb97a::t_a8438d0610c4bb 62,65-73
+  s_f621b7e1fcb97a::t_8cf45cda8103aa 1-11,14-15,17-18,20-29,33,35-61,63-64,74-83,85-125,127-128,132-135
+Gemfile.lock
+  s_f621b7e1fcb97a::t_b25b958654fe5e 380-381,456,610
+db/schema.rb
+  s_f621b7e1fcb97a::t_1f17150b442c1e 13,503,510
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_ae035eb02441ac 5-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "063ae36dbb2cecf886d3b31d68b6519e6c5c6a50",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
