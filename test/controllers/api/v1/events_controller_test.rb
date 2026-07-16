@@ -287,4 +287,71 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/events"
     assert_response :unauthorized
   end
+
+  test "create rejects a track that belongs to another group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    other_track = create_track(group: create_group)
+
+    post "/api/v1/events", params: {
+      event: { title: "X", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, track_id: other_track.id }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "track does not belong", json_response["error"]
+  end
+
+  test "update re-validates a venue against the event's group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    foreign_venue = create_venue(group: create_group, owner: create_user)
+
+    patch "/api/v1/events/#{event.id}", params: { event: { venue_id: foreign_venue.id } }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+    assert_nil event.reload.venue_id
+  end
+
+  test "update does not flag the event's own booking as a double-booking" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    start_at = 2.days.from_now.change(hour: 10)
+    event = create_event(group: group, owner: owner, venue: venue, status: "published",
+                         start_time: start_at, end_time: start_at + 2.hours)
+
+    # Editing the same event (its slot overlaps only itself) must succeed —
+    # check_availability excludes the event being updated.
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed", venue_id: venue.id } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "Renamed", event.reload.title
+  end
+
+  test "update rejects moving into a slot already booked by another event" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    start_at = 2.days.from_now.change(hour: 10)
+    create_event(group: group, owner: owner, venue: venue, status: "published",
+                 start_time: start_at, end_time: start_at + 2.hours)
+    mover = create_event(group: group, owner: owner, start_time: start_at + 5.hours, end_time: start_at + 6.hours)
+
+    patch "/api/v1/events/#{mover.id}", params: {
+      event: { venue_id: venue.id, start_time: start_at + 1.hour, end_time: start_at + 3.hours }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "already booked", json_response["error"]
+  end
+
+  test "destroy (cancel) requires owner or group admin" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+
+    delete "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
+    assert_response :forbidden
+    assert_not_equal "cancelled", event.reload.status
+  end
 end

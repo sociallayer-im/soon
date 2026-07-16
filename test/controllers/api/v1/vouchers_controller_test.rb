@@ -92,6 +92,42 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "send_badge on a group badge_class is allowed for a group admin who isn't the creator" do
+    owner = create_user
+    admin = create_user
+    receiver = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+    bc = create_badge_class(creator: owner, group: group)
+
+    post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.name] }, headers: auth_headers(admin)
+    assert_response :created
+  end
+
+  test "send_badge on a group badge_class is forbidden for an ordinary member" do
+    owner = create_user
+    member = create_user
+    receiver = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    bc = create_badge_class(creator: owner, group: group)
+
+    post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.name] }, headers: auth_headers(member)
+    assert_response :forbidden
+  end
+
+  test "send_badge with group_member_send lets an ordinary member send" do
+    owner = create_user
+    member = create_user
+    receiver = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    bc = create_badge_class(creator: owner, group: group, can_send_badge: "group_member_send")
+
+    post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.name] }, headers: auth_headers(member)
+    assert_response :created
+  end
+
   # ---------- send_badge_by_address (address strategy) ----------
 
   test "send_badge_by_address mints an address-strategy voucher for a valid 0x address" do

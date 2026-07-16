@@ -139,4 +139,91 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_equal ids.sort, Event.where(id: ids).pluck(:id).sort, "events must survive"
     assert Event.where(id: ids).all? { |e| e.recurring_id.nil? }
   end
+
+  test "create generates one event per monthly occurrence" do
+    assert_difference -> { Event.count }, 3 do
+      post "/api/v1/recurring", params: {
+        group_id: @group.id, interval: "month", event_count: 3,
+        start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "Monthly"
+      }, headers: auth_headers(@owner)
+    end
+    assert_response :created
+    events = Recurring.find(json_response["id"]).events.order(:start_time)
+    assert_equal (base_start + 2.months).to_i, events.last.start_time.to_i
+  end
+
+  test "create rejects a non-positive event_count" do
+    assert_no_difference -> { Recurring.count } do
+      post "/api/v1/recurring", params: {
+        group_id: @group.id, interval: "week", event_count: 0,
+        start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "None"
+      }, headers: auth_headers(@owner)
+    end
+    assert_response :unprocessable_entity
+    assert_match "event_count", json_response["error"]
+  end
+
+  test "create rejects an end_time that is not after start_time" do
+    assert_no_difference -> { Recurring.count } do
+      post "/api/v1/recurring", params: {
+        group_id: @group.id, interval: "week", event_count: 2,
+        start_time: base_start.iso8601, end_time: base_start.iso8601, title: "Zero-length"
+      }, headers: auth_headers(@owner)
+    end
+    assert_response :unprocessable_entity
+    assert_match "start_time/end_time", json_response["error"]
+  end
+
+  test "create 404s for an unknown group_id" do
+    post "/api/v1/recurring", params: {
+      group_id: "nope", interval: "week", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "X"
+    }, headers: auth_headers(@owner)
+    assert_response :not_found
+  end
+
+  test "show returns the series with its events, 404 for unknown" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "day", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "Daily"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+
+    get "/api/v1/recurring/#{recurring_id}", headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal 2, json_response["events"].size
+
+    get "/api/v1/recurring/does-not-exist", headers: auth_headers(@owner)
+    assert_response :not_found
+  end
+
+  test "update requires owner or group admin" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "day", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "Daily"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+    outsider = create_user
+
+    patch "/api/v1/recurring/#{recurring_id}", params: { selector: "all", title: "Hijacked" },
+      headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "update with a new venue re-checks availability and rejects a conflict" do
+    venue = create_venue(group: @group, owner: @owner)
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+    # Pre-book the venue over the first occurrence's slot with an unrelated event.
+    create_event(group: @group, owner: @owner, venue: venue, status: "published",
+                 start_time: base_start, end_time: base_start + 2.hours)
+
+    patch "/api/v1/recurring/#{recurring_id}", params: { selector: "all", venue_id: venue.id },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "already booked", json_response["error"]
+  end
 end
