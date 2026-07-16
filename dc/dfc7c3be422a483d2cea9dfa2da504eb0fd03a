@@ -1,0 +1,83 @@
+test/support/factory_helpers.rb
+  s_f621b7e1fcb97a::t_7e027ee5937d9b 11
+app/controllers/api/v1/tickets_controller.rb
+  s_f621b7e1fcb97a::t_1864336bb77668 250
+test/controllers/api/v1/memberships_controller_test.rb
+  s_f621b7e1fcb97a::t_6b2ef5665abaf2 123-211
+app/controllers/api/v1/memberships_controller.rb
+  s_f621b7e1fcb97a::t_9eb0325e1bcba1 6,15-17,20,28,30,32-38,48-52,54,64-67,70-71
+app/controllers/api/v1/auth_controller.rb
+  s_f621b7e1fcb97a::t_4150800bff990c 2-3,7-16,18,25-26,28-31,33-34
+test/controllers/api/v1/groups_controller_test.rb
+  s_f621b7e1fcb97a::t_e5617b69b323ad 65-100
+test/controllers/api/v1/badge_classes_controller_test.rb
+  s_f621b7e1fcb97a::t_4f2a270ca8691e 43,57,75
+app/models/auth_code.rb
+  s_f621b7e1fcb97a::t_496b2b00717d90 10,23-28
+  s_f621b7e1fcb97a::t_163bdcb8a040c5 3
+  s_f621b7e1fcb97a::t_e58280b4368e05 29
+test/controllers/api/v1/badges_controller_test.rb
+  s_f621b7e1fcb97a::t_4f2a270ca8691e 35,71,80,85,97,109
+test/controllers/api/v1/users_controller_test.rb
+  s_f621b7e1fcb97a::t_0d932fdb6cfb67 32,34,40
+  s_f621b7e1fcb97a::t_16f5a9b7944112 50-75
+test/controllers/api/v1/auth_controller_test.rb
+  s_f621b7e1fcb97a::t_e75e133a169d7f 14-50
+db/migrate/20260316000006_remove_handle_from_users.rb
+  s_f621b7e1fcb97a::t_476ddad54d3c86 1-6
+app/controllers/api/v1/vouchers_controller.rb
+  s_f621b7e1fcb97a::t_1864336bb77668 19,22,117
+app/models/user.rb
+  s_f621b7e1fcb97a::t_cb8c56a789290e 19-20
+  s_f621b7e1fcb97a::t_b52c2fa375fb22 17-18
+  s_f621b7e1fcb97a::t_787da807d94550 21
+app/controllers/api/v1/users_controller.rb
+  s_f621b7e1fcb97a::t_cd1090d057e1c8 3-8,13,23
+  s_f621b7e1fcb97a::t_a28ddce9e35ba6 21
+app/policies/group_policy.rb
+  s_f621b7e1fcb97a::t_1c3cd56d53beae 5-20
+app/controllers/api/v1/group_invites_controller.rb
+  s_f621b7e1fcb97a::t_1864336bb77668 134
+  s_f621b7e1fcb97a::t_c4b7393c30613a 158
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_8eca48a76b5721 5-49
+app/blueprints/user_blueprint.rb
+  s_f621b7e1fcb97a::t_0b2f214e444031 4-5,7-11
+  s_f621b7e1fcb97a::t_9e4a7b87024248 6
+db/migrate/20260316000005_add_attempts_to_auth_codes.rb
+  s_f621b7e1fcb97a::t_aafabcacd7f960 1-6
+app/models/group.rb
+  s_f621b7e1fcb97a::t_53092087ca2b63 21
+app/controllers/api/v1/groups_controller.rb
+  s_f621b7e1fcb97a::t_ebac78c413c941 15-19,21-23,28-29,47-54,58-59
+app/models/membership.rb
+  s_f621b7e1fcb97a::t_6176d5d985f663 3-6
+test/controllers/api/v1/vouchers_controller_test.rb
+  s_f621b7e1fcb97a::t_4f2a270ca8691e 64,442,470
+test/controllers/api/v1/tickets_controller_test.rb
+  s_f621b7e1fcb97a::t_3b3bd53087c85c 651,654,658
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_f621b7e1fcb97a::t_4f2a270ca8691e 11,26,39,68,91
+app/controllers/api/v1/badge_classes_controller.rb
+  s_f621b7e1fcb97a::t_1864336bb77668 30-31,37
+app/controllers/api/v1/badges_controller.rb
+  s_f621b7e1fcb97a::t_1864336bb77668 17,37
+db/schema.rb
+  s_f621b7e1fcb97a::t_b540182f1941b5 13,34,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "dcdfc7c3be422a483d2cea9dfa2da504eb0fd03a",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
