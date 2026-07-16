@@ -20,7 +20,7 @@ class Api::V1::CalendarsController < Api::BaseController
   # The group's public, published events as a subscribable feed. Subscribe in
   # Apple Calendar via webcal://<host>/api/v1/groups/:id/calendar.ics
   def group
-    group = Group.find(params[:id])
+    group = Group.resolve!(params[:id]) # TSID or slug — subscription URLs use the slug
     events = group.events
       .where(visibility: "public", status: "published")
       .where("end_time IS NULL OR end_time > ?", 90.days.ago)

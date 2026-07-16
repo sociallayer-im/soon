@@ -47,4 +47,14 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, response.body.scan("BEGIN:VEVENT").size
     assert_includes response.body, "SUMMARY:Shown"
   end
+
+  test "group feed resolves by slug" do
+    owner = create_user
+    group = create_group(owner: owner, name: "sluggy-group")
+    create_event(group: group, owner: owner, status: "published")
+
+    get "/api/v1/groups/sluggy-group/calendar.ics"
+    assert_response :success
+    assert_match "BEGIN:VCALENDAR", response.body
+  end
 end
