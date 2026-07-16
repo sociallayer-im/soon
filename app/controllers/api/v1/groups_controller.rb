@@ -53,7 +53,7 @@ class Api::V1::GroupsController < Api::BaseController
       group.save!
       group.add_member(current_user.id, "owner") # counter_cache keeps memberships_count right
     end
-    render json: GroupBlueprint.render(group), status: :created
+    render json: GroupBlueprint.render(group, view: :detail), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -63,7 +63,7 @@ class Api::V1::GroupsController < Api::BaseController
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group_params[:parent_id])
 
     if @group.update(group_params)
-      render json: GroupBlueprint.render(@group)
+      render json: GroupBlueprint.render(@group, view: :detail)
     else
       render_error(@group.errors.full_messages.join(", "))
     end
