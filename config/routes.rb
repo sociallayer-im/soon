@@ -21,6 +21,11 @@ Rails.application.routes.draw do
       # Image upload (Cloudflare Images)
       post "upload/image", to: "uploads#image"
 
+      # Public calendar feeds (subscribable in Apple Calendar / Google via webcal).
+      # `.ics` suffix optional so subscription URLs can end in .ics.
+      get "events/:id/calendar(.ics)", to: "calendars#event", as: :event_calendar
+      get "groups/:id/calendar(.ics)", to: "calendars#group", as: :group_calendar
+
       # Resources
       resources :users, only: %i[show update]
 

@@ -8,6 +8,40 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
 
   def base_start = 3.days.from_now.change(hour: 10)
 
+  # A weekly 10:00 America/New_York series that crosses the spring-forward DST
+  # boundary (2026-03-08) must keep every occurrence at 10:00 *local* — advancing
+  # in the zone, not in UTC. Before the fix, occurrences after the transition
+  # drifted to 09:00 local.
+  test "recurring keeps wall-clock time stable across a DST transition" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 3, timezone: "America/New_York",
+      # naive local time — interpreted in the series' zone
+      start_time: "2026-03-01 10:00:00", end_time: "2026-03-01 12:00:00", title: "Weekly", status: "published"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    events = Recurring.find(json_response["id"]).events.order(:start_time)
+    local_hours = events.map { |e| e.start_time.in_time_zone("America/New_York").hour }
+    assert_equal [10, 10, 10], local_hours, "every occurrence should stay at 10:00 local"
+
+    # And the absolute UTC instants shift by an hour across the DST boundary:
+    # 10:00 EST = 15:00 UTC (before), 10:00 EDT = 14:00 UTC (after).
+    assert_equal 15, events.first.start_time.utc.hour
+    assert_equal 14, events.last.start_time.utc.hour
+  end
+
+  test "a naive start_time is interpreted in the series timezone, not UTC" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "day", event_count: 1, timezone: "Asia/Shanghai",
+      start_time: "2026-07-16 14:00:00", end_time: "2026-07-16 16:00:00", title: "SH"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    event = Recurring.find(json_response["id"]).events.first
+    # 14:00 Shanghai (UTC+8) == 06:00 UTC
+    assert_equal Time.utc(2026, 7, 16, 6, 0, 0), event.start_time.utc
+  end
+
   test "create generates one event per weekly occurrence" do
     assert_difference -> { Event.count }, 4 do
       post "/api/v1/recurring", params: {

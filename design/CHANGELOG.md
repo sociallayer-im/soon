@@ -2,7 +2,46 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — email notifications + Cloudflare image upload
+## 2026-07-16 (latest) — iCalendar redesign + timezone correctness
+
+Redesigned event calendar generation and fixed the timezone bugs it depended on.
+Suite green at 459 runs.
+
+### The core bug (matches a sails user report)
+The old `Event#to_ics` passed a datetime to `Icalendar::Values::DateTime.new` with
+**no `tzid`**, producing a *floating* DATE-TIME (`DTSTART:20260716T140000` — no `Z`,
+no `TZID`). Calendar clients render floating times in the **viewer's** zone, so a
+14:00 Shanghai event showed as 14:00 for a New York subscriber instead of the real
+02:00. (sails had the same class of bug via `in_time_zone(tz)` without `tzid`.)
+
+### EventCalendar service (new)
+- One place builds all `.ics` output (`app/services/event_calendar.rb`), used by both
+  emails and feeds. Emits the event in its **own zone with a TZID + full VTIMEZONE**
+  (DST rules included) via `icalendar/tzinfo`, so every viewer sees the correct instant.
+  UTC events use canonical `...Z` times (no redundant VTIMEZONE).
+- Stable per-event **UID**, monotonic **SEQUENCE** (from `updated_at`, bumps on edit),
+  UTC **DTSTAMP**, **ORGANIZER**/optional **ATTENDEE**, and iTIP **METHOD**
+  (REQUEST invite / CANCEL / PUBLISH feed) set on both the VCALENDAR and the MIME part.
+
+### Lifecycle + delivery
+- Approval → `REQUEST` invite; cancellation → `CANCEL`; **new**: editing a calendar-relevant
+  field (time/place/title/status…) emails attendees an `updated` invite with a bumped
+  SEQUENCE so their calendar updates in place. Emails now render the **event-local** time
+  with its zone abbreviation (was raw UTC).
+
+### Apple Calendar subscription feeds (new, public)
+- `GET /api/v1/events/:id/calendar.ics` (single) and `GET /api/v1/groups/:id/calendar.ics`
+  (group feed, `METHOD:PUBLISH` + `X-WR-CALNAME` + refresh hints) — subscribable via
+  `webcal://`. Public but only expose published, public events.
+
+### Timezone fixes
+- **Recurring across DST**: `RecurringController` now parses `start_time` in the series'
+  zone (a naive `"2026-03-01 10:00"` means 10:00 *local*, not UTC) and advances occurrences
+  in that zone, so a weekly 10:00 stays 10:00 across the spring-forward boundary (was
+  drifting an hour). `Event#event_timezone`/`#local_start`/`#local_end` centralize safe
+  zone resolution (invalid free-text → UTC, never raises).
+
+## 2026-07-16 — email notifications + Cloudflare image upload
 
 Ported the two remaining sails subsystems the API needed — transactional email
 and image upload — as clean, self-contained features. Suite green at 445 runs.

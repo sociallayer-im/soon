@@ -1,0 +1,8 @@
+Event updated
+
+Details for <%= @event.title %> have changed. The attached calendar invite will update the event on your calendar.
+
+When: <%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %>
+<% if @event.location_text.present? %>Where: <%= @event.location_text %>
+<% end %>
+View event: <%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>

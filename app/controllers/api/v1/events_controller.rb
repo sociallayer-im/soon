@@ -34,6 +34,7 @@ class Api::V1::EventsController < Api::BaseController
       return render_error(err)
     end
     if @event.save
+      notify_attendees_of_update if calendar_relevant_change?
       render json: EventBlueprint.render(@event)
     else
       render_error(@event.errors.full_messages.join(", "))
@@ -60,10 +61,26 @@ class Api::V1::EventsController < Api::BaseController
   # Email every attending participant that the event was cancelled (with an .ics
   # calendar cancellation). Skips participants without an email.
   def notify_attendees_of_cancellation
+    each_attendee_email { |email| EventMailer.cancelled(event_id: @event.id, recipient: email).deliver_later }
+  end
+
+  # Email attendees an updated invite (bumped SEQUENCE) so their calendars update.
+  def notify_attendees_of_update
+    each_attendee_email { |email| EventMailer.updated(event_id: @event.id, recipient: email).deliver_later }
+  end
+
+  def each_attendee_email
     @event.participants.where(status: "attending").includes(:user).find_each do |participant|
       email = participant.user&.email
-      EventMailer.cancelled(event_id: @event.id, recipient: email).deliver_later if email.present?
+      yield email if email.present?
     end
+  end
+
+  # Only the fields that appear in the calendar entry warrant re-inviting people.
+  CALENDAR_FIELDS = %w[start_time end_time timezone title content place_id venue_id meeting_url external_url status].freeze
+
+  def calendar_relevant_change?
+    (@event.saved_changes.keys & CALENDAR_FIELDS).any?
   end
 
   # Validates that referenced venue/track belong to the event's group and, for a

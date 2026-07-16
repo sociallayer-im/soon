@@ -8,7 +8,9 @@ class EventMailerTest < ActionMailer::TestCase
     @attendee = create_user
   end
 
-  test "participant_approved emails the attendee and attaches a calendar invite" do
+  test "participant_approved emails the attendee and attaches a REQUEST invite in the event zone" do
+    @event.update!(timezone: "Asia/Shanghai",
+      start_time: Time.utc(2026, 7, 16, 6, 0, 0), end_time: Time.utc(2026, 7, 16, 8, 0, 0))
     participant = create_participant(event: @event, user: @attendee, status: "attending")
     mail = EventMailer.participant_approved(participant_id: participant.id)
 
@@ -16,9 +18,16 @@ class EventMailerTest < ActionMailer::TestCase
     assert_equal "You're in! — Launch Party", mail.subject
     ics = mail.attachments["invite.ics"]
     assert ics.present?, "should attach invite.ics"
-    assert_match "BEGIN:VCALENDAR", ics.body.to_s
     assert_match "SUMMARY:Launch Party", ics.body.to_s
     assert_match "STATUS:CONFIRMED", ics.body.to_s
+    # The invite carries the event's own zone (14:00 Shanghai == 06:00 UTC), NOT a
+    # floating time — so any recipient's calendar shows the correct instant.
+    assert_match "DTSTART;TZID=Asia/Shanghai:20260716T140000", ics.body.to_s
+    assert_match "BEGIN:VTIMEZONE", ics.body.to_s
+    # iTIP method belongs on the MIME part so clients treat it as an invitation.
+    assert_match(/method=REQUEST/i, ics.content_type)
+    # The email copy shows the event-local time, not UTC.
+    assert_match "14:00", mail.html_part.body.to_s
   end
 
   test "participant_rejected emails the attendee without an attachment" do

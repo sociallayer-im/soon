@@ -1,7 +1,7 @@
 <h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">Event cancelled</h1>
 <p style="margin: 0 0 16px; color: #4b5563;">
   We're sorry to let you know that <strong><%= @event.title %></strong>
-  (<%= @event.start_time&.strftime("%b %-d, %Y · %H:%M") %>) has been cancelled.
+  (<%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %>) has been cancelled.
   The attached calendar update will remove it from your calendar.
 </p>
 <%= cta_button "Explore other events", MailerHelper::WEB_URL %>

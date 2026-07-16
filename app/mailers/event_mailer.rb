@@ -7,7 +7,7 @@ class EventMailer < ApplicationMailer
     recipient = @participant.user&.email
     return if recipient.blank?
 
-    attachments["invite.ics"] = { mime_type: "text/calendar", content: @event.to_ics }
+    attach_invite(recipient, method: "REQUEST")
     mail(to: recipient, subject: "You're in! — #{@event.title}")
   end
 
@@ -26,7 +26,28 @@ class EventMailer < ApplicationMailer
     @event = Event.find(event_id)
     return if recipient.blank?
 
-    attachments["invite.ics"] = { mime_type: "text/calendar", content: @event.to_ics(cancelled: true) }
+    attach_invite(recipient, method: "CANCEL")
     mail(to: recipient, subject: "Cancelled — #{@event.title}")
+  end
+
+  # An event's details changed — re-send the invite with a bumped SEQUENCE so the
+  # recipient's calendar updates the entry in place (same UID).
+  def updated(event_id:, recipient:)
+    @event = Event.find(event_id)
+    return if recipient.blank?
+
+    attach_invite(recipient, method: "REQUEST")
+    mail(to: recipient, subject: "Updated — #{@event.title}")
+  end
+
+  private
+
+  # iTIP requires text/calendar with the METHOD as a MIME parameter for a client
+  # to treat the part as an invite/update/cancel (not just a file to open).
+  def attach_invite(recipient, method:)
+    attachments["invite.ics"] = {
+      mime_type: %(text/calendar; method=#{method}; charset=UTF-8),
+      content: EventCalendar.for_event(@event, method: method, attendee: recipient)
+    }
   end
 end

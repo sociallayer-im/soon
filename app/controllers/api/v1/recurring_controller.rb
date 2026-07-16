@@ -21,8 +21,12 @@ class Api::V1::RecurringController < Api::BaseController
     count = params[:event_count].to_i
     return render_error("event_count must be positive") unless count.positive?
 
-    start_time = parse_time(params[:start_time])
-    end_time   = parse_time(params[:end_time])
+    # Parse in the series' own zone: a naive "2026-07-16 18:00" then means
+    # 18:00 local (not 18:00 UTC), and occurrences advance in that zone so a
+    # weekly 18:00 stays 18:00 across a DST transition (see occurrence_starts).
+    zone = resolve_zone(params[:timezone])
+    start_time = parse_time(params[:start_time], zone)
+    end_time   = parse_time(params[:end_time], zone)
     return render_error("invalid start_time/end_time") unless start_time && end_time && end_time > start_time
     duration = end_time - start_time
 
@@ -144,16 +148,25 @@ class Api::V1::RecurringController < Api::BaseController
     venue
   end
 
+  # Advance in the start_time's own zone. On a TimeWithZone, advance(:weeks/:months)
+  # preserves the wall-clock time across DST transitions (unlike adding raw
+  # seconds/advancing a UTC time, which would shift a weekly 18:00 by an hour).
   def occurrence_starts(start_time, count, interval)
     unit = Recurring::INTERVALS[interval]
     Array.new(count) { |i| start_time.advance(unit => i) }
   end
 
-  def parse_time(value)
+  # A user-supplied time is interpreted in `zone`; an explicit offset in the
+  # string still wins (Time.zone.parse honors it).
+  def parse_time(value, zone)
     return nil if value.blank?
-    Time.zone.parse(value.to_s)
+    zone.parse(value.to_s)
   rescue ArgumentError, TypeError
     nil
+  end
+
+  def resolve_zone(tzid)
+    (tzid.presence && ActiveSupport::TimeZone[tzid]) || Time.find_zone!("UTC")
   end
 
   def event_attributes
