@@ -2,7 +2,27 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — places/tracks/discover/search (frontend migration C+D)
+## 2026-07-16 (latest) — remember feature (frontend migration E)
+
+Ports sails' "remember" (shared commemorative badge for people physically
+together) onto soon's voucher/badge primitives. Suite green at 498 runs.
+
+- `POST /remember` — creates a `strategy: "remember"` voucher from a
+  `badge_type: "remember"` badge class and auto-joins the creator.
+- `POST /remember/:voucher_id/join|cancel` — join roster is
+  `remember/join` activities on the voucher (idempotent join).
+- `POST /remember/:voucher_id/mint` — creator-only, ≥2 joiners; one identical
+  badge per joiner via `Voucher#build_badge_for` with the same badge_class
+  index locking as vouchers#use; voucher consumed (counter → 0).
+- `GET /remember/meta` (public) — badge_class id + joiner threshold; resolved
+  by `badge_type: "remember"` instead of sails' hardcoded id.
+- `GET /remember/:voucher_id` (public) — the QR-poll payload
+  (voucher/badge_class/join roster).
+- `GET /remember/related_groups?user_ids=` (public) — popup-city groups each
+  user attended (replaces sails' hardcoded 14-group allowlist with the
+  dated+located group rule).
+
+## 2026-07-16 — places/tracks/discover/search (frontend migration C+D)
 
 Third and fourth backend chunks of the seastar-app → soon migration. Suite
 green at 493 runs.

@@ -100,6 +100,15 @@ Rails.application.routes.draw do
       resources :tracks,   only: %i[index show create update destroy]
       resources :markers,  only: %i[index show create update destroy]
 
+      # Remember (shared commemorative badge). Static paths before :voucher_id.
+      get  "remember/meta",               to: "remember#meta"
+      get  "remember/related_groups",     to: "remember#related_groups"
+      post "remember",                    to: "remember#create"
+      get  "remember/:voucher_id",        to: "remember#show"
+      post "remember/:voucher_id/join",   to: "remember#join"
+      post "remember/:voucher_id/cancel", to: "remember#cancel"
+      post "remember/:voucher_id/mint",   to: "remember#mint"
+
       post  "recurring",                    to: "recurring#create"
       get   "recurring/:id",                to: "recurring#show"
       patch "recurring/:recurring_id",      to: "recurring#update"
