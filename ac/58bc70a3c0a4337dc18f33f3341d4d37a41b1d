@@ -1,0 +1,62 @@
+test/controllers/api/v1/recurring_controller_test.rb
+  s_f621b7e1fcb97a::t_8452830870a766 11-44
+test/services/event_calendar_test.rb
+  s_f621b7e1fcb97a::t_c15c1d1f4a2c89 62-63,72-73
+  s_f621b7e1fcb97a::t_4208d5fc7216aa 41
+  s_f621b7e1fcb97a::t_f889d99cb99a1d 1-40,42-61,64-71,74-91,98
+  s_f621b7e1fcb97a::t_475bd16487a936 92-97
+app/views/event_mailer/participant_approved.text.erb
+  s_f621b7e1fcb97a::t_9e3afe4dafd2de 5
+app/views/event_mailer/cancelled.text.erb
+  s_f621b7e1fcb97a::t_9e3afe4dafd2de 3
+app/views/event_mailer/cancelled.html.erb
+  s_f621b7e1fcb97a::t_9e3afe4dafd2de 4
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_63130fbdfd5325 5-44
+app/services/event_calendar.rb
+  s_f621b7e1fcb97a::t_3f0c6bbb7e6d2e 1-123
+app/controllers/api/v1/calendars_controller.rb
+  s_f621b7e1fcb97a::t_2cd62bd5d040d1 1-47
+app/views/event_mailer/updated.text.erb
+  s_f621b7e1fcb97a::t_eb5247f00e617b 1-8
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_4235f34984050f 64-72,75,79-84
+  s_f621b7e1fcb97a::t_ee5e8217fbd2d0 37
+  s_f621b7e1fcb97a::t_0f2fd6040b66f5 85
+test/controllers/api/v1/calendars_controller_test.rb
+  s_f621b7e1fcb97a::t_137c7b33b8fdd1 1-50
+app/views/event_mailer/participant_approved.html.erb
+  s_f621b7e1fcb97a::t_9e3afe4dafd2de 10
+config/routes.rb
+  s_f621b7e1fcb97a::t_40e5629283aefc 24-28
+app/views/event_mailer/updated.html.erb
+  s_f621b7e1fcb97a::t_6194a3dc355045 1-20
+app/mailers/event_mailer.rb
+  s_f621b7e1fcb97a::t_ea436a74e658f5 29,32-52
+  s_f621b7e1fcb97a::t_36f8cfd7823161 10
+app/controllers/api/v1/recurring_controller.rb
+  s_f621b7e1fcb97a::t_c777b23857a72f 151-153,159-161,163,168-169
+  s_f621b7e1fcb97a::t_44c757be2c63fa 24-29
+  s_f621b7e1fcb97a::t_67b50b8b9348b9 170-171
+test/mailers/event_mailer_test.rb
+  s_f621b7e1fcb97a::t_bb6c0a14bb1477 11-13,23-30
+app/models/event.rb
+  s_f621b7e1fcb97a::t_eeceba3b13dcbf 40-44,47-57
+  s_f621b7e1fcb97a::t_424abdb7344163 45-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ac58bc70a3c0a4337dc18f33f3341d4d37a41b1d",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
