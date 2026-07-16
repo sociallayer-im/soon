@@ -119,4 +119,26 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     patch "/api/v1/groups/#{group.id}", params: { group: { nickname: "Nope" } }, headers: auth_headers(member)
     assert_response :forbidden
   end
+
+  test "update accepts tag/permission/banner fields but strips privileged group_tags" do
+    owner = create_user
+    group = create_group(owner: owner, group_tags: ["top"])
+
+    patch "/api/v1/groups/#{group.id}", params: { group: {
+      event_tag_list: ["talk", "party"],
+      can_publish_event: "member",
+      social_links: { twitter: "@g" },
+      banner_text: "hello",
+      group_tags: ["popup", "featured"]
+    } }, headers: auth_headers(owner)
+    assert_response :success
+
+    group.reload
+    assert_equal %w[talk party], group.event_tag_list
+    assert_equal "member", group.can_publish_event
+    assert_equal({ "twitter" => "@g" }, group.social_links)
+    assert_equal "hello", group.banner_text
+    # "featured" (privileged) stripped; pre-existing "top" kept
+    assert_equal ["popup", "top"].sort, group.group_tags.sort
+  end
 end

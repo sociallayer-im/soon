@@ -3,8 +3,8 @@ class EventBlueprint < Blueprinter::Base
 
   fields :title, :content, :start_time, :end_time, :timezone, :status, :visibility,
          :meeting_url, :external_url, :category, :kind, :tags, :pinned,
-         :max_participant, :participant_count, :require_approval,
-         :image_url, :recurring_id, :form_id, :created_at
+         :max_participant, :participant_count, :require_approval, :requirement_tags,
+         :image_url, :recurring_id, :form_id, :notes, :created_at
 
   # Viewer flags — only emitted when the request was authenticated and the
   # controller passed the viewer's sets (see EventsController#personalization_options).

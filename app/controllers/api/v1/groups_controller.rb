@@ -89,8 +89,23 @@ class Api::V1::GroupsController < Api::BaseController
     parent && GroupPolicy.new(current_user, parent).manage?
   end
 
+  # Tags a group cannot grant itself — homepage curation is a deploy-side
+  # decision (set directly in the DB / console), not self-service.
+  PRIVILEGED_TAGS = %w[featured top].freeze
+
   def group_params
-    params.require(:group).permit(:name, :nickname, :timezone, :location,
-      :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id)
+    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location,
+      :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
+      :banner_image_url, :banner_link_url, :banner_text,
+      :can_publish_event, :can_join_event, :can_view_event,
+      social_links: {}, group_tags: [], event_tag_list: [],
+      requirement_tag_list: [], venue_tag_list: [])
+
+    # Strip privileged tags a caller tries to add; keep ones the group already has.
+    if permitted[:group_tags]
+      existing = @group ? (@group.group_tags & PRIVILEGED_TAGS) : []
+      permitted[:group_tags] = (permitted[:group_tags] - PRIVILEGED_TAGS) | existing
+    end
+    permitted
   end
 end
