@@ -1,0 +1,32 @@
+app/controllers/api/v1/events_controller.rb
+  s_f621b7e1fcb97a::t_d755aae748fdd1 15-17
+  s_f621b7e1fcb97a::t_28688e0753192e 34-36
+  s_f621b7e1fcb97a::t_17052baa3ddaf7 121-137
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_6505fdecd65838 43-49
+app/controllers/api/v1/recurring_controller.rb
+  s_f621b7e1fcb97a::t_60fad1b484eb88 50-51
+  s_f621b7e1fcb97a::t_3782d015bbfc7d 170-172
+  s_f621b7e1fcb97a::t_e2bc37a2950546 24-28
+app/models/event.rb
+  s_f621b7e1fcb97a::t_7975cb8ecb2e7a 71-74
+  s_f621b7e1fcb97a::t_81690f144fde26 28-31
+test/controllers/api/v1/events_controller_test.rb
+  s_f621b7e1fcb97a::t_b8d4c98e741399 119-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a9fec958f24bea15819423fea9011d578bcb6b0f",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
