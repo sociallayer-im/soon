@@ -3,6 +3,8 @@ class VenueBlueprint < Blueprinter::Base
 
   fields :name, :capacity, :website, :about, :amenities, :tags, :featured_image_url
 
+  association :place, blueprint: PlaceBlueprint
+
   view :with_availability do
     association :availabilities, blueprint: AvailabilityBlueprint
   end

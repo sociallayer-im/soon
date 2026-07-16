@@ -274,13 +274,19 @@ class Api::V1::TicketsController < Api::BaseController
 
   # GET /api/v1/tickets/list?profile_handle=&event_id=
   def list
-    user = User.find_by(name: params[:profile_handle])
-    return render_error("user not found") unless user
-    return render_error("not authorized", status: :forbidden) unless user.id == current_user.id || event_manager?(params[:event_id])
+    if params[:profile_handle].present?
+      user = User.find_by(name: params[:profile_handle])
+      return render_error("user not found") unless user
+      return render_error("not authorized", status: :forbidden) unless user.id == current_user.id || event_manager?(params[:event_id])
 
-    items = TicketItem.where(user_id: user.id, event_id: params[:event_id])
+      items = TicketItem.where(user_id: user.id, event_id: params[:event_id])
+    else
+      # No user filter: the whole event's order list — managers only.
+      return render_error("not authorized", status: :forbidden) unless event_manager?(params[:event_id])
+      items = TicketItem.where(event_id: params[:event_id])
+    end
     items = items.where(status: params[:status]) if params[:status].present?
-    render json: TicketItemBlueprint.render(items)
+    render json: TicketItemBlueprint.render(items.includes(:user), view: :with_profile)
   end
 
   # GET /api/v1/tickets/coupons?event_id=
