@@ -1,4 +1,6 @@
 class Api::V1::CommentsController < Api::BaseController
+  # Comment threads render on public event/group pages.
+  skip_before_action :authenticate!, only: :index
   before_action :set_comment, only: %i[remove]
 
   # POST /api/v1/comments

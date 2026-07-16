@@ -160,8 +160,8 @@ class Api::V1::CommentsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes ids, removed.id
   end
 
-  test "index requires authentication" do
+  test "index is public" do
     get "/api/v1/comments", params: { comment_type: "comment" }
-    assert_response :unauthorized
+    assert_response :success
   end
 end

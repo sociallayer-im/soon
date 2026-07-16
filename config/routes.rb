@@ -42,6 +42,7 @@ Rails.application.routes.draw do
       resources :groups do
         member do
           post :freeze
+          post :send_email
         end
         resources :memberships, only: %i[index create update destroy]
         resources :group_invites, only: %i[index create destroy] do

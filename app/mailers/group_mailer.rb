@@ -8,6 +8,14 @@ class GroupMailer < ApplicationMailer
     mail(to: @invite.receiver_address, subject: "You're invited to join #{@group.display_name}")
   end
 
+  # A manager's broadcast to the group's members (the "email members" page).
+  # Subject/content are manager-authored; content is plain text.
+  def member_broadcast(group_id:, subject:, content:, recipient:)
+    @group = Group.find(group_id)
+    @content = content
+    mail(to: recipient, subject: subject)
+  end
+
   # Notifies a group's owner that one of their group tickets was purchased.
   def ticket_purchased(ticket_item_id:, recipient:)
     @ticket_item = TicketItem.find(ticket_item_id)

@@ -17,9 +17,9 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, ids.size
   end
 
-  test "index requires authentication" do
+  test "index is public with a group filter but rejects an anonymous firehose" do
     get "/api/v1/markers"
-    assert_response :unauthorized
+    assert_response :unprocessable_entity
   end
 
   test "show returns a marker with its associations" do
@@ -61,13 +61,9 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
-  # KNOWN GAP (pre-existing, not introduced this session, out of scope to fix here):
-  # MarkersController never calls `authorize`, even though app/policies/marker_policy.rb
-  # defines create?/update?/destroy? rules (group_member?/owner?/group_admin?). Any
-  # authenticated user can create a marker in ANY group, and update/destroy ANY marker
-  # regardless of ownership or group membership. These tests document the actual
-  # (unauthorized) behavior rather than the intended-per-policy behavior.
-  test "create currently allows a non-member to create a marker in someone else's group (KNOWN GAP — MarkerPolicy is never invoked)" do
+  # MarkerPolicy is enforced: create needs group membership; update/destroy
+  # need the owner or a group manager.
+  test "create rejects a non-member creating a marker in someone else's group" do
     outsider = create_user
     owner = create_user
     group = create_group(owner: owner)
@@ -75,10 +71,10 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
 
     post "/api/v1/markers", params: { marker: { title: "Intruder Marker", place_id: place.id, group_id: group.id } },
       headers: auth_headers(outsider)
-    assert_response :created
+    assert_response :forbidden
   end
 
-  test "update currently allows any authenticated user to update any marker (KNOWN GAP — MarkerPolicy is never invoked)" do
+  test "update rejects a non-owner non-manager" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
@@ -86,8 +82,8 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     marker = create_marker(group: group, place: place, owner: owner)
 
     patch "/api/v1/markers/#{marker.id}", params: { marker: { title: "Hijacked" } }, headers: auth_headers(outsider)
-    assert_response :success
-    assert_equal "Hijacked", marker.reload.title
+    assert_response :forbidden
+    assert_not_equal "Hijacked", marker.reload.title
   end
 
   test "update persists valid changes" do
@@ -113,7 +109,7 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
-  test "destroy currently allows any authenticated user to destroy any marker (KNOWN GAP — MarkerPolicy is never invoked)" do
+  test "destroy rejects a non-owner non-manager" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
@@ -121,8 +117,8 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     marker = create_marker(group: group, place: place, owner: owner)
 
     delete "/api/v1/markers/#{marker.id}", headers: auth_headers(outsider)
-    assert_response :no_content
-    assert_not Marker.exists?(marker.id)
+    assert_response :forbidden
+    assert Marker.exists?(marker.id)
   end
 
   test "destroy 404s for an unknown id" do

@@ -1,7 +1,7 @@
 class Api::V1::GroupsController < Api::BaseController
   # Group pages are public.
   skip_before_action :authenticate!, only: :show
-  before_action :set_group, only: %i[update destroy freeze]
+  before_action :set_group, only: %i[update destroy freeze send_email]
 
   def index
     render_collection current_user.groups, blueprint: GroupBlueprint
@@ -19,6 +19,29 @@ class Api::V1::GroupsController < Api::BaseController
     authorize @group
     @group.update!(active: false)
     render json: GroupBlueprint.render(@group, view: :detail)
+  end
+
+  # POST /api/v1/groups/:id/send_email — manager broadcast to members.
+  # With test_recipient set, sends ONLY to that address (preview mode).
+  def send_email
+    authorize @group, :manage?
+    subject = params[:subject].to_s.strip
+    content = params[:content].to_s.strip
+    return render_error("subject and content are required") if subject.blank? || content.blank?
+
+    if params[:test_recipient].present?
+      GroupMailer.member_broadcast(group_id: @group.id, subject: subject,
+        content: content, recipient: params[:test_recipient]).deliver_later
+      return render json: { sent_count: 1, test: true }
+    end
+
+    emails = @group.memberships.where(active: true).includes(:user)
+                   .filter_map { |m| m.user&.email }.uniq
+    emails.each do |email|
+      GroupMailer.member_broadcast(group_id: @group.id, subject: subject,
+        content: content, recipient: email).deliver_later
+    end
+    render json: { sent_count: emails.size, test: false }
   end
 
   def create

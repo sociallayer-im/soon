@@ -94,10 +94,11 @@ class Api::V1::EventsController < Api::BaseController
   def apply_filters(scope)
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).id)
-    elsif current_user
-      # No group filter: an authenticated caller browses their own groups
+    elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank?
+      # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
-      # public events (feeds/search).
+      # public events (feeds/search). Profile-tab filters (owner_id/attendee_id)
+      # must NOT be narrowed to the viewer's groups.
       scope = scope.where(group_id: current_user.groups.select(:id))
     end
 
@@ -107,6 +108,16 @@ class Api::V1::EventsController < Api::BaseController
     when "past"     then scope.where("end_time < ?", now).order(start_time: :desc)
     when "ongoing"  then scope.where("start_time <= ? AND end_time >= ?", now, now).order(:start_time)
     else scope.order(:start_time)
+    end
+
+    # Profile-page tabs: events a user hosts / attends (public visibility rules
+    # still apply through visible_to). Both accept a TSID or username.
+    if params[:owner_id].present?
+      scope = scope.where(owner_id: User.resolve!(params[:owner_id]).id)
+    end
+    if params[:attendee_id].present?
+      attendee = User.resolve!(params[:attendee_id])
+      scope = scope.where(id: Participant.where(user_id: attendee.id, status: "attending").select(:event_id))
     end
 
     scope = scope.where(venue_id: params[:venue_id]) if params[:venue_id].present?

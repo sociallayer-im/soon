@@ -2,7 +2,26 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — remember feature (frontend migration E)
+## 2026-07-16 (latest) — public map/comments, profile tabs, member email, marker authz (frontend migration F)
+
+Gaps surfaced while rewriting the SDK. Suite green at 503 runs.
+
+- **Markers**: index is public with `group_id` (TSID or slug) + `category`
+  filters (anonymous callers must filter by group); **security fix** — the
+  existing `MarkerPolicy` was never invoked: any authenticated user could
+  create markers in any group and update/destroy anyone's. Now enforced
+  (create: group member; update/destroy: owner or group manager).
+- **Comments**: `GET /comments` is public (threads render on public pages).
+- **Events**: `owner_id` / `attendee_id` filters (TSID or username) on the
+  public list — profile-page "hosting"/"attended" tabs. These filters bypass
+  the authenticated caller's own-groups default scope.
+- **Groups**: `POST /groups/:id/send_email` (manager-only) — broadcast to all
+  active members via `GroupMailer#member_broadcast`; `test_recipient` sends a
+  single preview email. Returns `{sent_count, test}`.
+- Blueprinter timestamps are ISO 8601 (`...T...Z` / plain dates) — JS `Date`
+  can't reliably parse Ruby's default `to_s`.
+
+## 2026-07-16 — remember feature (frontend migration E)
 
 Ports sails' "remember" (shared commemorative badge for people physically
 together) onto soon's voucher/badge primitives. Suite green at 498 runs.
