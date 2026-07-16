@@ -2,7 +2,25 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — public map/comments, profile tabs, member email, marker authz (frontend migration F)
+## 2026-07-16 (latest) — platform-admin curation + polish (frontend migration G)
+
+Suite green at 508 runs.
+
+- **Platform admins**: `User#platform_admin?` (`users.permissions` includes
+  `"admin"`). They manage/freeze/delete any group and may set the privileged
+  `featured`/`top` group_tags (stripped for everyone else); `/users/me`
+  exposes `permissions` so the UI can gate admin actions. Restores sails'
+  popup-city curation (tags are clean names now — no `:` prefix).
+- groups#create/update render the `:detail` view (writes return the full
+  group payload).
+- Group calendar feed resolves by slug (subscription URLs use the name).
+- tickets#update/destroy for event editing (sold tickets retire to
+  `inactive`); tickets#list supports event-wide manager listing
+  (`:with_profile`); VenueBlueprint emits `place`; EventBlueprint emits
+  `requirement_tags`/`notes`; PaymentMethodBlueprint emits `token_address`/
+  `chain_token_addresses`; invite activities carry `group_name` payload.
+
+## 2026-07-16 — public map/comments, profile tabs, member email, marker authz (frontend migration F)
 
 Gaps surfaced while rewriting the SDK. Suite green at 503 runs.
 
