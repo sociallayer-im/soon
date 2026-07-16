@@ -14,7 +14,7 @@ class Api::V1::BadgesController < Api::BaseController
       badges = badges.where(owner_id: user.id) if params[:owned_badges]
       badges = badges.where(creator_id: user.id) if params[:created_badges]
     end
-    badges = badges.joins(:owner).where(users: { handle: params[:owner_handle] }) if params[:owner_handle].present?
+    badges = badges.joins(:owner).where(users: { name: params[:owner_handle] }) if params[:owner_handle].present?
     badges = badges.where(badge_class_id: params[:badge_class_id]) if params[:badge_class_id].present?
     render_collection badges.includes(:badge_class, :creator, :owner), blueprint: BadgeBlueprint
   end
@@ -34,7 +34,7 @@ class Api::V1::BadgesController < Api::BaseController
   # POST /api/v1/badges/:id/transfer
   def transfer
     authorize @badge, :own?, policy_class: BadgePolicy
-    target = User.find_by(handle: params[:target])
+    target = User.find_by(name: params[:target])
     return render_error("target not found") unless target
     return render_error("cannot transfer to self") if target.id == current_user.id
     return render_error("badge is not transferable") unless @badge.badge_class.transferable

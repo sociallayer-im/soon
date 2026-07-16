@@ -18,13 +18,13 @@ class Group < ApplicationRecord
   # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.
+  # memberships_count is maintained by Membership's counter_cache, not here.
   def add_member(user_id, role)
     membership = memberships.find_by(user_id: user_id)
     if membership
       membership.update!(role: role)
     else
       membership = memberships.create!(user_id: user_id, role: role, active: true)
-      increment!(:memberships_count)
     end
     membership
   end

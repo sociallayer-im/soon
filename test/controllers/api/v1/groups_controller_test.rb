@@ -62,4 +62,40 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     delete "/api/v1/groups/#{group.id}", headers: auth_headers(owner)
     assert_response :no_content
   end
+
+  test "create sets memberships_count to 1 via the owner membership" do
+    user = create_user
+    post "/api/v1/groups", params: { group: { name: "Counted" } }, headers: auth_headers(user)
+    assert_response :created
+    assert_equal 1, Group.find(json_response["id"]).memberships_count
+  end
+
+  test "update persists timezone" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { timezone: "Europe/Zurich" } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "Europe/Zurich", group.reload.timezone
+  end
+
+  test "a parent-group manager can manage a child group" do
+    owner = create_user
+    parent = create_group(owner: owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+
+    patch "/api/v1/groups/#{child.id}", params: { group: { name: "child-renamed" } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "child-renamed", child.reload.name
+  end
+
+  test "create under an unmanaged parent is forbidden" do
+    stranger = create_user
+    other_owner = create_user
+    parent = create_group(owner: other_owner)
+
+    post "/api/v1/groups", params: { group: { name: "sneaky", parent_id: parent.id } }, headers: auth_headers(stranger)
+    assert_response :forbidden
+    assert_not Group.exists?(name: "sneaky")
+  end
 end

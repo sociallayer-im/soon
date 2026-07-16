@@ -61,7 +61,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     receiver = create_user
     bc = create_badge_class(creator: creator)
 
-    post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.handle] }, headers: auth_headers(creator)
+    post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.name] }, headers: auth_headers(creator)
     assert_response :created
     voucher = json_response.first
     assert_equal "account", voucher["strategy"]
@@ -439,7 +439,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     v1 = create_voucher(sender: sender1, badge_class: bc1, counter: 3)
     create_voucher(sender: sender2, badge_class: bc2, counter: 3)
 
-    get "/api/v1/vouchers", params: { sender_handle: sender1.handle }, headers: auth_headers(sender1)
+    get "/api/v1/vouchers", params: { sender_handle: sender1.name }, headers: auth_headers(sender1)
     assert_response :success
     ids = json_response["data"].map { |v| v["id"] }
     assert_equal [v1.id], ids
@@ -467,7 +467,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "Voucher.count" do
       post "/api/v1/vouchers/send_badge",
-        params: { badge_class_id: bc.id, receivers: [valid.handle, "no-such-user"] },
+        params: { badge_class_id: bc.id, receivers: [valid.name, "no-such-user"] },
         headers: auth_headers(creator)
     end
     assert_response :unprocessable_entity

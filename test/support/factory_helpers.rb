@@ -8,8 +8,7 @@ module FactoryHelpers
     n = unique_suffix
     User.create!({
       email: "user#{n}@test.com",
-      name: "User #{n}",
-      handle: "user#{n}"
+      name: "user_#{n}"
     }.merge(attrs))
   end
 

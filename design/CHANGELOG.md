@@ -2,7 +2,51 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — badge/voucher: fix review findings + drop redundant columns
+## 2026-07-16 (latest) — auth/group/membership: fix review findings + drop `handle`
+
+A code review of login, group creation/management, and membership fixed 8 findings, and — per the
+product decision that `handle` is legacy `sails/` design — dropped the `handle` column entirely so
+both users and groups are identified by `name`. Suite green at 390 runs.
+
+### Fixed — auth
+- **Login-code brute force / stacking.** `AuthCode` gained `MAX_ATTEMPTS = 5` and an `attempts`
+  counter (migration `20260316000005`); `verify_code` burns the code after 5 wrong tries and compares
+  with `ActiveSupport::SecurityUtils.secure_compare`. `request_code` invalidates any prior active
+  login codes so an attacker can't hold several concurrently-guessable codes.
+- **Account enumeration.** `request_code` now returns a uniform `{message: "Code sent"}` whether or
+  not the email exists (previously 404 leaked which emails had accounts).
+- Codes are scoped by `context` ("login") so a code minted for one flow can't verify another;
+  `last_signin_at` is stamped on success.
+
+### Fixed — group / membership
+- **Authorization centralized in `GroupPolicy`.** `update?/destroy?/manage?` require `manages?`
+  (own admins/owners, or a *parent*-group manager per the Parent-Child contract); `members?`
+  requires membership-or-manage. Hand-rolled `authorize_group_admin!`/`group_admin?` helpers removed.
+- **Owner-role protection.** A non-owner admin can no longer grant the owner role, self-promote to
+  owner, or demote the owner (membership create/update guards), and the **last owner** of a group
+  can't be removed.
+- **`memberships#index` no longer leaks email** — it renders `UserBlueprint`'s default view (email
+  lives only in the `:self` view).
+- **`memberships_count` via `counter_cache`** on `Membership belongs_to :group` — `Group#add_member`
+  no longer hand-increments, so create/destroy keep the count exact.
+- **Group create is transactional** and routes the owner through `add_member`; nesting under a parent
+  you don't manage is rejected (`parent_ok?`).
+
+### Changed — `handle` → `name`
+- Dropped `users.handle` (migration `20260316000006`); users are identified by `name`, which now
+  carries the slug rule (`/\A[a-z0-9_]{3,30}\z/`, unique). `name` is not user-clearable (presence)
+  but the format check is `allow_blank` so presence owns the empty case.
+- Groups are looked up by `name` too (was `handle`/`nickname` in filters). All controller lookups
+  (vouchers, badges, badge_classes, tickets, group_invites) migrated `handle:` → `name:`.
+- **Email is PII:** `UserBlueprint` default view excludes it; only the `:self` view (own record)
+  includes it. `users#update` permits neither `handle` nor `email`.
+
+### Tests
+- 14 regressions added: owner-role guards, last-owner protection, index membership-gate + no email
+  leak, counter_cache correctness, parent-manager-manages-child, unmanaged-parent create 403, group
+  timezone update, own-vs-other email visibility, name slug/uniqueness 422.
+
+## 2026-07-16 — badge/voucher: fix review findings + drop redundant columns
 
 A code review of the badge/voucher features fixed 8 findings and removed redundant schema fields.
 Suite green at 373 runs.

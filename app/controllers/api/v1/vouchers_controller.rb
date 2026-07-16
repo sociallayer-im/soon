@@ -16,10 +16,10 @@ class Api::V1::VouchersController < Api::BaseController
                        .where("expires_at > ? OR expires_at IS NULL", Time.current)
                        .where("counter != 0 OR counter IS NULL")
     if params[:sender_handle].present?
-      sender = User.find_by!(handle: params[:sender_handle])
+      sender = User.find_by!(name: params[:sender_handle])
       vouchers = vouchers.where(sender_id: sender.id)
     elsif params[:group_handle].present?
-      vouchers = vouchers.joins(badge_class: :group).where(groups: { handle: params[:group_handle] })
+      vouchers = vouchers.joins(badge_class: :group).where(groups: { name: params[:group_handle] })
     end
     render_collection vouchers.order(created_at: :desc), blueprint: VoucherBlueprint
   end
@@ -114,7 +114,7 @@ class Api::V1::VouchersController < Api::BaseController
   # POST /api/v1/vouchers/send_badge
   def send_badge
     issue_vouchers(action: "voucher/send_badge") do |address|
-      receiver = User.find_by(handle: address) || User.find_by(eth: address) || User.find_by(email: address)
+      receiver = User.find_by(name: address) || User.find_by(eth: address) || User.find_by(email: address)
       raise InvalidReceiver, "invalid receiver" unless receiver
       [{ strategy: "account", receiver_id: receiver.id, counter: 1 }, { receiver: receiver }]
     end

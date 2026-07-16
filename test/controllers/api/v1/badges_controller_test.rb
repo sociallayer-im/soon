@@ -32,7 +32,7 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     ids = json_response["data"].map { |b| b["id"] }
     assert_includes ids, minted.id
 
-    get "/api/v1/badges", params: { owner_handle: owner.handle }, headers: auth_headers(owner)
+    get "/api/v1/badges", params: { owner_handle: owner.name }, headers: auth_headers(owner)
     ids = json_response["data"].map { |b| b["id"] }
     assert_includes ids, minted.id
 
@@ -68,7 +68,7 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     badge = create_badge(badge_class: bc, creator: creator, owner: owner)
 
     # non-owner forbidden
-    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.handle }, headers: auth_headers(creator)
+    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.name }, headers: auth_headers(creator)
     assert_response :forbidden
 
     # target not found
@@ -77,12 +77,12 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     assert_match "target not found", json_response["error"]
 
     # self-transfer rejected
-    post "/api/v1/badges/#{badge.id}/transfer", params: { target: owner.handle }, headers: auth_headers(owner)
+    post "/api/v1/badges/#{badge.id}/transfer", params: { target: owner.name }, headers: auth_headers(owner)
     assert_response :unprocessable_entity
     assert_match "cannot transfer to self", json_response["error"]
 
     # success
-    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.handle }, headers: auth_headers(owner)
+    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.name }, headers: auth_headers(owner)
     assert_response :success
     assert_equal target.id, badge.reload.owner_id
   end
@@ -94,7 +94,7 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     bc = create_badge_class(creator: creator, transferable: false)
     badge = create_badge(badge_class: bc, creator: creator, owner: owner)
 
-    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.handle }, headers: auth_headers(owner)
+    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.name }, headers: auth_headers(owner)
     assert_response :unprocessable_entity
     assert_match "not transferable", json_response["error"]
   end
@@ -106,7 +106,7 @@ class Api::V1::BadgesControllerTest < ActionDispatch::IntegrationTest
     bc = create_badge_class(creator: creator, transferable: true)
     badge = create_badge(badge_class: bc, creator: creator, owner: owner, status: "burned")
 
-    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.handle }, headers: auth_headers(owner)
+    post "/api/v1/badges/#{badge.id}/transfer", params: { target: target.name }, headers: auth_headers(owner)
     assert_response :unprocessable_entity
     assert_match "not owned/accepted", json_response["error"]
   end

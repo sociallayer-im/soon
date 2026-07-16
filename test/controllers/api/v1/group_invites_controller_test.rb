@@ -8,7 +8,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "GroupInvite.count" do
       post "/api/v1/groups/#{group.id}/group_invites",
-        params: { receivers: [target.handle], role: "member" }, headers: auth_headers(owner)
+        params: { receivers: [target.name], role: "member" }, headers: auth_headers(owner)
     end
     assert_response :success
     assert_equal "added", json_response["results"].first["result"]
@@ -23,7 +23,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "GroupInvite.count" do
       post "/api/v1/groups/#{group.id}/group_invites",
-        params: { receivers: [target.handle], role: "admin" }, headers: auth_headers(owner)
+        params: { receivers: [target.name], role: "admin" }, headers: auth_headers(owner)
     end
     assert_equal "role_updated", json_response["results"].first["result"]
     assert_equal "admin", group.memberships.find_by(user: target).role
@@ -36,7 +36,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     create_membership(user: target, group: group, role: "admin")
 
     post "/api/v1/groups/#{group.id}/group_invites",
-      params: { receivers: [target.handle], role: "member" }, headers: auth_headers(owner)
+      params: { receivers: [target.name], role: "member" }, headers: auth_headers(owner)
     result = json_response["results"].first
     assert_equal "error", result["result"]
     assert_match "membership exists", result["message"]
@@ -65,7 +65,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
       params: { receivers: ["not-a-handle-or-email"], role: "member" }, headers: auth_headers(owner)
     result = json_response["results"].first
     assert_equal "error", result["result"]
-    assert_match "invalid receiver handle", result["message"]
+    assert_match "invalid receiver", result["message"]
   end
 
   test "create with an invalid role reports a per-address error instead of silently failing" do
@@ -88,7 +88,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     create_membership(user: target, group: group, role: "member")
 
     post "/api/v1/groups/#{group.id}/group_invites",
-      params: { receivers: [target.handle], role: "manager" }, headers: auth_headers(owner)
+      params: { receivers: [target.name], role: "manager" }, headers: auth_headers(owner)
     result = json_response["results"].first
     assert_equal "error", result["result"]
     assert_equal "member", group.memberships.find_by(user: target).role

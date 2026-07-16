@@ -27,14 +27,14 @@ class Api::V1::BadgeClassesController < Api::BaseController
     scope = BadgeClass.all
     scope = scope.where(group_id: params[:group_id]) if params[:group_id].present?
     scope = scope.where(badge_type: params[:badge_type]) if params[:badge_type].present?
-    scope = scope.joins(:creator).where(users: { handle: params[:creator_handle] }) if params[:creator_handle].present?
-    scope = scope.joins(:group).where(groups: { nickname: params[:group_handle] }) if params[:group_handle].present?
+    scope = scope.joins(:creator).where(users: { name: params[:creator_handle] }) if params[:creator_handle].present?
+    scope = scope.joins(:group).where(groups: { name: params[:group_handle] }) if params[:group_handle].present?
     render_collection scope, blueprint: BadgeClassBlueprint
   end
 
   # GET /api/v1/badge_classes/by_user
   def by_user
-    user = User.find_by!(handle: params[:handle])
+    user = User.find_by!(name: params[:handle])
     group_ids = user.memberships.pluck(:group_id)
     render json: BadgeClassBlueprint.render(BadgeClass.where(group_id: group_ids))
   end

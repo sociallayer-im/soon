@@ -648,14 +648,14 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
 
     outsider = create_user
-    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(outsider)
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.name, event_id: @event.id }, headers: auth_headers(outsider)
     assert_response :forbidden
 
-    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(buyer)
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.name, event_id: @event.id }, headers: auth_headers(buyer)
     assert_response :success
     assert_equal 1, json_response.size
 
-    get "/api/v1/tickets/list", params: { profile_handle: buyer.handle, event_id: @event.id }, headers: auth_headers(@owner)
+    get "/api/v1/tickets/list", params: { profile_handle: buyer.name, event_id: @event.id }, headers: auth_headers(@owner)
     assert_response :success
   end
 

@@ -29,15 +29,15 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
 
   test "update changes the current user's name" do
     user = create_user
-    patch "/api/v1/users/#{user.id}", params: { user: { name: "New Name" } }, headers: auth_headers(user)
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "new_name" } }, headers: auth_headers(user)
     assert_response :success
-    assert_equal "New Name", user.reload.name
+    assert_equal "new_name", user.reload.name
   end
 
   test "update ignores unpermitted params like email" do
     user = create_user
     original_email = user.email
-    patch "/api/v1/users/#{user.id}", params: { user: { name: "New Name", email: "hacked@test.com" } }, headers: auth_headers(user)
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "new_name", email: "hacked@test.com" } }, headers: auth_headers(user)
     assert_response :success
     assert_equal original_email, user.reload.email
   end
@@ -45,6 +45,32 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
   test "update rejects a blank name" do
     user = create_user
     patch "/api/v1/users/#{user.id}", params: { user: { name: "" } }, headers: auth_headers(user)
+    assert_response :unprocessable_entity
+  end
+
+  test "show reveals own email but hides other users' email" do
+    user = create_user
+    other = create_user
+
+    get "/api/v1/users/me", headers: auth_headers(user)
+    assert_response :success
+    assert_equal user.email, json_response["email"]
+
+    get "/api/v1/users/#{other.id}", headers: auth_headers(user)
+    assert_response :success
+    assert_not json_response.key?("email")
+  end
+
+  test "update rejects a name that is not a valid slug" do
+    user = create_user
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "Not A Slug" } }, headers: auth_headers(user)
+    assert_response :unprocessable_entity
+  end
+
+  test "update rejects a name already taken by another user" do
+    taken = create_user(name: "taken_name")
+    user = create_user
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "taken_name" } }, headers: auth_headers(user)
     assert_response :unprocessable_entity
   end
 end

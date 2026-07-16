@@ -131,7 +131,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
   end
 
   def send_invite_to(address, role)
-    user = User.find_by(handle: address) || User.find_by(email: address) || User.find_by(eth: address)
+    user = User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)
@@ -155,7 +155,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
       )
       return { address: address, result: "invited" }
     else
-      return { address: address, result: "error", message: "invalid receiver handle" }
+      return { address: address, result: "error", message: "invalid receiver" }
     end
   rescue ActiveRecord::RecordInvalid => e
     { address: address, result: "error", message: e.record.errors.full_messages.join(", ") }

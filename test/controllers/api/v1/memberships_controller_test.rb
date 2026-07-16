@@ -120,4 +120,93 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     delete "/api/v1/groups/#{group.id}/memberships/#{membership2.id}", headers: auth_headers(member1)
     assert_response :forbidden
   end
+
+  test "create forbids a non-owner admin from granting the owner role" do
+    owner = create_user
+    admin = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+
+    post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "owner" }, headers: auth_headers(admin)
+    assert_response :forbidden
+    assert_not group.memberships.exists?(user: target)
+  end
+
+  test "update forbids a non-owner admin from self-promoting to owner" do
+    owner = create_user
+    admin = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+    membership = group.memberships.find_by(user: admin)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "owner" } }, headers: auth_headers(admin)
+    assert_response :forbidden
+    assert_equal "admin", membership.reload.role
+  end
+
+  test "update forbids a non-owner admin from demoting the owner" do
+    owner = create_user
+    admin = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+    owner_membership = group.memberships.find_by(user: owner)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{owner_membership.id}", params: { membership: { role: "member" } }, headers: auth_headers(admin)
+    assert_response :forbidden
+    assert_equal "owner", owner_membership.reload.role
+  end
+
+  test "destroy refuses to remove the last owner of a group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    membership = group.memberships.find_by(user: owner)
+
+    delete "/api/v1/groups/#{group.id}/memberships/#{membership.id}", headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert group.memberships.exists?(user: owner)
+  end
+
+  test "destroy allows removing an owner when another owner remains" do
+    owner1 = create_user
+    owner2 = create_user
+    group = create_group(owner: owner1)
+    create_membership(user: owner2, group: group, role: "owner")
+    membership2 = group.memberships.find_by(user: owner2)
+
+    delete "/api/v1/groups/#{group.id}/memberships/#{membership2.id}", headers: auth_headers(owner1)
+    assert_response :no_content
+    assert_not group.memberships.exists?(user: owner2)
+  end
+
+  test "index requires membership and does not leak member email" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+
+    # A non-member, non-manager cannot view the roster.
+    get "/api/v1/groups/#{group.id}/memberships", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    # The roster never exposes member email (UserBlueprint default view).
+    get "/api/v1/groups/#{group.id}/memberships", headers: auth_headers(owner)
+    assert_response :success
+    assert_not json_response["data"].first["user"].key?("email")
+  end
+
+  test "counter_cache keeps memberships_count correct across add and remove" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    assert_equal 1, group.reload.memberships_count
+
+    post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "member" }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal 2, group.reload.memberships_count
+
+    membership = group.memberships.find_by(user: target)
+    delete "/api/v1/groups/#{group.id}/memberships/#{membership.id}", headers: auth_headers(owner)
+    assert_response :no_content
+    assert_equal 1, group.reload.memberships_count
+  end
 end

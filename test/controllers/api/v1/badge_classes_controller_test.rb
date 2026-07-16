@@ -40,7 +40,7 @@ class Api::V1::BadgeClassesControllerTest < ActionDispatch::IntegrationTest
   test "index filters by group_id, badge_type, creator_handle, group_handle" do
     user = create_user
     owner = create_user
-    group = create_group(owner: owner, nickname: "the-guild")
+    group = create_group(owner: owner, name: "the-guild")
     in_group = create_badge_class(creator: owner, group: group, badge_type: "nft")
     standalone = create_badge_class(creator: user, badge_type: "badge")
 
@@ -54,7 +54,7 @@ class Api::V1::BadgeClassesControllerTest < ActionDispatch::IntegrationTest
     assert_includes ids, in_group.id
     assert_not_includes ids, standalone.id
 
-    get "/api/v1/badge_classes", params: { creator_handle: user.handle }, headers: auth_headers(user)
+    get "/api/v1/badge_classes", params: { creator_handle: user.name }, headers: auth_headers(user)
     ids = json_response["data"].map { |b| b["id"] }
     assert_includes ids, standalone.id
     assert_not_includes ids, in_group.id
@@ -72,7 +72,7 @@ class Api::V1::BadgeClassesControllerTest < ActionDispatch::IntegrationTest
     bc = create_badge_class(creator: owner, group: group)
     other_group_bc = create_badge_class(creator: owner, group: create_group(owner: owner))
 
-    get "/api/v1/badge_classes/by_user", params: { handle: member.handle }, headers: auth_headers(member)
+    get "/api/v1/badge_classes/by_user", params: { handle: member.name }, headers: auth_headers(member)
     assert_response :success
     ids = json_response.map { |b| b["id"] }
     assert_includes ids, bc.id

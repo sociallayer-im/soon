@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_16_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_000006) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -31,12 +31,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000004) do
   end
 
   create_table "auth_codes", id: :string, force: :cascade do |t|
+    t.integer "attempts", default: 0, null: false
     t.string "code", null: false
     t.string "context", null: false, comment: "signup | login | password_reset | email_verification | phone_verification"
     t.datetime "created_at", null: false
     t.string "recipient", null: false
     t.string "recipient_type", null: false, comment: "email | phone"
     t.datetime "used_at"
+    t.index ["recipient", "context", "used_at"], name: "index_auth_codes_on_recipient_and_context_and_used_at"
   end
 
   create_table "availabilities", id: :string, force: :cascade do |t|
@@ -489,7 +491,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000004) do
     t.jsonb "data", default: {}
     t.string "email"
     t.string "eth"
-    t.string "handle"
     t.string "image_url"
     t.datetime "last_signin_at"
     t.string "name"
@@ -501,7 +502,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_000004) do
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["eth"], name: "index_users_on_eth", unique: true
-    t.index ["handle"], name: "index_users_on_handle", unique: true
     t.index ["name"], name: "index_users_on_name", unique: true
     t.index ["phone"], name: "index_users_on_phone", unique: true
   end

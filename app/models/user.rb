@@ -14,5 +14,9 @@ class User < ApplicationRecord
   has_many :created_badges, class_name: "Badge", foreign_key: "creator_id", dependent: :destroy
 
   validates :email, presence: true, uniqueness: true
-  validates :name, presence: true
+  # `name` is the user's unique identifier/username (the handle concept). It must
+  # be a well-formed slug and unique (the column is uniquely indexed).
+  validates :name, presence: true, uniqueness: true
+  validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
+    allow_blank: true
 end

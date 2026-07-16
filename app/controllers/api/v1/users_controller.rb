@@ -1,14 +1,16 @@
 class Api::V1::UsersController < Api::BaseController
   def show
-    user = params[:id] == "me" ? current_user : User.find(params[:id])
-    render json: UserBlueprint.render(user)
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
+    if params[:id] == "me" || params[:id] == current_user.id
+      render json: UserBlueprint.render(current_user, view: :self)
+    else
+      # Other users: public fields only (no email).
+      render json: UserBlueprint.render(User.find(params[:id]))
+    end
   end
 
   def update
     if current_user.update(user_params)
-      render json: UserBlueprint.render(current_user)
+      render json: UserBlueprint.render(current_user, view: :self)
     else
       render_error(current_user.errors.full_messages.join(", "))
     end
@@ -16,7 +18,8 @@ class Api::V1::UsersController < Api::BaseController
 
   private
 
+  # email is intentionally excluded — it's the login identity, not updatable here.
   def user_params
-    params.require(:user).permit(:name)
+    params.require(:user).permit(:name, :nickname, :bio, :image_url)
   end
 end
