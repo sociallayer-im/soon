@@ -1,0 +1,25 @@
+app/controllers/api/v1/remember_controller.rb
+  s_f621b7e1fcb97a::t_c75edf3ffddc89 1-140
+config/routes.rb
+  s_f621b7e1fcb97a::t_e9476e9b9edb5c 103-111
+test/controllers/api/v1/remember_test.rb
+  s_f621b7e1fcb97a::t_7af43f1df83861 1-100
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_b46043978cbd9e 5-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b7f142607ff03fb05c3ed1ebb37c516dd2266214",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
