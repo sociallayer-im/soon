@@ -1,0 +1,25 @@
+app/controllers/api/v1/groups_controller.rb
+  s_f621b7e1fcb97a::t_5dc2633ecc0f7c 92-95,97-109
+app/blueprints/event_blueprint.rb
+  s_f621b7e1fcb97a::t_f7d383f2e9b8d8 6-7
+app/blueprints/payment_method_blueprint.rb
+  s_f621b7e1fcb97a::t_f7d383f2e9b8d8 4
+test/controllers/api/v1/groups_controller_test.rb
+  s_f621b7e1fcb97a::t_64d4bc003d3d4c 122-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "5abcccc0a0664c92cd746462acc2b95110042ebb",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
