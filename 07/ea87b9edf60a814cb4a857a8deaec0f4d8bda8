@@ -1,0 +1,30 @@
+design/CHANGELOG.md
+  s_f621b7e1fcb97a::t_ca2e7bd81d099d 5-33
+app/controllers/api/v1/users_controller.rb
+  s_f621b7e1fcb97a::t_728b684c22dac5 3
+  s_f621b7e1fcb97a::t_f098264e41d88d 19-27
+app/blueprints/membership_blueprint.rb
+  s_f621b7e1fcb97a::t_1b0cb39e87bcdb 6-10
+test/controllers/api/v1/discover_test.rb
+  s_f621b7e1fcb97a::t_cf1d130c128161 1-59
+config/routes.rb
+  s_f621b7e1fcb97a::t_90792496a1e3a1 29-32,34-38
+app/controllers/api/v1/discover_controller.rb
+  s_f621b7e1fcb97a::t_46b8167f10c8c0 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "07ea87b9edf60a814cb4a857a8deaec0f4d8bda8",
+  "prompts": {},
+  "sessions": {
+    "s_f621b7e1fcb97a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e5be7fa-d46b-4a5d-9402-cfb18fa1c82c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
