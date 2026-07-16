@@ -26,8 +26,16 @@ Rails.application.routes.draw do
       get "events/:id/calendar(.ics)", to: "calendars#event", as: :event_calendar
       get "groups/:id/calendar(.ics)", to: "calendars#group", as: :group_calendar
 
+      # Public discovery (homepage + global search)
+      get "discover", to: "discover#index"
+      get "search",   to: "discover#search"
+
       # Resources
-      resources :users, only: %i[show update]
+      resources :users, only: %i[show update] do
+        member do
+          get :groups
+        end
+      end
 
       get "group_invites/pending", to: "group_invites#pending"
 

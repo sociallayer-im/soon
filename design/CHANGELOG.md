@@ -2,7 +2,35 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — public event browsing + event ops (frontend migration B)
+## 2026-07-16 (latest) — places/tracks/discover/search (frontend migration C+D)
+
+Third and fourth backend chunks of the seastar-app → soon migration. Suite
+green at 493 runs.
+
+### Places (C)
+- `POST /places` is **find-or-create by name** — the frontend resolves every
+  location-bearing write (events, venues, markers) to a `place_id` first, so an
+  existing name returns the existing record (200) instead of erroring.
+- `GET /places/search?query=` — typeahead over name/address.
+- `places.data` jsonb added (carries the Google place id, as sails did).
+- **Fix:** longitude validation was bounded to ±90 (latitude's range), rejecting
+  any place east of 90°E (Tokyo at 139°E). Now ±180.
+
+### Tracks (C)
+- Full CRUD (group-manager only). `name` slug generated from title on collision
+  (`edge-city-workshops-2`). `manager_ids` syncs `TrackRole` rows (role admin).
+  `:with_roles` view; public index filterable by group slug.
+
+### Discovery (D)
+- `GET /discover` (public) — featured groups (`group_tags && {featured,top}`),
+  popup cities (groups with `start_date` + `location`, `:detail` view), next
+  20 public events.
+- `GET /search?keyword=` (public, ≥2 chars) — events (public+published only),
+  groups, users, badge_classes; ILIKE, 10 each.
+- `GET /users/:id/groups?role=` (public) — a user's active memberships with
+  their groups (profile page "communities"), role-filterable.
+
+## 2026-07-16 — public event browsing + event ops (frontend migration B)
 
 Second backend chunk of the seastar-app → soon migration. Suite green at 482 runs.
 

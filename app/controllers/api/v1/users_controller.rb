@@ -1,6 +1,6 @@
 class Api::V1::UsersController < Api::BaseController
   # Profile pages are public — auth is optional and only unlocks private fields.
-  skip_before_action :authenticate!, only: :show
+  skip_before_action :authenticate!, only: %i[show groups]
   before_action :authenticate_optional!, only: :show
 
   # :id accepts "me", a TSID, or a username (User.resolve!).
@@ -14,6 +14,15 @@ class Api::V1::UsersController < Api::BaseController
     # Own record gets private fields (email); everyone else the public profile.
     view = user.id == current_user&.id ? :self : :profile
     render json: UserBlueprint.render(user, view: view)
+  end
+
+  # GET /api/v1/users/:id/groups?role=owner,admin — a user's public group
+  # memberships (their profile page's "communities"), optionally by role.
+  def groups
+    user = User.resolve!(params[:id])
+    scope = user.memberships.includes(:group).where(active: true)
+    scope = scope.where(role: params[:role].to_s.split(",")) if params[:role].present?
+    render json: MembershipBlueprint.render(scope.order(:created_at), view: :with_group)
   end
 
   def update
