@@ -12,7 +12,9 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def create
-    event = Event.new(event_params.merge(owner: current_user))
+    attrs = event_params.to_h
+    normalize_times!(attrs, group: Group.find_by(id: attrs[:group_id]))
+    event = Event.new(attrs.merge(owner: current_user))
     authorize event
     if (err = reference_error(event))
       return render_error(err)
@@ -29,7 +31,9 @@ class Api::V1::EventsController < Api::BaseController
     # group_id is intentionally not updatable — moving an event into another
     # group would escape the authorization that was checked against its current
     # group. venue/track references are re-validated against the current group.
-    @event.assign_attributes(event_params.except(:group_id))
+    attrs = event_params.to_h.except("group_id")
+    normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
+    @event.assign_attributes(attrs)
     if (err = reference_error(@event))
       return render_error(err)
     end
@@ -113,5 +117,22 @@ class Api::V1::EventsController < Api::BaseController
       :status, :visibility, :group_id, :place_id, :venue_id, :track_id, :meeting_url,
       :external_url, :max_participant, :require_approval, :category, :kind,
       tags: [], requirement_tags: [])
+  end
+
+  # Interpret naive start/end time strings in the event's zone so "2026-07-16 14:00"
+  # means 14:00 *there*, not 14:00 UTC. An explicit offset in the string still wins
+  # (TimeZone#parse honors it). Zone = the request's timezone, else the event's
+  # current one (update), else the group's. With no zone anywhere, times are left
+  # untouched (ActiveRecord coerces them as UTC, as before).
+  def normalize_times!(attrs, group:, current_tz: nil)
+    tzid = attrs[:timezone].presence || current_tz.presence || group&.timezone.presence
+    zone = tzid && ActiveSupport::TimeZone[tzid]
+    return unless zone
+
+    %i[start_time end_time].each do |key|
+      next if attrs[key].blank?
+      parsed = zone.parse(attrs[key].to_s)
+      attrs[key] = parsed if parsed
+    end
   end
 end

@@ -25,6 +25,10 @@ class Event < ApplicationRecord
   validates :visibility, inclusion: { in: VISIBILITIES }, allow_nil: true
   validate :end_time_after_start_time
 
+  # An event with no explicit timezone inherits its group's. Fixed at creation:
+  # a later change to the group's zone leaves existing events untouched.
+  before_validation :inherit_group_timezone, on: :create
+
   # Events a user is allowed to see in a listing: public & not draft/archived to
   # everyone, plus anything they own or manage (group admin/owner). Callers still
   # scope by group membership on top of this.
@@ -63,6 +67,10 @@ class Event < ApplicationRecord
   end
 
   private
+
+  def inherit_group_timezone
+    self.timezone = group&.timezone if timezone.blank?
+  end
 
   def end_time_after_start_time
     return unless start_time && end_time

@@ -116,6 +116,69 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal member.id, event.owner_id
   end
 
+  test "create inherits the group's timezone when none is given" do
+    owner = create_user
+    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal "Asia/Shanghai", Event.find(json_response["id"]).timezone
+  end
+
+  test "create keeps an explicit timezone over the group's" do
+    owner = create_user
+    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", timezone: "America/New_York",
+               start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal "America/New_York", Event.find(json_response["id"]).timezone
+  end
+
+  test "create interprets a naive start_time in the event's timezone" do
+    owner = create_user
+    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+
+    post "/api/v1/events", params: {
+      event: { title: "SH", start_time: "2026-07-16 14:00:00", end_time: "2026-07-16 16:00:00", group_id: group.id }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    event = Event.find(json_response["id"])
+    # 14:00 Shanghai (UTC+8) == 06:00 UTC — not stored as 14:00 UTC.
+    assert_equal Time.utc(2026, 7, 16, 6, 0, 0), event.start_time.utc
+    assert_equal 14, event.local_start.hour
+  end
+
+  test "create respects an explicit offset in the time string over the zone" do
+    owner = create_user
+    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+
+    post "/api/v1/events", params: {
+      event: { title: "Offset", start_time: "2026-07-16T14:00:00-04:00",
+               end_time: "2026-07-16T16:00:00-04:00", group_id: group.id }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    # -04:00 in the string wins: 14:00 EDT == 18:00 UTC.
+    assert_equal Time.utc(2026, 7, 16, 18, 0, 0), Event.find(json_response["id"]).start_time.utc
+  end
+
+  test "update reinterprets a naive start_time in the event's existing zone" do
+    owner = create_user
+    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+    event = create_event(group: group, owner: owner) # inherits Asia/Shanghai
+
+    patch "/api/v1/events/#{event.id}",
+      params: { event: { start_time: "2026-07-16 09:00:00", end_time: "2026-07-16 10:00:00" } },
+      headers: auth_headers(owner)
+    assert_response :success
+    # 09:00 Shanghai == 01:00 UTC
+    assert_equal Time.utc(2026, 7, 16, 1, 0, 0), event.reload.start_time.utc
+  end
+
   test "create validates presence of title/start_time/end_time" do
     owner = create_user
     group = create_group(owner: owner)

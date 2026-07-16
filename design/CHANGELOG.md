@@ -40,6 +40,13 @@ no `TZID`). Calendar clients render floating times in the **viewer's** zone, so 
   in that zone, so a weekly 10:00 stays 10:00 across the spring-forward boundary (was
   drifting an hour). `Event#event_timezone`/`#local_start`/`#local_end` centralize safe
   zone resolution (invalid free-text → UTC, never raises).
+- **Events inherit the group's timezone** when none is given (`before_validation`, fixed at
+  creation) — a group-scoped event no longer needs a redundant `timezone`.
+- **`events#create`/`update` interpret naive time strings in the event's zone** (the
+  request's timezone, else the current one on update, else the group's) — `"2026-07-16 14:00"`
+  for a Shanghai event is stored as 06:00 UTC, not 14:00 UTC. An explicit offset in the string
+  still wins. Consistent with the recurring path; recurring's `resolve_zone` also falls back to
+  the group zone.
 
 ## 2026-07-16 — email notifications + Cloudflare image upload
 
