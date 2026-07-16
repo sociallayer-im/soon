@@ -1,13 +1,39 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <style>
-      /* Email styles need to be inline */
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
   </head>
-
-  <body>
-    <%= yield %>
+  <body style="margin: 0; padding: 0; background: #f3f4f6; -webkit-font-smoothing: antialiased;
+               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f3f4f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px;">
+            <!-- Header -->
+            <tr>
+              <td align="center" style="padding-bottom: 20px;">
+                <img src="<%= MailerHelper::LOGO_URL %>" alt="<%= MailerHelper::BRAND_NAME %>"
+                     height="40" style="height: 40px; border: 0;">
+              </td>
+            </tr>
+            <!-- Card -->
+            <tr>
+              <td style="background: #ffffff; border-radius: 12px; padding: 36px 32px;
+                         color: #111827; font-size: 15px; line-height: 1.6;">
+                <%= yield %>
+              </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="padding: 24px 16px; color: #9ca3af; font-size: 12px; line-height: 1.5;">
+                <%= MailerHelper::BRAND_NAME %><br>
+                <a href="<%= MailerHelper::WEB_URL %>" style="color: #9ca3af;"><%= MailerHelper::WEB_URL %></a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>

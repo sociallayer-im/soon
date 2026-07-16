@@ -8,11 +8,12 @@ class Api::V1::AuthController < ActionController::API
       # Only the latest code stays valid — invalidate any prior unused login codes
       # so an attacker can't stack many concurrently-guessable codes.
       AuthCode.active.for_recipient(user.email).for_context(CONTEXT).update_all(used_at: Time.current)
-      AuthCode.create!(
+      code = AuthCode.create!(
         recipient: user.email, recipient_type: "email", context: CONTEXT,
         code: SecureRandom.alphanumeric(6).upcase
       )
-      # TODO: deliver code via email
+      # Sent synchronously so a delivery failure surfaces on this request.
+      AuthMailer.login_code(email: user.email, code: code.code).deliver_now
     end
 
     # Uniform response whether or not the email exists — no account enumeration.

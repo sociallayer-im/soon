@@ -15,6 +15,11 @@ class Group < ApplicationRecord
 
   validates :name, presence: true
 
+  # Human-facing label — the friendly nickname when set, else the handle-like name.
+  def display_name
+    nickname.presence || name
+  end
+
   # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.

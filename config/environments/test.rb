@@ -39,6 +39,10 @@ Rails.application.configure do
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "example.com" }
 
+  # Enqueue jobs (incl. deliver_later) to the :test adapter so tests can assert
+  # on them deterministically instead of the async thread pool racing.
+  config.active_job.queue_adapter = :test
+
   # Print deprecation notices to the stderr.
   config.active_support.deprecation = :stderr
 

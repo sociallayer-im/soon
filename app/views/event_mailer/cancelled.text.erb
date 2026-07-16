@@ -1,0 +1,5 @@
+Event cancelled
+
+We're sorry to let you know that <%= @event.title %> (<%= @event.start_time&.strftime("%b %-d, %Y · %H:%M") %>) has been cancelled. The attached calendar update will remove it from your calendar.
+
+Explore other events: <%= MailerHelper::WEB_URL %>

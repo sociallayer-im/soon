@@ -1,0 +1,11 @@
+<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">Sign in to <%= MailerHelper::BRAND_NAME %></h1>
+<p style="margin: 0 0 20px; color: #4b5563;">Use this code to finish signing in:</p>
+
+<div style="margin: 0 0 20px; padding: 16px 24px; background: #f3f4f6; border-radius: 10px;
+            text-align: center; font-size: 30px; font-weight: 700; letter-spacing: 8px; color: #111827;">
+  <%= @code %>
+</div>
+
+<p style="margin: 0; color: #6b7280; font-size: 13px;">
+  This code expires in <%= @expiry_minutes %> minutes. If you didn't request it, you can ignore this email.
+</p>

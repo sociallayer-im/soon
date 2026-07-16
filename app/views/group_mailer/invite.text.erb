@@ -1,0 +1,7 @@
+You're invited
+
+<%= @invite.sender&.name || MailerHelper::BRAND_NAME %> invited you to join <%= @group.display_name %> as <%= @invite.role %>.
+<% if @invite.message.present? %>
+"<%= @invite.message %>"
+<% end %>
+Accept your invitation: <%= @accept_url %>

@@ -147,12 +147,13 @@ class Api::V1::GroupInvitesController < Api::BaseController
         return { address: address, result: "added" }
       end
     elsif address.to_s.include?("@")
-      GroupInvite.create!(
+      invite = GroupInvite.create!(
         group: @group, sender: current_user, role: role,
         receiver_address_type: "email", receiver_address: address,
         status: "sending", expires_at: INVITE_TTL.from_now,
         message: params[:message]
       )
+      GroupMailer.invite(invite_id: invite.id).deliver_later
       return { address: address, result: "invited" }
     else
       return { address: address, result: "error", message: "invalid receiver" }

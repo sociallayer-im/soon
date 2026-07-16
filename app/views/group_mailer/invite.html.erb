@@ -1,0 +1,17 @@
+<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">You're invited</h1>
+<p style="margin: 0 0 8px; color: #4b5563;">
+  <strong><%= @invite.sender&.name || MailerHelper::BRAND_NAME %></strong>
+  invited you to join <strong><%= @group.display_name %></strong>
+  as <strong><%= @invite.role %></strong>.
+</p>
+<% if @invite.message.present? %>
+  <p style="margin: 12px 0; padding: 12px 16px; background: #f9fafb; border-left: 3px solid #d1d5db; color: #4b5563;">
+    <%= @invite.message %>
+  </p>
+<% end %>
+
+<%= cta_button "Accept invitation", @accept_url %>
+
+<p style="margin: 0; color: #6b7280; font-size: 13px;">
+  If the button doesn't work, open <%= link_to @accept_url, @accept_url, style: "color: #2563eb;" %>.
+</p>

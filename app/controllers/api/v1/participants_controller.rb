@@ -84,6 +84,22 @@ class Api::V1::ParticipantsController < Api::BaseController
     return render_error("participant is not pending") unless participant.status == "pending"
 
     participant.update!(status: "attending")
+    EventMailer.participant_approved(participant_id: participant.id).deliver_later
+    render json: ParticipantBlueprint.render(participant)
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
+  end
+
+  # POST /api/v1/events/:event_id/participants/:id/reject
+  #
+  # Event owner or group admin/owner declines a pending applicant.
+  def reject
+    authorize @event, :update?
+    participant = @event.participants.find(params[:id])
+    return render_error("participant is not pending") unless participant.status == "pending"
+
+    participant.update!(status: "declined")
+    EventMailer.participant_rejected(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
     render_not_found

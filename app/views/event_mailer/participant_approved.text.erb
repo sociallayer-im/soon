@@ -1,0 +1,8 @@
+You're in!
+
+Your application to <%= @event.title %> was approved. A calendar invite is attached.
+
+When: <%= @event.start_time&.strftime("%b %-d, %Y · %H:%M") %>
+<% if @event.location_text.present? %>Where: <%= @event.location_text %>
+<% end %>
+View event: <%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>

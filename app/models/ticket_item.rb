@@ -69,7 +69,7 @@ class TicketItem < ApplicationRecord
     group_owner = group.users.joins(:memberships).where(memberships: { role: "owner" }).first
     return unless group_owner&.email.present?
 
-    # TODO: wire to a GroupMailer once soon/'s mail setup exists.
+    GroupMailer.ticket_purchased(ticket_item_id: id, recipient: group_owner.email).deliver_later
   end
 
   private

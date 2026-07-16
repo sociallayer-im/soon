@@ -5,7 +5,7 @@ class Api::V1::CommentsController < Api::BaseController
   def create
     comment = Comment.new(comment_params.merge(user: current_user))
     if comment.save
-      # TODO: wire to a CommentMailer once soon/'s mail setup exists.
+      CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"
       render json: CommentBlueprint.render(comment), status: :created
     else
       render_error(comment.errors.full_messages.join(", "))

@@ -45,6 +45,7 @@ class Api::V1::EventsController < Api::BaseController
   def destroy
     authorize @event
     @event.update(status: "cancelled")
+    notify_attendees_of_cancellation
     head :no_content
   end
 
@@ -54,6 +55,15 @@ class Api::V1::EventsController < Api::BaseController
     @event = Event.find(params[:id])
   rescue ActiveRecord::RecordNotFound
     render_not_found
+  end
+
+  # Email every attending participant that the event was cancelled (with an .ics
+  # calendar cancellation). Skips participants without an email.
+  def notify_attendees_of_cancellation
+    @event.participants.where(status: "attending").includes(:user).find_each do |participant|
+      email = participant.user&.email
+      EventMailer.cancelled(event_id: @event.id, recipient: email).deliver_later if email.present?
+    end
   end
 
   # Validates that referenced venue/track belong to the event's group and, for a

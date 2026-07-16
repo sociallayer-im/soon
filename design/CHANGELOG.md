@@ -2,7 +2,43 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — auth/group/membership: fix review findings + drop `handle`
+## 2026-07-16 (latest) — email notifications + Cloudflare image upload
+
+Ported the two remaining sails subsystems the API needed — transactional email
+and image upload — as clean, self-contained features. Suite green at 445 runs.
+
+### Email notifications (Resend + ActionMailer)
+- **Delivery**: production sends via Resend (`config.action_mailer.delivery_method = :resend`,
+  `config/initializers/resend.rb` reads `RESEND_API_KEY`). Test uses `:test`; the test env now
+  pins `:test` ActiveJob adapter so `deliver_later` is deterministic.
+- **Coherent branding** (improves on sails' per-template inlining): from-address, product name,
+  logo, and web host live once in `ApplicationMailer` + `MailerHelper`; a single branded
+  `layouts/mailer.{html,text}.erb` shell wraps every message, so templates carry only content.
+  Every mail is multipart HTML **and** text.
+- **Mailers**: `AuthMailer#login_code`, `GroupMailer#{invite,ticket_purchased}`,
+  `CommentMailer#feedback`, `EventMailer#{participant_approved,participant_rejected,cancelled}`.
+  Event approval/cancellation carry an `.ics` calendar invite via the new `Event#to_ics`
+  (icalendar gem); cancellation emits `STATUS:CANCELLED`/`METHOD:CANCEL`.
+- **Wired the standing TODO hooks + more**: login code (auth `request_code`, `deliver_now` so
+  failures surface), feedback comment, group-ticket purchase, email group invite, participant
+  approve. Added a `participants#reject` action (sibling of `approve`) and event-cancellation
+  fan-out to attending participants (`deliver_later`).
+
+### Image upload (Cloudflare Images)
+- `POST /api/v1/upload/image` — **authenticated** (sails' equivalent was an open endpoint),
+  validates content-type + 10 MB size, forwards the file to Cloudflare Images via the existing
+  `httpx` (no new dependency), returns the delivery URL. Logic is isolated in a
+  `CloudflareImages` service (sails used a bare global `$client`).
+- Config (ENV): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_IMAGES_TOKEN`. New `.env.example` documents
+  all feature env vars.
+
+### Tests (+24)
+- Mailer unit tests (subjects/recipients/bodies + `.ics` attachments), `CloudflareImages` service
+  tests (variant selection, not-configured guard), uploads controller tests (auth, success with
+  stubbed Cloudflare, validation, 502 on failure), and an `email_notifications` integration suite
+  asserting the right mail fires on each domain event.
+
+## 2026-07-16 — auth/group/membership: fix review findings + drop `handle`
 
 A code review of login, group creation/management, and membership fixed 8 findings, and — per the
 product decision that `handle` is legacy `sails/` design — dropped the `handle` column entirely so

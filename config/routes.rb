@@ -18,6 +18,9 @@ Rails.application.routes.draw do
       post "auth/request_code", to: "auth#request_code"
       post "auth/verify_code",  to: "auth#verify_code"
 
+      # Image upload (Cloudflare Images)
+      post "upload/image", to: "uploads#image"
+
       # Resources
       resources :users, only: %i[show update]
 
@@ -43,6 +46,7 @@ Rails.application.routes.draw do
         resources :participants, only: %i[index create update destroy] do
           member do
             post :approve
+            post :reject
           end
         end
         resources :event_roles,  only: %i[index create update destroy]

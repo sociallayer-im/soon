@@ -1,0 +1,7 @@
+New ticket purchase
+
+A ticket for <%= @group.display_name %> was just purchased.
+
+Ticket: <%= @ticket_item.ticket&.title %>
+<% if @buyer %>Buyer: <%= @buyer.name %>
+<% end %>Amount: <%= @ticket_item.amount %>
