@@ -73,4 +73,24 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     patch "/api/v1/users/#{user.id}", params: { user: { name: "taken_name" } }, headers: auth_headers(user)
     assert_response :unprocessable_entity
   end
+
+  test "name is the unique identifier — two users cannot share one" do
+    create_user(name: "duplicate_name")
+    assert_raises(ActiveRecord::RecordInvalid) { create_user(name: "duplicate_name") }
+  end
+
+  test "name must be a lowercase slug at creation time" do
+    assert_raises(ActiveRecord::RecordInvalid) { create_user(name: "Has Spaces") }
+    assert_raises(ActiveRecord::RecordInvalid) { create_user(name: "UPPER") }
+  end
+
+  test "a user is resolvable by name via the badge owner filter" do
+    owner = create_user(name: "resolvable_user")
+    bc = create_badge_class(creator: owner)
+    badge = create_badge(badge_class: bc, creator: owner, owner: owner)
+
+    get "/api/v1/badges", params: { owner_handle: "resolvable_user" }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal [badge.id], json_response["data"].map { |b| b["id"] }
+  end
 end

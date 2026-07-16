@@ -98,4 +98,25 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
     assert_not Group.exists?(name: "sneaky")
   end
+
+  test "a non-owner group admin can update the group" do
+    owner = create_user
+    admin = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { nickname: "By Admin" } }, headers: auth_headers(admin)
+    assert_response :success
+    assert_equal "By Admin", group.reload.nickname
+  end
+
+  test "an ordinary member cannot update the group" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { nickname: "Nope" } }, headers: auth_headers(member)
+    assert_response :forbidden
+  end
 end

@@ -101,4 +101,45 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/users/me", headers: { "Authorization" => "Bearer #{token}" }
     assert_response :success
   end
+
+  test "request_code never leaks the code in its response body" do
+    user = create_user
+    post "/api/v1/auth/request_code", params: { email: user.email }
+    code = AuthCode.for_recipient(user.email).order(:created_at).last.code
+
+    assert_not_includes response.body, code
+    assert_nil json_response["code"]
+  end
+
+  test "request_code with a blank email is a uniform no-op" do
+    assert_no_difference "AuthCode.count" do
+      post "/api/v1/auth/request_code", params: { email: "" }
+    end
+    assert_response :success
+    assert_equal "Code sent", json_response["message"]
+  end
+
+  test "verify_code stamps last_signin_at on success" do
+    user = create_user
+    AuthCode.create!(recipient: user.email, recipient_type: "email", context: "login", code: "ABC123")
+    assert_nil user.last_signin_at
+
+    post "/api/v1/auth/verify_code", params: { email: user.email, code: "ABC123" }
+    assert_response :success
+    assert_not_nil user.reload.last_signin_at
+  end
+
+  test "a correct code still works after a few (below-threshold) wrong attempts" do
+    user = create_user
+    AuthCode.create!(recipient: user.email, recipient_type: "email", context: "login", code: "ABC123")
+
+    (AuthCode::MAX_ATTEMPTS - 1).times do
+      post "/api/v1/auth/verify_code", params: { email: user.email, code: "WRONG1" }
+      assert_response :unauthorized
+    end
+
+    post "/api/v1/auth/verify_code", params: { email: user.email, code: "ABC123" }
+    assert_response :success
+    assert json_response["token"].present?
+  end
 end

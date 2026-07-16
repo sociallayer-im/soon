@@ -194,6 +194,34 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_not json_response["data"].first["user"].key?("email")
   end
 
+  test "a non-owner admin can add and remove ordinary members" do
+    owner = create_user
+    admin = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+
+    post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "member" }, headers: auth_headers(admin)
+    assert_response :created
+    membership = group.memberships.find_by(user: target)
+
+    delete "/api/v1/groups/#{group.id}/memberships/#{membership.id}", headers: auth_headers(admin)
+    assert_response :no_content
+    assert_not group.memberships.exists?(user: target)
+  end
+
+  test "an admin cannot remove an owner" do
+    owner = create_user
+    admin = create_user
+    group = create_group(owner: owner)
+    create_membership(user: admin, group: group, role: "admin")
+    owner_membership = group.memberships.find_by(user: owner)
+
+    delete "/api/v1/groups/#{group.id}/memberships/#{owner_membership.id}", headers: auth_headers(admin)
+    assert_response :forbidden
+    assert group.memberships.exists?(user: owner, role: "owner")
+  end
+
   test "counter_cache keeps memberships_count correct across add and remove" do
     owner = create_user
     target = create_user
