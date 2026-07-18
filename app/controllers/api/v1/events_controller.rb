@@ -23,7 +23,9 @@ class Api::V1::EventsController < Api::BaseController
 
   def create
     attrs = event_params.to_h
-    normalize_times!(attrs, group: Group.find_by(id: attrs[:group_id]))
+    group = Group.find_by(id: attrs[:group_id])
+    gate_pinned!(attrs, group)
+    normalize_times!(attrs, group: group)
     event = Event.new(attrs.merge(owner: current_user))
     authorize event
     if (err = reference_error(event))
@@ -42,6 +44,7 @@ class Api::V1::EventsController < Api::BaseController
     # group would escape the authorization that was checked against its current
     # group. venue/track references are re-validated against the current group.
     attrs = event_params.to_h.except("group_id")
+    gate_pinned!(attrs, @event.group)
     normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
     @event.assign_attributes(attrs)
     if (err = reference_error(@event))
@@ -209,10 +212,19 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def event_params
-    params.require(:event).permit(:title, :content, :start_time, :end_time, :timezone,
+    params.require(:event).permit(:title, :content, :notes, :image_url, :pinned,
+      :start_time, :end_time, :timezone,
       :status, :visibility, :group_id, :place_id, :venue_id, :track_id, :meeting_url,
       :external_url, :max_participant, :require_approval, :category, :kind,
       tags: [], requirement_tags: [])
+  end
+
+  # `pinned` features an event on the homepage/carousel — a group-curation
+  # decision, so only group managers may set it. Silently drop it for everyone
+  # else (rather than 403) so a non-manager's ordinary save still succeeds.
+  def gate_pinned!(attrs, group)
+    return unless attrs.key?("pinned")
+    attrs.delete("pinned") unless group && GroupPolicy.new(current_user, group).manage?
   end
 
   # Interpret naive start/end time strings in the event's zone so "2026-07-16 14:00"

@@ -116,6 +116,62 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal member.id, event.owner_id
   end
 
+  test "create persists image_url and notes (were previously dropped)" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, image_url: "https://cdn.test/cover.png", notes: "backstage info" }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    event = Event.find(json_response["id"])
+    assert_equal "https://cdn.test/cover.png", event.image_url
+    assert_equal "backstage info", event.notes
+  end
+
+  test "create ignores pinned from a non-manager member" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, pinned: true }
+    }, headers: auth_headers(member)
+    assert_response :created
+    assert_not Event.find(json_response["id"]).pinned, "a non-manager must not be able to feature their event"
+  end
+
+  test "create honors pinned from a group manager" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, pinned: true }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    assert Event.find(json_response["id"]).pinned
+  end
+
+  test "update ignores pinned from a non-manager owner but keeps their other edits" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    event = create_event(group: group, owner: member)
+
+    patch "/api/v1/events/#{event.id}", params: {
+      event: { title: "Renamed", pinned: true }
+    }, headers: auth_headers(member)
+    assert_response :success
+    event.reload
+    assert_equal "Renamed", event.title
+    assert_not event.pinned
+  end
+
   test "create inherits the group's timezone when none is given" do
     owner = create_user
     group = create_group(owner: owner, timezone: "Asia/Shanghai")
