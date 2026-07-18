@@ -116,6 +116,51 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal member.id, event.owner_id
   end
 
+  test "create atomically persists inline event_roles and tickets in one request" do
+    owner = create_user
+    cohost = create_user
+    group = create_group(owner: owner)
+
+    assert_difference ["Event.count", "EventRole.count", "Ticket.count"], 1 do
+      post "/api/v1/events", params: {
+        event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
+        event_roles: [{ item_id: cohost.id, item_type: "User", role: "manager", display_name: "Co" }],
+        tickets: [{ title: "GA", ticket_type: "event", quantity: 50 }]
+      }, headers: auth_headers(owner)
+    end
+    assert_response :created
+    event = Event.find(json_response["id"])
+    assert_equal cohost.id, event.event_roles.first.item_id
+    assert_equal "GA", event.tickets.first.title
+  end
+
+  test "create rolls the whole event back when an inline ticket is invalid" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_no_difference ["Event.count", "Ticket.count"] do
+      post "/api/v1/events", params: {
+        event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
+        tickets: [{ title: "Bad", ticket_type: "not-a-valid-type" }]
+      }, headers: auth_headers(owner)
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "create rolls back and 422s on an inline role with a bad item_type (no polymorphic 500)" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_no_difference "Event.count" do
+      post "/api/v1/events", params: {
+        event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
+        event_roles: [{ item_id: owner.id, item_type: "Bogus", role: "manager" }]
+      }, headers: auth_headers(owner)
+    end
+    assert_response :unprocessable_entity
+    assert_match "item_type must be User or Group", json_response["error"]
+  end
+
   test "create persists image_url and notes (were previously dropped)" do
     owner = create_user
     group = create_group(owner: owner)

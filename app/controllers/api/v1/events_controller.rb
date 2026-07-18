@@ -1,4 +1,8 @@
 class Api::V1::EventsController < Api::BaseController
+  # Raised when a nested role/ticket in an atomic create is malformed; rolls the
+  # whole event create back with a precise message.
+  class InvalidChild < StandardError; end
+
   # Event browsing/pages are public — EventPolicy/visible_to still hide
   # drafts/private events from anonymous viewers.
   skip_before_action :authenticate!, only: %i[index show]
@@ -21,6 +25,11 @@ class Api::V1::EventsController < Api::BaseController
     render json: EventBlueprint.render(@event, view: :extended)
   end
 
+  # Optionally accepts `event_roles: [...]` and `tickets: [...]` alongside the
+  # event. When present, the event and its children are created in one
+  # transaction so a child failure can't leave a half-configured event — and a
+  # retry after failure starts from a clean slate instead of duplicating
+  # children against a partially-created parent.
   def create
     attrs = event_params.to_h
     group = Group.find_by(id: attrs[:group_id])
@@ -31,11 +40,17 @@ class Api::V1::EventsController < Api::BaseController
     if (err = reference_error(event))
       return render_error(err)
     end
-    if event.save
-      render json: EventBlueprint.render(event), status: :created
-    else
-      render_error(event.errors.full_messages.join(", "))
+
+    ActiveRecord::Base.transaction do
+      event.save!
+      create_nested_roles!(event, params[:event_roles])
+      create_nested_tickets!(event, params[:tickets], event.group_id)
     end
+    render json: EventBlueprint.render(event), status: :created
+  rescue InvalidChild => e
+    render_error(e.message)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   def update
@@ -225,6 +240,32 @@ class Api::V1::EventsController < Api::BaseController
   def gate_pinned!(attrs, group)
     return unless attrs.key?("pinned")
     attrs.delete("pinned") unless group && GroupPolicy.new(current_user, group).manage?
+  end
+
+  # Create co-hosts/speakers passed inline with the event. Guards item_type
+  # before build so a bad value is a clean 422, not a polymorphic NameError.
+  def create_nested_roles!(event, roles)
+    Array(roles).each do |role|
+      permitted = role.permit(:item_id, :item_type, :role, :email, :display_name, :image_url)
+      unless %w(User Group).include?(permitted[:item_type])
+        raise InvalidChild, "event_role item_type must be User or Group"
+      end
+      event.event_roles.create!(permitted)
+    end
+  end
+
+  # Create tickets (and their payment methods) passed inline with the event.
+  # group_id defaults to the event's group so group tickets resolve correctly.
+  def create_nested_tickets!(event, tickets, group_id)
+    Array(tickets).each do |ticket|
+      permitted = ticket.permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
+        :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
+        days_allowed: [], tracks_allowed: [],
+        payment_methods_attributes: [:chain, :kind, :token_name, :token_address,
+          :receiver_address, :price, :protocol, chains: []]).to_h
+      permitted["group_id"] = group_id if permitted["group_id"].blank?
+      event.tickets.create!(permitted)
+    end
   end
 
   # Interpret naive start/end time strings in the event's zone so "2026-07-16 14:00"
