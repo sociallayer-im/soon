@@ -273,10 +273,21 @@ class Api::V1::EventsController < Api::BaseController
   # (TimeZone#parse honors it). Zone = the request's timezone, else the event's
   # current one (update), else the group's. With no zone anywhere, times are left
   # untouched (ActiveRecord coerces them as UTC, as before).
+  #
+  # Also persists the resolved zone back onto attrs[:timezone] when the caller
+  # didn't set one explicitly — Venue#check_availability (called via
+  # reference_error, right after this) reads event.timezone as its one
+  # canonical source. Leaving it nil would make that check silently re-derive
+  # the group's *current* timezone every time instead of the zone actually
+  # used to interpret this event's own start/end times — fine today, but it
+  # would silently drift if the group's timezone setting ever changed after
+  # the event was created.
   def normalize_times!(attrs, group:, current_tz: nil)
     tzid = attrs[:timezone].presence || current_tz.presence || group&.timezone.presence
     zone = tzid && ActiveSupport::TimeZone[tzid]
     return unless zone
+
+    attrs[:timezone] = zone.name if attrs[:timezone].blank?
 
     %i[start_time end_time].each do |key|
       next if attrs[key].blank?

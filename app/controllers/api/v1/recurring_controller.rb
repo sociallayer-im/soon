@@ -36,9 +36,16 @@ class Api::V1::RecurringController < Api::BaseController
 
     occurrences = occurrence_starts(start_time, count, interval)
 
+    # `zone` (already resolved above with the request→group fallback) is the
+    # one canonical timezone source for this series — used for the occurrence
+    # times themselves, the availability check, and persisted onto both the
+    # Recurring and every Event it creates, so a later edit (see #update)
+    # reading event.timezone always finds the exact zone this series was
+    # actually created in, not a re-derived (and possibly since-changed)
+    # group timezone.
     if venue
       occurrences.each do |occ_start|
-        ok, message = venue.check_availability(occ_start, occ_start + duration, params[:timezone])
+        ok, message = venue.check_availability(occ_start, occ_start + duration, zone.name)
         return render_error("#{message} (#{occ_start.to_date})") unless ok
       end
     end
@@ -47,13 +54,13 @@ class Api::V1::RecurringController < Api::BaseController
     ActiveRecord::Base.transaction do
       recurring = Recurring.create!(
         start_time: start_time, end_time: occurrences.last + duration,
-        interval: interval, event_count: count,
-        timezone: params[:timezone].presence || group.timezone
+        interval: interval, event_count: count, timezone: zone.name
       )
       occurrences.each do |occ_start|
         Event.create!(event_attributes.merge(
           group: group, owner: current_user, recurring_id: recurring.id,
-          venue_id: venue&.id, start_time: occ_start, end_time: occ_start + duration
+          venue_id: venue&.id, start_time: occ_start, end_time: occ_start + duration,
+          timezone: zone.name
         ))
       end
     end
@@ -66,8 +73,12 @@ class Api::V1::RecurringController < Api::BaseController
   # PATCH /api/v1/recurring/:recurring_id
   # Updates the events in a series. selector "after" (with after_event_id) limits
   # the change to that occurrence onward; anything else updates the whole series.
-  # Optional start_time_diff/end_time_diff (seconds) shift each occurrence; a new
-  # venue_id re-checks availability for every affected occurrence first.
+  # Optional start_time_diff/end_time_diff (seconds) shift each occurrence; every
+  # affected occurrence is re-checked against its venue first — its *new* venue if
+  # venue_id is given, otherwise the venue it already has (a time-only shift on a
+  # series that already has a venue must still respect that venue's hours; it used
+  # to only check when venue_id was explicitly re-sent, silently allowing a
+  # time-only edit to move a series into a slot its own venue is closed for).
   def update
     events = selected_events(params[:recurring_id], selector: params[:selector], pivot_id: params[:after_event_id])
     return if performed?
@@ -76,16 +87,21 @@ class Api::V1::RecurringController < Api::BaseController
     start_diff = params[:start_time_diff].to_i
     end_diff   = params[:end_time_diff].to_i
 
-    venue = params[:venue_id].present? ? resolve_venue(events.first.group) : nil
+    new_venue = params[:venue_id].present? ? resolve_venue(events.first.group) : nil
     return if performed?
+    # Resolved once, up front, same as #create — so the check below and what
+    # actually gets persisted (via event_attributes, which already includes
+    # :timezone when the request sends one) never disagree.
+    new_tz = params[:timezone].presence
 
-    if venue
-      events.each do |event|
-        s = event.start_time + start_diff.seconds
-        e = event.end_time + end_diff.seconds
-        ok, message = venue.check_availability(s, e, event.timezone, event.id)
-        return render_error(message) unless ok
-      end
+    events.each do |event|
+      venue = new_venue || event.venue
+      next unless venue
+
+      s = event.start_time + start_diff.seconds
+      e = event.end_time + end_diff.seconds
+      ok, message = venue.check_availability(s, e, new_tz || event.timezone, event.id)
+      return render_error(message) unless ok
     end
 
     attrs = event_attributes
@@ -94,7 +110,7 @@ class Api::V1::RecurringController < Api::BaseController
         changes = attrs.dup
         changes[:start_time] = event.start_time + start_diff.seconds if params.key?(:start_time_diff)
         changes[:end_time]   = event.end_time + end_diff.seconds if params.key?(:end_time_diff)
-        changes[:venue_id]   = venue.id if venue
+        changes[:venue_id]   = new_venue.id if new_venue
         event.update!(changes)
       end
     end

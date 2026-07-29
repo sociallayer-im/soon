@@ -244,6 +244,72 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "create persists the resolved timezone onto every occurrence and the series" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, timezone: "Asia/Shanghai",
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "TZ"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    recurring = Recurring.find(json_response["id"])
+    assert_equal "Asia/Shanghai", recurring.timezone
+    assert recurring.events.all? { |e| e.timezone == "Asia/Shanghai" }
+  end
+
+  test "create with no explicit timezone persists the group's timezone onto every occurrence" do
+    @group.update!(timezone: "America/New_York")
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "TZ"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    recurring = Recurring.find(json_response["id"])
+    assert_equal "America/New_York", recurring.timezone
+    assert recurring.events.all? { |e| e.timezone == "America/New_York" }
+  end
+
+  test "update re-checks availability against the existing venue even when venue_id isn't re-sent" do
+    venue = create_venue(group: @group, owner: @owner)
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: venue.id, timezone: "UTC",
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+
+    # Pre-book the venue at the time we're about to shift the series into —
+    # 1 day later than the current occurrences, with an unrelated event.
+    conflict_start = base_start + 1.day
+    create_event(group: @group, owner: @owner, venue: venue, status: "published",
+                 start_time: conflict_start, end_time: conflict_start + 2.hours)
+
+    # Shift every occurrence by exactly 1 day — no venue_id in the request at
+    # all, only a time shift. Must still be checked against the venue the
+    # series already has.
+    patch "/api/v1/recurring/#{recurring_id}", params: { selector: "all", start_time_diff: 1.day.to_i, end_time_diff: 1.day.to_i },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "already booked", json_response["error"]
+
+    # And the events were NOT shifted — the whole update rolled back.
+    events = Event.where(recurring_id: recurring_id).order(:start_time)
+    assert_equal base_start.to_i, events.first.start_time.to_i
+  end
+
+  test "update accepts a time shift that still fits the existing venue's hours" do
+    venue = create_venue(group: @group, owner: @owner)
+    venue.availabilities.create!(day_of_week: base_start.strftime("%A").downcase, intervals: [["00:00", "23:59"]])
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: venue.id, timezone: "UTC",
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+
+    patch "/api/v1/recurring/#{recurring_id}", params: { selector: "all", start_time_diff: 3600, end_time_diff: 3600 },
+      headers: auth_headers(@owner)
+    assert_response :success
+  end
+
   test "update with a new venue re-checks availability and rejects a conflict" do
     venue = create_venue(group: @group, owner: @owner)
     post "/api/v1/recurring", params: {
