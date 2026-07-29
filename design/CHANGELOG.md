@@ -2,7 +2,34 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — pending events were publicly listed before manager approval
+## 2026-07-29 (latest) — homepage popup-city list wasn't curated, and its card image was wrong
+
+Third round of local-vs-production diffing (`localhost:4001/` vs
+`app.sola.day/`): the homepage popup-city carousel showed 50 uncurated
+groups locally (any active group with start_date+location) vs 21 curated
+ones on production. Root cause, per sails' `event/discover`: popup cities
+are curated by `group_tags` containing `top` (excluding `hidden`) — a
+deploy-side decision — not "has dates". Fixed `DiscoverController#index` to
+match (same 21 groups, same order as production after the fix).
+
+Also cancelled events (initially assumed intentional per the entry below)
+now also drop out of browse listings per an explicit product decision —
+`Event.visible_to`'s public branch excludes `cancelled` alongside
+`draft`/`pending`/`archived`; the owner/manager branches are untouched so an
+organizer still sees their own cancelled event.
+
+Second, compounding gap: sails renders `group.featured_image_url ||
+group.image_url` for the popup-city card — a dedicated wide/banner image,
+distinct from the small avatar `image_url`. soon's `groups` table never had
+this column (added: `20260729111650_add_featured_image_url_to_groups.rb`),
+`migrate_from_sails.rb` never copied it, and the frontend's `toPopupCity()`
+only ever read `image_url`. Fixed all three. Also normalized `group_tags`
+during migration — sails stores them colon-prefixed (`:top`), but
+soon's own code (`GroupsController::PRIVILEGED_TAGS`, this fix) always
+compares colon-less strings, so every tag check on migrated data was
+silently failing before this.
+
+## 2026-07-29 — pending events were publicly listed before manager approval
 
 Follow-up to the event_union investigation below: checked a second reported
 list-mismatch (`/event/mushanghai?collection=past`, local showed 266 vs
