@@ -5,22 +5,48 @@ being built as a leaner replacement for `sails/`. See `SAILS_COMPARISON.md` for 
 from where and why, and `CHANGELOG.md` for a chronological log of changes. This document is the
 synchronic view — how the system is actually built, independent of its migration history.
 
-Last updated: 2026-07-16 (later revision — constraints/logic gaps closed, test suite added).
+Last updated: 2026-07-29 (mail + background jobs wired up; wallet/trusted sign-in, calendars,
+uploads, discovery and remember documented; §9 gaps re-audited).
 
-**Testing**: Rails Minitest (`bin/rails test`), no fixtures (soon/'s TSID PKs are callback-generated;
-`test/support/factory_helpers.rb` provides `create_user`/`create_group`/etc. instead), one
-`test/controllers/api/v1/*_controller_test.rb` per controller plus `test/models/*_test.rb` for the
-validations/constraints called out in §8. 311 tests, 786 assertions, 0 failures as of this
-revision.
+**Testing**: Rails Minitest (`bin/rails test`), no fixtures (soon/'s TSID PKs are
+callback-generated; `test/support/factory_helpers.rb` provides `create_user`/`create_group`/etc.
+instead). 45 files across `test/controllers/api/v1/` (one per controller), `test/models/`
+(the validations/constraints called out in §8), `test/mailers/` (template rendering),
+`test/jobs/`, `test/services/`, and `test/integration/` (which endpoint fires which email).
+615 runs, 1,760 assertions, 0 failures as of this revision.
 
 ## 1. Architecture overview
 
 **Stack**: Rails 8.1 (API-only, `ActionController::API`), PostgreSQL, Puma. JSON serialization via
 `blueprinter`. Authorization via `pundit`. Pagination via `pagy` (v9+ `Pagy::Offset` API — no
-`Pagy::Backend` mixin). Auth is stateless bearer-JWT (`jwt` gem) with email one-time-codes, no
-sessions, no cookies, no OAuth. Background work via **GoodJob** running inside the Puma process
-(`execution_mode :async`) — no separate worker to deploy, but jobs are rows in `good_jobs`, so a
-restart doesn't drop queued mail. All outgoing email goes through it; see §1.1.
+`Pagy::Backend` mixin). Auth is stateless bearer-JWT (`jwt` gem) — no sessions, no cookies, no
+Doorkeeper/OAuth server; see §4.1 for the four ways a token is minted. Background work via
+**GoodJob** running inside the Puma process (`execution_mode :async`) — no separate worker to
+deploy, but jobs are rows in `good_jobs`, so a restart doesn't drop queued mail. All outgoing
+email goes through it; see §1.1.
+
+**Choices worth naming**, since each had a plausible alternative:
+
+| Choice | Instead of | Why |
+|---|---|---|
+| TSID string PKs | bigint / UUID | Time-sortable like an autoincrement, but safe to expose and mint client-side-independently. `TicketItem`'s own id doubles as the order number. |
+| Blueprinter | Jbuilder (what sails used) | Serialization is a class with explicit views, not a template resolved by controller/action path — grep-able, testable, and it can't accidentally render a different shape per action. |
+| Rails `enum` on plain string columns | Postgres native enum types | Adding a value is a code change, not a migration + type alter. |
+| GoodJob `:async` | Solid Queue (Rails 8's default) | §1.1. |
+| `siwe-rb` | the unmaintained `siwe` gem | The original (spruceid) gem's last real commit was 2023-07. Full `lib/` reviewed before adopting the replacement. |
+| Bearer JWT | server-side sessions | The API has three separate frontends (app, auth service, dashboard) on different origins; a bearer token avoids cross-origin cookie work entirely. |
+
+**External services** — each is reachable only through one wrapper, so swapping or stubbing is a
+single-file change:
+
+| Service | Wrapper | Used for |
+|---|---|---|
+| Resend | `config.action_mailer.delivery_method = :resend` (prod only) | All outgoing mail (§1.1) |
+| Cloudflare Images | `app/services/cloudflare_images.rb` → `UploadsController#image` | Every user-uploaded image; models store the returned delivery URL in a `*_url` column, never a blob |
+| Stripe | `stripe` gem, in `TicketsController` only | Fiat ticket payment + webhook (§4.7) |
+| EVM JSON-RPC | `lib/evm_payment_verifier.rb` (`httpx`) | On-chain payment proof (§4.7) |
+| — | `app/services/event_calendar.rb` (`icalendar`) | `.ics` generation for invites and feeds (§4.11) |
+| — | `app/services/jwt_service.rb` | Auth tokens and badge swap codes |
 
 ### 1.1 Background jobs
 
@@ -53,8 +79,16 @@ config/routes.rb
       → app/policies/*_policy.rb              (Pundit — authorization only)
       → app/models/*.rb                       (ActiveRecord — validations, associations,
                                                  business logic, callbacks)
+      → app/services/*.rb                     (external I/O behind one wrapper each:
+                                                 Cloudflare Images, JWT, .ics generation)
       → app/blueprints/*_blueprint.rb          (Blueprinter — response shaping)
+
+  ⇢ app/jobs/*.rb                             (GoodJob — everything off the request path)
+      → app/mailers/*.rb → app/views/*_mailer/*.{html,text}.erb
 ```
+
+Anything that talks to a third party sits in `app/services/` or `lib/`, never inline in a
+controller — which is what makes the whole suite runnable with no network access.
 
 All controllers inherit from `Api::BaseController < ActionController::API`
 (`app/controllers/api/base_controller.rb`), which is the single place that defines:
@@ -109,8 +143,8 @@ resource — not an inconsistency to "fix":
 
 | Model | Key columns | Notes |
 |---|---|---|
-| `User` | `email` (unique), `handle` (unique), `eth` (unique), `phone` (unique), `name` (unique), `nickname`, `image_url`, `bio`, `permissions[]`, `social_links` jsonb, `telegram_id`, `active`, `last_signin_at`, `data` jsonb | The single identity model — `sails/`'s `Profile` was **not** ported as a separate concept; social-provider handles (twitter/github/etc.) live in `social_links` jsonb rather than dedicated columns |
-| `AuthCode` | `recipient`, `recipient_type` (email\|phone), `context`, `code`, `used_at` | One-time code, 15-minute expiry computed from `created_at` (no stored `expires_at` — see `AuthCode::EXPIRY`) |
+| `User` | `name` (unique — **this is the handle**; there is no separate `handle` column), `email` (unique), `eth` (unique), `sol` (unique), `phone` (unique), `ref_id`, `nickname`, `image_url`, `bio`, `permissions[]`, `social_links` jsonb, `telegram_id`, `active`, `last_signin_at`, `data` jsonb | The single identity model — `sails/`'s `Profile` was **not** ported as a separate concept; social-provider handles (twitter/github/etc.) live in `social_links` jsonb rather than dedicated columns. At least one of `email`/`eth`/`sol` must be present (`has_login_identity` validation) — an account is always reachable by some login path. `sol` exists only to hold the 50 migrated Solana accounts; the frontend sign-in option was removed 2026-07-29 |
+| `AuthCode` | `recipient`, `recipient_type` (email\|phone), `context` (login\|bind_email), `code`, `used_at`, `attempts` | One-time code, 15-minute expiry computed from `created_at` (no stored `expires_at` — see `AuthCode::EXPIRY`), max 5 attempts. `context` keeps a bind-email code from being replayed as a login code |
 
 ### 3.2 Groups, events, and the social graph
 
@@ -119,13 +153,13 @@ resource — not an inconsistency to "fix":
 | `Group` | `name`, `nickname`, `parent_id` (self-referential), `handle`-equivalent is `nickname`, `group_tags[]`, `social_links` jsonb, `memberships_count`/`events_count` (denormalized counters), `start_date`/`end_date`/`location` (popup-city mode), `can_publish_event`/`can_join_event`/`can_view_event`, `group_ticket_event_id` | `parent_id` self-reference has no default scope for cascading permissions beyond what controllers implement (see `GroupPolicy`) |
 | `Membership` | `user_id`, `group_id`, `role` (member\|admin\|owner), `active`, `data` jsonb | Unique on `(user_id, group_id)` |
 | `GroupInvite` | `sender_id`/`receiver_id` (optional — `receiver_id` only set once resolved), `group_id`, `role`, `status` enum, `receiver_address_type` (id\|email\|code), `receiver_address`, `expires_at`, `badge_class_id`/`badge_id`/`ticket_id` (optional grant-on-accept refs) | See §4.2 for the branching logic — **not every invite flow creates a `GroupInvite` row** |
-| `Event` | `title`, `content`, `start_time`/`end_time`, `status`, `visibility`, `group_id`, `owner_id`, `place_id`/`track_id`/`venue_id`/`recurring_id`/`form_id` (all optional), `require_approval`, `participant_count`, `tags[]`, `kind` (also doubles as the `"group_ticket"` marker — see §4.5) | `op_status`/`op_priority`/`op_labels[]`/`assigned_operators[]` exist on the table but are **deliberately unused** for now (deferred to a future dedicated table) |
+| `Event` | `title`, `content`, `start_time`/`end_time`, `status`, `visibility`, `group_id`, `owner_id`, `place_id`/`track_id`/`venue_id`/`recurring_id`/`form_id` (all optional), `require_approval`, `participant_count`, `tags[]`, `kind` (also doubles as the `"group_ticket"` marker — see §4.5) | `op_status`/`op_priority`/`op_labels[]` exist on the table but are **deliberately unused** for now (deferred to a future dedicated table) |
 | `EventRole` | `event_id`, `item_id`/`item_type` (polymorphic: user\|group), `role` (member\|manager), `email`/`display_name`/`image_url` (for not-yet-registered co-hosts) | Unique on `(event_id, item_id, item_type)` |
 | `Participant` | `event_id`, `user_id`, `status` (attending\|declined\|maybe\|pending), `payment_status`, `message`, `register_time`, `voucher_id`/`badge_id`/`ticket_id` (all optional — ticket/voucher integration) | Unique on `(user_id, event_id)` — one participant record per user per event, mutated in place across RSVP/cancel/re-RSVP rather than recreated |
 | `Recurring` | `start_time`, `end_time`, `interval`, `event_count`, `timezone` | Groups a series of `Event`s via `events.recurring_id`; no back-reference `has_many :events` cascade rule beyond `dependent: :destroy` |
 | `Place` | `name` (unique), `address`, `latitude`/`longitude`, `description` | |
-| `Venue` | `name` (unique), `group_id`, `owner_id`, `place_id` (optional), `capacity`, `amenities[]`/`tags[]`, `timeslots`/`overrides` jsonb, `track_ids[]`, `require_approval` | |
-| `Availability` | `item_id`/`item_type` (polymorphic), `day`/`day_of_week`, `intervals` jsonb, `role_required` | Generic weekly/date-override availability, used for venues (see top-level `CLAUDE.md`'s "Venue Availability" section — `Venue#check_availability` is not yet ported into `soon/`, only the data shape is) |
+| `Venue` | `name` (unique), `group_id`, `owner_id`, `place_id` (optional), `capacity`, `amenities[]`/`tags[]`, `image_urls[]`/`featured_image_url`, `website`, `about`, `track_ids[]`, `require_approval`, `start_date`/`end_date` (bookable window), `archived` | `archived` is a **soft delete** — `#destroy` flips the flag rather than removing the row, since events still reference the venue; `index` filters it out. `timeslots`/`overrides` jsonb exist on the table but are unused — availability lives in `Availability` rows |
+| `Availability` | `item_id`/`item_type` (polymorphic), `day`/`day_of_week`, `intervals` jsonb, `role_required` | Weekly slots (`day_of_week`) plus date overrides (`day`), an override winning over the weekly slot for that date; empty `intervals` = closed; **no rows at all = open 7×24**. `Venue#check_availability(start, end, timezone, event_id = nil)` is the canonical check, used by both the event and recurring paths (pass `event_id` to exclude the event being edited from the overlap query) |
 | `Track` | `group_id`, `name` (unique), `title`, `description`, `is_private`, `start_date`/`end_date` | |
 | `TrackRole` | `track_id`, `user_id`, `role` (member\|organizer\|admin) | Unique on `(track_id, user_id)` |
 | `Marker` | `group_id`, `place_id`, `owner_id`, `category`, `title`, `about`, `link`, `status`, `data` jsonb | |
@@ -161,12 +195,33 @@ resource — not an inconsistency to "fix":
 
 ### 4.1 Auth (`AuthController`)
 
-Email one-time-code flow only — no OAuth, no wallet-signature login, no session cookies.
-`request_code` creates an `AuthCode` (`recipient: user.email, recipient_type: "email",
-context: "login"`) with a random 6-character code; `verify_code` looks it up via
-`AuthCode.active.for_recipient(email).find_by(code:)` (active = unused and within the 15-minute
-window), marks it used, and returns a `JwtService`-signed bearer token (`{"user_id" => user.id}`,
-30-day expiry).
+`AuthController` is the only controller inheriting `ActionController::API` directly, since its
+actions run before a JWT exists. Every path ends at the same place: `render_token`, a
+`JwtService`-signed bearer token (`{"user_id" => user.id}`, 30-day expiry). There are no sessions,
+no cookies, and soon/ is not an OAuth *server* — where OAuth appears (Google), it is verified by
+the auth frontend and arrives here as a trusted server-to-server call.
+
+Four ways in:
+
+1. **Email one-time code** — `request_code` creates an `AuthCode` (`recipient_type: "email"`,
+   `context: "login"`) with a random 6-character code and mails it; `verify_code` matches it via
+   `consume_code!` (unused, inside the 15-minute window, under the attempt cap), marks it used, and
+   **creates the account if the address is new** — signup and signin are the same endpoint.
+2. **SIWE wallet** — `nonce` mints a single-use nonce, `verify_wallet` parses and verifies the
+   Sign-In with Ethereum message, then finds-or-creates by `eth` (downcased). The message's
+   `domain` field is checked against `ALLOWED_SIWE_DOMAINS` (default `auth.sola.day,auth.juluo.xyz`;
+   localhost is additionally allowed outside production) so a signature harvested by another site
+   can't be replayed here.
+3. **`trusted_signin`** — for flows the auth frontend verifies *itself* (Google OAuth; historically
+   Solana signatures), gated by `secure_compare` against the `NEXT_TOKEN` shared secret. Takes
+   either `email` or `sol_address`. This is the one endpoint where soon/ trusts an assertion it did
+   not verify, so the secret must be treated accordingly.
+4. **`bind_email`** — attaches an email to a wallet-first account, using a code minted under
+   `context: "bind_email"` so it can't be replayed as a login. The email is the login identity, so
+   it can only be set **once**, and never to an address already belonging to another account.
+
+Both paths that establish an email (`verify_code`, `bind_email`) then call
+`GroupInvite.auto_accept_ticket_invites_for(user)` — see §4.5.
 
 ### 4.2 GroupInvite — direct-add vs. real invite
 
@@ -201,9 +256,10 @@ Badges are minted either directly (`Badge.create!`, e.g. by controller code else
 
 ### 4.4 Vouchers — multi-strategy redemption
 
-`VouchersController#use` is the single redemption entrypoint for all 5 active strategies (`code`,
-`account`, `address`, `email`, `event` — `remember` is a valid enum value with no controller logic
-exercising it):
+`VouchersController#use` is the single redemption entrypoint for 5 of the 6 strategies (`code`,
+`account`, `address`, `email`, `event`). The sixth, `remember`, is a real strategy but deliberately
+has no branch here — `RememberController` creates its voucher and mints from it through its own
+threshold-gated flow (§4.13):
 
 1. Reject if `voucher.invalid?` (counter exhausted or expired).
 2. Strategy-specific match: `code` compares `params[:code]`; `account`/`event` compare
@@ -235,10 +291,16 @@ Any `Ticket` attached to that event with `event.kind == "group_ticket"` is autom
 `ticket_type: "group"` and inherits `group_id` from the event (`Ticket#inherit_group_ticket_type`,
 a `before_save` callback). `TicketsController#add_group_ticket_item` is the manager-facing action
 that grants a group-ticket tier to someone by email: if they already have an account, the
-`TicketItem` is immediately marked `succeeded` and `Group#add_member` runs; if not, an
-`status: "unbounded"` placeholder `TicketItem` is created (`selector_type: "email"`,
-`selector_address: email`), awaiting a future claim flow keyed off that email once they sign up
-(this claim-on-signup wiring is not yet implemented — see §9).
+`TicketItem` is immediately marked `succeeded` and `Group#add_member` runs.
+
+**If they don't have an account yet**, a `GroupInvite` carrying the `ticket_id` is created instead
+(`receiver_address_type: "email"`, `status: "sending"`). The claim happens automatically the moment
+that address becomes a real login identity: `AuthController`'s `verify_code` and `bind_email` both
+call `GroupInvite.auto_accept_ticket_invites_for(user)`, which accepts every pending ticket-bearing
+invite for that email — joining the group and materialising the `TicketItem` via `grant_ticket!`.
+An earlier revision of this doc described a `status: "unbounded"` placeholder `TicketItem` awaiting
+an unimplemented claim hook; that design was replaced by this one. `"unbounded"` survives only as a
+value in `TicketItem`'s status inclusion list with nothing writing it.
 
 ### 4.6 Ticket purchase (`rsvp`) and coupon math
 
@@ -261,8 +323,10 @@ that grants a group-ticket tier to someone by email: if they already have an acc
    `amount: 0` immediately.
 6. If the event has a `form_id` and `params[:answers]` were supplied, upserts a `FormSubmission`
    and replaces its `FormAnswer`s (same logic as the standalone `Forms` join-time flow).
-7. On `succeeded`, auto-joins the group (for `ticket_type == "group"`) and calls
-   `TicketItem#notify_group_owner` (currently a no-op stub pending a mailer — see §9).
+7. On `succeeded`, auto-joins the group (for `ticket_type == "group"`), emails the buyer their
+   confirmation (`EventMailer#ticket_purchased`, with the `.ics` attached), and calls
+   `TicketItem#notify_group_owner`, which mails the group's owner
+   (`GroupMailer#ticket_purchased`). Both are `deliver_later` (§1.1).
 
 **Coupon discount math** (`Coupon#get_discounted_price(amount, paymethod)`) — these are exact,
 non-obvious business rules, not simplifications:
@@ -320,6 +384,65 @@ favoriting works — a lightweight join-table substitute). `remove` is a soft-de
 every list query should use. Author-only authorization on `remove` was added (the source design
 had none).
 
+### 4.10 Discovery and search (`DiscoverController`)
+
+Both actions are fully anonymous (`skip_before_action :authenticate!`) and only ever read public,
+published content, so there is no viewer to scope by.
+
+- **`GET /discover`** — the homepage payload in one round trip: featured groups, popup cities, and
+  the next 20 public events. "Popup city" is **curation, not inference**: it means a `Group` tagged
+  `top` (excluding `hidden`), not "any group that happens to have `start_date`/`end_date` set".
+  `featured` is a second tag that the frontend filters out of the same list client-side, which
+  means a group must carry **both** `featured` and `top` to appear in the carousel. Tag assignment
+  is privileged (`GroupsController::PRIVILEGED_TAGS`).
+- **`GET /search?keyword=`** — one ILIKE pass each over events (public+published, by title), groups,
+  users, and badge classes, 10 apiece. Queries under 2 characters short-circuit to empty rather than
+  scanning. No ranking, no full-text index — deliberately the simplest thing that serves the
+  header search box.
+
+### 4.11 Calendar feeds (`CalendarsController`, `EventCalendar`)
+
+`.ics` output serves two different purposes and both go through `app/services/event_calendar.rb`:
+
+- **Attachments on transactional mail** — `EventMailer` attaches the invite with an explicit iTIP
+  `METHOD` MIME parameter (`REQUEST` on approve/purchase/update, `CANCEL` on cancellation). Without
+  the parameter a client treats the part as a file to open rather than an invite to act on. Updates
+  reuse the same UID with a bumped `SEQUENCE`, so a calendar edits the existing entry in place
+  instead of creating a duplicate.
+- **Subscribable feeds** — `GET /events/:id/calendar.ics` and `GET /groups/:id/calendar.ics`. These
+  are **public by necessity**: a calendar client subscribing to a URL cannot carry a bearer token.
+  So they apply their own visibility gate (`calendar_visible?`: public, not draft/archived) rather
+  than the usual policy layer, and the group feed additionally trims to events ending within the
+  last 90 days. Group feeds resolve by slug as well as TSID, since the slug is what ends up in a
+  `webcal://` URL a human pasted.
+
+### 4.12 Uploads (`UploadsController`, `CloudflareImages`)
+
+`POST /upload/image` is authenticated, caps at 10 MB, and allowlists PNG/JPEG/GIF/WebP/SVG. The
+file is forwarded to Cloudflare Images and only the returned delivery URL comes back to the
+caller, who stores it on some model's `*_url` column. **soon/ never stores image bytes** — there is
+no Active Storage attachment anywhere in the schema, which is why every image field is a plain
+string.
+
+### 4.13 Remember (`RememberController`)
+
+A shared commemorative badge for a set of people who were physically in the same place. One user
+creates a "remember", shows a QR code, others scan and `join`; once the joiner threshold is met
+(`REQUIRED_JOINERS`, creator included) the creator calls `mint` and every joiner receives an
+identical badge. Which `BadgeClass` it mints from is **discovered, not hardcoded** — it's whichever
+class carries `badge_type: "remember"` (sails hardcoded the id). `meta`/`show`/`related_groups` are
+public so a scanner can see what they're joining before signing in.
+
+### 4.14 Places and markers
+
+`Place` is a shared, deduplicated location record referenced by events, venues, and markers;
+`Marker` is a pin on a group's community map. Both have public read paths, but with different
+shapes: `places#search` is an open ILIKE lookup used by the location picker, whereas
+`markers#index` is public **only with a `group_id` filter** — an anonymous request without one is
+rejected `422` rather than serving a firehose of every group's map. An authenticated caller with no
+filter gets markers across their own groups. `markers#index` also excludes `status: "removed"`,
+a soft-delete that only exists in migrated legacy data (soon's own `#destroy` hard-deletes).
+
 ## 5. Associations, constraints, and validations — cross-cutting rules
 
 **Polymorphic associations** appear in 6 places, all following the same `item_type`/`item_id`
@@ -328,14 +451,15 @@ had none).
 — validity of `item_type` is enforced at the application layer only (or, for `PaymentMethod`, via
 an explicit `validates :item_type, inclusion:`).
 
-**Uniqueness constraints**, mostly DB-backed via unique indexes (not just `validates
-uniqueness:`): `users.email/handle/eth/phone/name`, `places.name`, `venues.name`, `domains.name`,
-`forms.slug`, `memberships(user_id, group_id)`, `participants(user_id, event_id)`,
+**Uniqueness constraints** are DB-backed via unique indexes, not just `validates uniqueness:`:
+`users.email/eth/sol/phone/name`, `venues.name`, `domains.name`, `forms.slug`, `tracks.name`,
+`memberships(user_id, group_id)`, `participants(user_id, event_id)`,
 `event_roles(event_id, item_id, item_type)`, `track_roles(track_id, user_id)`,
-`form_submissions(form_id, user_id)`. One exception: `Track#name` has `validates uniqueness:` at
-the model level but **no** matching unique index in the `tracks` table — a race condition (two
-concurrent creates with the same name) could still produce duplicates. Worth adding the index if
-this is ever a real risk.
+`form_submissions(form_id, user_id)`. Plus one partial unique index on `ticket_items.txhash`, which
+is what stops a single payment from being replayed against several orders (§4.7).
+
+`places.name` is the deliberate exception: it has a plain (non-unique) index, and its unique index
+was **dropped** — two genuinely different places can legitimately share a name.
 
 **`dependent:` cascade rules** are chosen per-association based on whether the child record has
 meaning without its parent: `:destroy` for owned/dependent records that cascade further
@@ -635,19 +759,33 @@ from its inclusion list (silently broke ticket-cancellation's participant sync).
 and `Voucher#counter` are now both atomic/row-locked (§8.2, §8.5) — the concurrency races flagged
 in earlier revisions of this doc are closed.
 
-- **Mailers**: `TicketItem#notify_group_owner`, `Comment#create`'s feedback-type notification, and
-  `GroupInvite`'s email-invite delivery are all stubbed (`# TODO` comments in the source) pending
-  soon/'s mail setup (`resend` gem is in the Gemfile but not yet wired to a mailer class).
-- **Stripe webhook signature verification** *(now implemented)*: `stripe_event_verified?` calls
-  `Stripe::Webhook.construct_event` when `STRIPE_WEBHOOK_SECRET` is set and **fails closed in
-  production** when it is not. The only remaining deferral is provisioning that secret per
-  environment; without it, production simply rejects Stripe webhooks rather than trusting them.
-- **Group-ticket claim-on-signup**: `add_group_ticket_item`'s `"unbounded"` placeholder
-  `TicketItem` (for emails without an account yet) has no corresponding "claim on signup" hook —
-  `AuthController#request_code`/`verify_code` don't check for pending unbounded ticket items.
-- **`Venue#check_availability`**: the `Availability` data model is ported, but the canonical
-  overlap-checking method described in the top-level `CLAUDE.md` (used by event/recurring
-  controllers in the source design) has not been ported into `soon/`'s `Venue`/`Event` models yet.
-- **Payment-timeout sweeping** (`TicketItem#timeout`) still has no scheduler. GoodJob is now
-  wired up (below) and supports cron, but `config.good_job.enable_cron` is off — turning it on is
-  the remaining step if that sweep is wanted.
+**Closed since**, and listed only so an old note elsewhere isn't mistaken for current state:
+
+- **Mailers** — all wired up. Five mailer classes (`Auth`/`Event`/`Group`/`Comment` + the shared
+  `ApplicationMailer` holding brand config), delivered through Resend, queued on GoodJob (§1.1).
+  `TicketItem#notify_group_owner`, the feedback-comment notification, and `GroupInvite`'s email
+  delivery — all three named as stubs in earlier revisions — are implemented.
+- **Group-ticket claim-on-signup** — implemented, via a redesign rather than the mechanism the old
+  note anticipated (§4.5): a ticket-bearing `GroupInvite`, auto-accepted the moment the address
+  becomes a login identity.
+- **`Venue#check_availability`** — ported (§3.2), including the date-override-beats-weekly-slot
+  rule and the `event_id` exclusion for edits.
+
+Still open:
+
+- **Stripe webhook secret provisioning**: `stripe_event_verified?` does a real
+  `Stripe::Webhook.construct_event` check when `STRIPE_WEBHOOK_SECRET` is set and **fails closed in
+  production** when it is not. The code is done; the secret still has to be provisioned per
+  environment. Until it is, production rejects Stripe webhooks rather than trusting them — the safe
+  failure, but payment confirmation then depends entirely on `verify_payment`/`set_payment_status`.
+- **TODO — payment-timeout sweeping**: `TicketItem#timeout` has no scheduler, so a `pending` item
+  whose payment never lands sits there indefinitely holding its reserved unit. GoodJob supports
+  cron and could run the sweep, but `config.good_job.enable_cron` is deliberately off.
+  **Deferred to a future pass over the payment system as a whole** — the sweep interacts with
+  reservation release and refund semantics, and is not worth wiring in isolation.
+- **Dead enum values**: `Badge#status`'s `"accepted"` and `BadgeClass#status`'s `"freezed"` are
+  legal values that **nothing ever sets or checks** (§8.5) — notably, freezing a badge class does
+  not stop new badges being minted from it. `TicketItem`'s `"unbounded"` is likewise now unwritten
+  (§4.5). Treat any policy or UI logic keyed on these as dead until a code path is added.
+- **Event operations columns**: `op_status`/`op_priority`/`op_labels[]` exist on `events` but are
+  unused, pending a dedicated operations table rather than more columns on `Event`.
