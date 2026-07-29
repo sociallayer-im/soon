@@ -22,10 +22,12 @@ class Api::V1::UsersController < Api::BaseController
     user = User.resolve!(params[:id])
     scope = user.memberships.joins(:group).includes(:group).where(active: true, groups: { active: true })
     scope = scope.where(role: params[:role].to_s.split(",")) if params[:role].present?
-    # sails' equivalent (`Group.where(id: ...)`) returns rows in the GROUP's
-    # own primary-key order — i.e. when each group was created — not when
-    # this user joined it. Match that: order by the group, not the membership.
-    render json: MembershipBlueprint.render(scope.order("groups.created_at ASC"), view: :with_group)
+    # Ordered by when this user joined each group, not when the group itself
+    # was created — sails' equivalent happened to sort by group creation
+    # (an artifact of `Group.where(id: ...)`'s natural PK order, not a
+    # deliberate choice), but join time is the more sensible sort for "this
+    # person's communities" and is what we intentionally keep here.
+    render json: MembershipBlueprint.render(scope.order(:created_at), view: :with_group)
   end
 
   def update
