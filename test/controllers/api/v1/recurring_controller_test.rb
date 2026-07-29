@@ -59,6 +59,32 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert events.all? { |e| e.title == "Weekly Standup" && e.status == "published" }
   end
 
+  test "create allows a venue owned by a venue_union partner group" do
+    partner_group = create_group
+    @group.update!(venue_union: [@group.id, partner_group.id])
+    partner_venue = create_venue(group: partner_group, owner: create_user)
+
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: partner_venue.id,
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Cross-group"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    events = Recurring.find(json_response["id"]).events
+    assert events.all? { |e| e.venue_id == partner_venue.id }
+  end
+
+  test "create rejects a venue outside the venue_union set" do
+    unrelated_venue = create_venue(group: create_group, owner: create_user)
+
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: unrelated_venue.id,
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Bad venue"
+    }, headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+  end
+
   test "create requires group membership" do
     outsider = create_user
     post "/api/v1/recurring", params: {

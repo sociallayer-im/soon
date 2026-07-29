@@ -47,4 +47,28 @@ class GroupTest < ActiveSupport::TestCase
     group = Group.new(name: "")
     assert_not group.valid?
   end
+
+  test "event_group_ids defaults to just the group itself" do
+    group = create_group
+    assert_equal [group.id], group.event_group_ids
+  end
+
+  test "event_group_ids includes event_union partners and de-dupes" do
+    group = create_group
+    partner = create_group
+    group.update!(event_union: [group.id, partner.id, partner.id])
+    assert_equal [group.id, partner.id].sort, group.event_group_ids.sort
+  end
+
+  test "venue_group_ids defaults to just the group itself" do
+    group = create_group
+    assert_equal [group.id], group.venue_group_ids
+  end
+
+  test "venue_group_ids includes venue_union partners" do
+    group = create_group
+    partner = create_group
+    group.update!(venue_union: [partner.id])
+    assert_equal [group.id, partner.id].sort, group.venue_group_ids.sort
+  end
 end

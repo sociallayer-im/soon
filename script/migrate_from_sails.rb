@@ -114,6 +114,10 @@ def mid(table, val)      # remap a single foreign id (nil-safe)
   $map[table][val.is_a?(String) ? val : val.to_i]
 end
 
+def mids(table, vals)    # remap an array of foreign ids, dropping any that don't survive
+  Array(vals).map { |v| mid(table, v) }.compact
+end
+
 def bn(v)                # blank -> nil (for unique text columns)
   v.nil? || (v.is_a?(String) && v.strip.empty?) ? nil : v
 end
@@ -194,7 +198,7 @@ MIGRATIONS = [
         banner_link_url: r["banner_link_url"], banner_text: r["banner_text"], bio: r["about"],
         can_join_event: r["can_join_event"], can_publish_event: r["can_publish_event"],
         can_view_event: r["can_view_event"], created_at: ts(r, "created_at"), data: {},
-        end_date: r["end_date"], event_tag_list: r["event_tags"] || [], event_union: [],
+        end_date: r["end_date"], event_tag_list: r["event_tags"] || [], event_union: mids("groups", r["group_union"]),
         events_count: r["events_count"] || 0, group_tags: r["group_tags"] || [],
         group_ticket_event_id: mid("events", r["group_ticket_event_id"]),
         image_url: r["image_url"], location: r["location"], logo_url: r["logo_url"],
@@ -204,7 +208,7 @@ MIGRATIONS = [
         requirement_tag_list: r["event_requirement_tags"] || [],
         social_links: r["social_links"] || {}, start_date: r["start_date"],
         timezone: r["timezone"], updated_at: ts(r, "updated_at", "created_at"),
-        venue_tag_list: [], venue_union: [] }
+        venue_tag_list: [], venue_union: mids("groups", r["venue_union"]) }
     } },
 
   { target: "events", source: "events", id: :key, req: %i[group_id owner_id], transform: ->(r) {

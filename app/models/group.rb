@@ -31,6 +31,21 @@ class Group < ApplicationRecord
     nickname.presence || name
   end
 
+  # Cross-group event-listing federation (ported from sails' `group_union`):
+  # a browse/schedule request for this group also pulls in events owned by
+  # every group listed here — e.g. a popup-city cluster where partner
+  # communities cross-list each other's events. Always includes self.
+  def event_group_ids
+    event_union.present? ? ([id] + event_union).uniq : [id]
+  end
+
+  # Cross-group venue-sharing (ported from sails' `venue_union`): an event
+  # belonging to this group may book a venue owned by any group listed here,
+  # not only its own. Always includes self.
+  def venue_group_ids
+    venue_union.present? ? ([id] + venue_union).uniq : [id]
+  end
+
   # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.

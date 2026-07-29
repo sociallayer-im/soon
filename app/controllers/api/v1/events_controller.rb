@@ -111,7 +111,7 @@ class Api::V1::EventsController < Api::BaseController
   # ignored rather than 422ing — a bad filter degrades to "unfiltered".
   def apply_filters(scope)
     if params[:group_id].present?
-      scope = scope.where(group_id: Group.resolve!(params[:group_id]).id)
+      scope = scope.where(group_id: Group.resolve!(params[:group_id]).event_group_ids)
     elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank?
       # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
@@ -214,7 +214,8 @@ class Api::V1::EventsController < Api::BaseController
     if event.venue_id
       venue = Venue.find_by(id: event.venue_id)
       return "venue not found" unless venue
-      return "venue does not belong to this group" unless venue.group_id == event.group_id
+      group = Group.find_by(id: event.group_id)
+      return "venue does not belong to this group" unless group && group.venue_group_ids.include?(venue.group_id)
       if event.max_participant && venue.capacity && event.max_participant > venue.capacity
         return "event capacity exceeds the venue capacity"
       end

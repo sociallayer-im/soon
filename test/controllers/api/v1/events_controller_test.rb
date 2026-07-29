@@ -14,6 +14,39 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, ids.size
   end
 
+  test "index with group_id also includes events from the group's event_union partners" do
+    owner = create_user
+    main_group = create_group(owner: owner)
+    partner_group = create_group
+    unrelated_group = create_group
+    main_group.update!(event_union: [main_group.id, partner_group.id])
+
+    own_event = create_event(group: main_group, owner: owner, status: "published")
+    partner_event = create_event(group: partner_group, owner: create_user, status: "published")
+    unrelated_event = create_event(group: unrelated_group, owner: create_user, status: "published")
+
+    get "/api/v1/events", params: { group_id: main_group.id }, headers: auth_headers(owner)
+    assert_response :success
+    ids = json_response["data"].map { |e| e["id"] }
+    assert_includes ids, own_event.id
+    assert_includes ids, partner_event.id
+    assert_not_includes ids, unrelated_event.id
+  end
+
+  test "index with group_id and no event_union only returns the group's own events" do
+    owner = create_user
+    group = create_group(owner: owner)
+    other_group = create_group
+    own_event = create_event(group: group, owner: owner)
+    other_event = create_event(group: other_group, owner: create_user)
+
+    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
+    assert_response :success
+    ids = json_response["data"].map { |e| e["id"] }
+    assert_includes ids, own_event.id
+    assert_not_includes ids, other_event.id
+  end
+
   test "show returns a public published event to any authenticated user" do
     owner = create_user
     outsider = create_user
@@ -91,6 +124,45 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/events", headers: auth_headers(owner)
     assert_response :success
     assert_equal 2, json_response["data"].size
+  end
+
+  test "index does not leak a pending (awaiting-approval) event to an ordinary member" do
+    owner = create_user
+    submitter = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    create_membership(user: submitter, group: group, role: "member")
+    create_membership(user: outsider, group: group, role: "member")
+    published = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    pending = create_event(group: group, owner: submitter, status: "pending", visibility: "public")
+
+    # The submitter still sees their own pending submission (owner_id clause)...
+    get "/api/v1/events", headers: auth_headers(submitter)
+    assert_equal [published.id, pending.id].sort, json_response["data"].map { |e| e["id"] }.sort
+
+    # ...but a random other member of the same group must not.
+    get "/api/v1/events", headers: auth_headers(outsider)
+    assert_equal [published.id], json_response["data"].map { |e| e["id"] }
+  end
+
+  test "index drops a cancelled event from a random viewer's browse listing" do
+    owner = create_user
+    group = create_group(owner: owner)
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+
+    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(create_user)
+    assert_response :success
+    assert_not_includes json_response["data"].map { |e| e["id"] }, cancelled.id
+  end
+
+  test "index still shows the organizer their own cancelled event (Cancelled badge, not vanished)" do
+    owner = create_user
+    group = create_group(owner: owner)
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+
+    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
+    assert_response :success
+    assert_includes json_response["data"].map { |e| e["id"] }, cancelled.id
   end
 
   test "show 404s for an unknown id" do
@@ -417,6 +489,36 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/events", params: {
       event: { title: "X", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
                group_id: group.id, venue_id: other_venue.id }
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+  end
+
+  test "create allows a venue owned by a venue_union partner group" do
+    owner = create_user
+    group = create_group(owner: owner)
+    partner_group = create_group
+    group.update!(venue_union: [group.id, partner_group.id])
+    partner_venue = create_venue(group: partner_group, owner: create_user)
+
+    post "/api/v1/events", params: {
+      event: { title: "X", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, venue_id: partner_venue.id }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal partner_venue.id, json_response["venue"]["id"]
+  end
+
+  test "create still rejects a venue outside the venue_union set" do
+    owner = create_user
+    group = create_group(owner: owner)
+    partner_group = create_group
+    group.update!(venue_union: [group.id, partner_group.id])
+    unrelated_venue = create_venue(group: create_group, owner: create_user)
+
+    post "/api/v1/events", params: {
+      event: { title: "X", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, venue_id: unrelated_venue.id }
     }, headers: auth_headers(owner)
     assert_response :unprocessable_entity
     assert_match "venue does not belong", json_response["error"]

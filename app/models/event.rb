@@ -29,13 +29,19 @@ class Event < ApplicationRecord
   # a later change to the group's zone leaves existing events untouched.
   before_validation :inherit_group_timezone, on: :create
 
-  # Events a user is allowed to see in a listing: public & not draft/archived to
-  # everyone, plus anything they own or manage (group admin/owner). Callers still
-  # scope by group membership on top of this.
+  # Events a user is allowed to see in a listing: public & not draft/pending/
+  # archived/cancelled to everyone (pending = awaiting manager approval via
+  # #approve — see EventsController#pending_approval — must stay unlisted
+  # until then, same as a draft; cancelled matches sails' behavior — a
+  # cancelled event drops out of browse listings entirely), plus anything they
+  # own or manage (group admin/owner) — an organizer still sees their own
+  # cancelled event (with the "Cancelled" badge — see CardEvent) so they know
+  # it's cancelled rather than it silently vanishing for them too. Callers
+  # still scope by group membership on top of this.
   scope :visible_to, ->(user) {
     managed = Membership.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
     where(
-      "(events.visibility = 'public' AND events.status NOT IN ('draft', 'archived')) " \
+      "(events.visibility = 'public' AND events.status NOT IN ('draft', 'pending', 'archived', 'cancelled')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed)",
       uid: user&.id, managed: managed
     )

@@ -2,7 +2,172 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — behavioral parity pass vs sails/, SIWE hardening, migration tooling
+## 2026-07-29 (latest) — pending events were publicly listed before manager approval
+
+Follow-up to the event_union investigation below: checked a second reported
+list-mismatch (`/event/mushanghai?collection=past`, local showed 266 vs
+production's 204). Root-caused by diffing sails' `event/list` filter against
+soon's `Event.visible_to`:
+- sails whitelists `status IN ('open','published','closed')` AND
+  `display IN ('normal','pinned','public')` for public listing.
+- soon's `visible_to` only blacklisted `status IN ('draft','archived')`, and
+  `display`'s hidden/private states were already correctly absorbed into
+  `visibility != 'public'` during the schema redesign — but `status: pending`
+  was not excluded.
+
+Two different findings, not one:
+- **Real bug, fixed**: a `pending` event (awaiting `EventsController#approve`
+  via the manager review-inbox flow — see `#pending_approval`) was publicly
+  listed to anyone before a manager ever approved it, defeating the point of
+  the pending-review workflow. `Event.visible_to` now excludes `pending`
+  alongside `draft`/`archived`. Low volume in this dataset (1 of 279 events)
+  but a real content-moderation gap regardless of count.
+- **Cancelled events**: initially assumed intentional (frontend has a
+  "Cancelled" badge in `CardEvent`, unlike sails' hard exclude), but per
+  explicit product decision this was wrong — cancelled events must also drop
+  out of browse listings, matching sails. `visible_to`'s public branch now
+  excludes `cancelled` too. The badge still fires where it's actually useful:
+  the `owner_id`/`managed` OR-clauses are untouched, so an organizer still
+  sees their own cancelled event (with the badge) instead of it silently
+  vanishing for them — only random public viewers lose visibility.
+
+## 2026-07-29 — event_union/venue_union cross-group federation was silently dropped in migration
+
+Refreshed local dev data (fresh prod dump → local sails → local soon, see
+below) to debug a report that `localhost:4001/event/ethchiangmai2025` and
+`app.sola.day/event/ethchiangmai2025` showed completely different event
+lists. Root cause, confirmed against production directly: sails' `groups`
+table has `group_union`/`venue_union` (integer[] columns) — a cross-group
+event-listing/venue-sharing federation feature (e.g. a popup-city cluster of
+partner communities cross-listing each other's events; 8 groups use it in
+production, including `ethchiangmai2025` ∪ `4seas`). soon's schema already
+had the equivalent columns (`event_union`/`venue_union`, renamed for its TSID
+ids) but:
+- `migrate_from_sails.rb` hardcoded both to `[]` on every group — never
+  actually copied `group_union`/`venue_union`, even after remapping ids.
+- `EventsController#apply_filters`'s `group_id` filter only matched the
+  literal group, never expanding through `event_union`.
+- `EventsController#reference_error` and `RecurringController#resolve_venue`
+  only accepted a venue owned by the event's own group, never one owned by a
+  `venue_union` partner.
+
+Fixed all three: `Group#event_group_ids`/`#venue_group_ids` (new model
+methods, self + union, deduped), migration now remaps `group_union` →
+`event_union` and `venue_union` → `venue_union` via the existing groups id
+map, and both controllers now check against the expanded set. Local re-migration
+confirmed exact parity with production for `ethchiangmai2025` (211 upcoming
+events, matching `api.sola.day`'s live response, vs 0 before the fix).
+
+**Local data refresh tooling** (`sails/`, unrelated to soon/'s own code but
+needed to get here): `bin/dump_tables_advanced.rb` and
+`bin/load_tables_advanced.rb` both had a real bug — a helper method (
+`dump_table_raw_sql`/`process_batch`) was `def`'d *after* the loop that calls
+it, so Ruby's top-to-bottom top-level execution meant every default-mode
+invocation failed with `undefined method`. Fixed by moving the definitions
+above their call sites. Also added `TABLE_ORDER` support to the load script —
+`CLEAR_TABLES=true` was clearing tables in alphabetical order, ignoring FK
+dependencies, so parent tables' `delete_all` aborted on FK violations from
+still-populated children and silently kept 100% stale data. A full prod dump
+→ local sails reload now needs: `TRUNCATE ... CASCADE` up front (sidesteps
+ordering entirely), then load with `TABLE_ORDER=profiles,groups,badge_classes,
+recurrings,vote_proposals,vote_options,vouchers,events,group_invites,
+memberships,venues,tracks,tickets,forms` (parents before children; the
+remaining independent tables fall back to alphabetical). ~0.2% of rows
+(mostly duplicate emails predating a unique index, and a handful of legacy
+NULL enum values predating a NOT NULL constraint) are unrecoverable
+legacy-data artifacts, not a tooling bug — expected and acceptable.
+
+## 2026-07-29 — adversarial seastar-app audit + fixes
+
+An adversarial ("find bugs like a competitor would") pass over seastar-app/
+seastar-auth against soon/'s current backend contract, run across three
+parallel reviews (sola-sdk contract, SIWE/auth flow, group/membership/venue
+UI). 17 findings; all fixed except the two wallet-extension e2e specs (need
+real wallet-automation tooling, out of scope). soon/ suite green at 573 runs;
+seastar-app `tsc --noEmit` clean. The Cypress rewrite below could not be
+executed against a live server in this pass — un-skipped and repointed at the
+correct contract, but not run end-to-end; treat as needing one real run
+before being trusted as a regression gate.
+
+**Backend (`soon/`):**
+- **Badge/BadgeClass/Voucher browsing 401'd on every read** — none of the
+  three controllers skipped `authenticate!` for index/show, but the SDK's
+  corresponding read functions never sent a token (by design — these are
+  public pages). Added `skip_before_action :authenticate!` for the
+  genuinely-public read actions.
+- **`badge_classes#invites` had no authorization check at all** — any
+  authenticated user could view any group's pending invites, including
+  `receiver_address` (an email, for email-type invites). Added a
+  `GroupPolicy#update?` check; deliberately did NOT make this action public
+  when fixing the badges/vouchers 401s above, for exactly this reason.
+- **Declining a group invite always 403'd the one user it's for** —
+  `GroupInvitePolicy#cancel?` only allowed the sender or a group admin; the
+  *recipient* (matched by `receiver_id` or, for email invites, by email) is
+  neither. Added recipient-cancel to the policy.
+- **`send_with_code`'s `message` param was accepted but silently discarded** —
+  unlike the direct-invite path, which persists it.
+
+**SDK (`packages/sola-sdk`):**
+- **Ticket payment-method edits duplicated instead of updating; deletes were
+  no-ops** — `ticketBody()` omitted `id`/`_destroy` on
+  `payment_methods_attributes`, even though the backend supports
+  `accepts_nested_attributes_for allow_destroy: true`.
+- **`updateGroup` silently dropped most editable fields** — banner
+  image/link/text, social_links, group_tags, event/requirement/venue tag
+  lists, can_publish/join/view_event all round-tripped as no-ops.
+- **Ticket `status`/`start_date`/`end_date`/`days_allowed` were unreachable**
+  from the frontend despite the backend accepting all four (scheduled on-sale
+  dates, hiding a ticket, day-restricted tickets).
+- **`getBadgeClassAndInviteByGroupName` hardcoded `groupInvites: []`** with a
+  stale comment claiming the backend didn't expose it — it does
+  (`badge_classes#invites`, now authorized — see above). Wired it up for real
+  (manager-only; falls back to `[]` for anonymous/non-manager callers).
+- Smaller SDK fixes: `updateMarker` had no location-required guard (unlike
+  `createMarker`); `transferBadge`'s docstring promised eth-address/email
+  target resolution the backend doesn't support (badges resolve by username
+  only, unlike vouchers); `getPopupCityById`'s "is this a popup city" check
+  used OR (`start_date` or `location`) while `/discover`'s listing uses AND —
+  a group with only one set was reachable by ID but never listed, or vice
+  versa; `getRememberMetadata` crashed on `data.types[0]` when the array was
+  empty instead of returning null (the caller already handled null — the bug
+  was the crash, not missing caller code); `Venue`/`VenueDetail` TS types were
+  missing `archived`, which the blueprint always returns.
+
+**Frontend (`seastar-app`):**
+- **Dead "Issuer" invite-role option** — `InviteForm.tsx` still offered it;
+  the backend rejects any role outside `member|manager|owner` (422), so
+  picking it made the invite flow fail 100% of the time. Removed (issuer was
+  already retired everywhere else, per `src/utils/index.ts`'s `isIssuer = false`).
+- **The parent-group-manager capability had no UI entry point** —
+  `GroupPolicy#can_assign_manager?` (2026-07-16 design decision: a parent
+  group's admin/owner may toggle a child-group member's role to/from
+  "manager", nothing else) was reachable from no page: `TabMembers.tsx`'s
+  management-dropdown gate never considered `group.parent`, and even a
+  hand-crafted request would have hit the wrong endpoint (`addManager` POSTed
+  to the member-create action, which requires full `manage?` and 403s for a
+  parent manager). Fixed `addManager` to PATCH an existing membership's role
+  instead (correct for both direct and parent managers — its one caller only
+  ever offers existing members anyway), and threaded a new
+  `currUserIsParentManager` flag through `GroupPageData` → `TabMembers` to
+  show a scoped "Manager Management" entry.
+- **Venue `start_date`/`end_date` had no edit UI** — the backend read/wrote
+  them and the SDK already passed them through, but the booking-window fields
+  were simply unreachable from `VenueForm.tsx`. Added date inputs.
+- `seastar-auth/.env` (git-tracked) points `NEXT_PUBLIC_API_URL` at the
+  legacy sails backend — correct for production today (sails is still the
+  live backend), but a fresh checkout running `bun run dev` with no
+  hand-made `.env.local` silently targets it too, so the hardened SIWE nonce
+  flow (server-persisted `AuthCode`) can never be exercised locally by
+  default. Added a git-tracked `.env.development` (loaded by `next dev`
+  before `.env`, never affects `next build`) pointing dev at
+  `localhost:3000`; production behavior is untouched.
+- `seastar-auth/cypress/e2e/Auth.cy.ts` was entirely `describe.skip` and
+  targeted sails-only routes end to end. Rewritten against soon's actual
+  `/api/v1/auth/*` contract and current component selectors/redirects; wallet
+  sign-in specs stay skipped (need real wallet-extension automation, not an
+  endpoint fix) with that reasoning now stated instead of silently skipped.
+
+## 2026-07-29 — behavioral parity pass vs sails/, SIWE hardening, migration tooling
 
 Suite green at 567 runs. Prompted by `soon/design/BEHAVIOR_COMPARISON.md` (new
 this pass — a functional/behavioral audit vs sails/, deeper than the existing

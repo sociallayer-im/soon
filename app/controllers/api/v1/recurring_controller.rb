@@ -161,7 +161,7 @@ class Api::V1::RecurringController < Api::BaseController
   end
 
   def resolve_venue(group)
-    venue = Venue.find_by(id: params[:venue_id], group_id: group.id)
+    venue = Venue.find_by(id: params[:venue_id], group_id: group.venue_group_ids)
     render_error("venue does not belong to this group") unless venue
     venue
   end
