@@ -54,4 +54,23 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Hard safety net: refuse to boot in test env against anything but a local
+  # database. `DATABASE_URL` overrides config/database.yml for EVERY Rails
+  # environment (including test) — sails/ (this monorepo's other Rails app)
+  # got bitten by exactly this: a RAILS_ENV=test run silently inherited a
+  # production DATABASE_URL from .env and truncated 61 tables. .env is empty
+  # here today, but this guard means it staying that way is never load-bearing.
+  config.after_initialize do
+    host = ActiveRecord::Base.connection_db_config.configuration_hash[:host]
+    unless host.nil? || host.to_s.match?(/\A(localhost|127\.0\.0\.1|::1)\z/)
+      abort <<~MSG
+
+        REFUSING TO BOOT test environment: database host is #{host.inspect}, not local.
+        See config/environments/test.rb — the test environment must only ever talk to
+        a local database.
+
+      MSG
+    end
+  end
 end
