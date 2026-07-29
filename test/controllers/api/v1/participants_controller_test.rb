@@ -188,4 +188,97 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/events/#{event.id}/participants/does-not-exist/approve", headers: auth_headers(owner)
     assert_response :not_found
   end
+
+  # ---------------------------------------------------------------- capacity
+
+  test "create is rejected once max_participant is reached" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, max_participant: 1)
+    create_participant(event: event, user: create_user, status: "attending")
+    event.increment!(:participant_count)
+
+    attendee = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    assert_response :unprocessable_entity
+    assert_not event.participants.exists?(user: attendee)
+  end
+
+  test "create is rejected once the venue's capacity is reached" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, capacity: 1)
+    event = create_event(group: group, owner: owner, venue: venue)
+    create_participant(event: event, user: create_user, status: "attending")
+    event.increment!(:participant_count)
+
+    attendee = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    assert_response :unprocessable_entity
+  end
+
+  test "a pending join (awaiting approval) doesn't count against capacity" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, max_participant: 1, require_approval: true)
+    create_participant(event: event, user: create_user, status: "attending")
+    event.increment!(:participant_count)
+
+    attendee = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    assert_response :created
+    assert_equal "pending", json_response["status"]
+  end
+
+  test "create increments participant_count only when attending" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(create_user)
+    assert_equal 1, event.reload.participant_count
+  end
+
+  test "destroy decrements participant_count for an attending participant" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    participant = create_participant(event: event, user: attendee, status: "attending")
+    event.increment!(:participant_count)
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
+    assert_response :no_content
+    assert_equal 0, event.reload.participant_count
+  end
+
+  test "self-cancel via update decrements participant_count and frees a seat" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, max_participant: 1)
+    participant = create_participant(event: event, user: attendee, status: "attending")
+    event.increment!(:participant_count)
+
+    patch "/api/v1/events/#{event.id}/participants/#{participant.id}",
+      params: { participant: { status: "cancelled" } }, headers: auth_headers(attendee)
+    assert_response :success
+    assert_equal 0, event.reload.participant_count
+
+    newcomer = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(newcomer)
+    assert_response :created
+  end
+
+  test "approve increments participant_count" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, require_approval: true)
+    participant = create_participant(event: event, user: attendee, status: "pending")
+
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal 1, event.reload.participant_count
+  end
 end

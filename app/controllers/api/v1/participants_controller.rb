@@ -24,10 +24,18 @@ class Api::V1::ParticipantsController < Api::BaseController
     status = params.dig(:participant, :status) || "attending"
     status = "pending" if (@event.require_approval || @event.form_id.present?) && !is_manager
 
+    # Only a status that counts toward capacity needs the check — a "pending"
+    # join (awaiting approval) doesn't occupy a seat yet, matching sails/'s
+    # "only count confirmed attendees; pending waits until approval".
+    if status == "attending" && (err = capacity_error)
+      return render_error(err)
+    end
+
     participant = @event.participants.new(user: current_user, status: status)
 
     ActiveRecord::Base.transaction do
       participant.save!
+      @event.increment!(:participant_count) if status == "attending"
 
       if @event.form_id && params[:form_answers].present?
         valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
@@ -54,7 +62,17 @@ class Api::V1::ParticipantsController < Api::BaseController
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    if participant.update(status: params.dig(:participant, :status))
+
+    new_status = params.dig(:participant, :status)
+    was_attending = participant.status == "attending"
+    will_attend = new_status == "attending"
+    if will_attend && !was_attending && (err = capacity_error)
+      return render_error(err)
+    end
+
+    if participant.update(status: new_status)
+      @event.increment!(:participant_count) if will_attend && !was_attending
+      @event.decrement!(:participant_count) if was_attending && !will_attend && @event.participant_count.to_i > 0
       render json: ParticipantBlueprint.render(participant)
     else
       render_error(participant.errors.full_messages.join(", "))
@@ -69,7 +87,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
+    was_attending = participant.status == "attending"
     participant.destroy
+    @event.decrement!(:participant_count) if was_attending && @event.participant_count.to_i > 0
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -84,6 +104,7 @@ class Api::V1::ParticipantsController < Api::BaseController
     return render_error("participant is not pending") unless participant.status == "pending"
 
     participant.update!(status: "attending")
+    @event.increment!(:participant_count)
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
@@ -124,5 +145,20 @@ class Api::V1::ParticipantsController < Api::BaseController
     @event = Event.find(params[:event_id])
   rescue ActiveRecord::RecordNotFound
     render_not_found
+  end
+
+  # Only "attending" participants occupy a seat — mirrors
+  # TicketsController#rsvp's venue-capacity check and the same
+  # @event.participant_count counter it maintains, extended here to also
+  # cover max_participant (rsvp has no ticket-quantity-independent event cap
+  # to check; the free/direct-join path does).
+  def capacity_error
+    return "event is full" if @event.max_participant && @event.participant_count.to_i >= @event.max_participant
+
+    if @event.venue&.capacity.to_i > 0 && @event.participant_count.to_i >= @event.venue.capacity
+      return "exceed venue capacity"
+    end
+
+    nil
   end
 end
