@@ -576,3 +576,32 @@ sails 仍在运行且保持冻结，经 `sails-old.sola.day` 可直达（回滚�
 （TSID 转不回整数、合并掉的 66 个身份拆不开），所以整体回切 sails
 等于放弃切换后产生的全部数据。镜像层面的回滚（`ginger rollback`）
 仍然可用，那解决的是"soon 新镜像有 bug"，不是"切回 sails"。
+
+## 12. 切换后修复：legacy 整数 ID 链接
+
+切换后 15 分钟内的生产日志显示，81 个非健康检查请求里有 24 个 404，其中
+**9 个是不同的整数 ID 活动查询**（`/api/v1/events/11399` 等）。这些是真实用户
+在点切换前生成的链接——书签、分享出去的消息、搜索引擎结果、日历订阅。
+整数永远不可能匹配 TSID 主键，所以全部 404。
+
+`ApplicationRecord.find_by_id_or_legacy!` 先按 TSID 查，失败后在标识符
+**全为数字**时回退到 `ref_id`（迁移时保留的旧整数）。全数字的标识符本身
+不可能是 TSID，所以回退无歧义；额外那次查询走的是 `ref_id` 的部分索引，
+且只在 legacy 路径上发生。迁移后新建的记录 `ref_id` 为 NULL，不会被数字命中。
+
+已接入 events / badges / badge_classes / vouchers 以及单活动日历订阅。
+groups 用 slug 寻址，slug 跨迁移不变，无需处理。
+
+验证：用户报的 `https://app.sola.day/event/detail/11399` 恢复 200
+（"cybernetic economy for the AI Age"），日志里其余 7 个整数 ID 全部恢复 200，
+TSID 照常工作，不存在的 ID 仍正确 404。
+
+### 仍未处理的旧路由 404
+
+同一批日志里还有几个 sails 时代的路径被请求：`/comment/list`（4 次）、
+`/api/event/list`（2 次）、`/group/icalendar`（1 次）、`/event/discover`（1 次）。
+其中 **`/group/icalendar` 是日历订阅**——用户在 Apple Calendar / Google
+里订阅过的 URL 现在失效了，soon 的等价路径是
+`/api/v1/groups/:id/calendar.ics`。这类旧路径兼容属于 §9 已知并接受的破坏
+（sola-cli / dashboard 后续迁移），但日历订阅是普通用户可见的，值得单独决定
+是否加一层重定向。
