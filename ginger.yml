@@ -66,7 +66,13 @@ env:
   # touches the database — no SQL issued, no error, no timeout. Setting
   # WEB_CONCURRENCY=1 reproduced exactly that on the first soon deploy.
   RAILS_MAX_THREADS: "3"
-  GOOD_JOB_MAX_THREADS: "3"
+  # The Postgres instance is shared with sola_sails_db and loop_prod and has
+  # max_connections=25 (22 once superuser reservations are taken out), so
+  # config/database.yml's pool — RAILS_MAX_THREADS + GOOD_JOB_MAX_THREADS + 2 —
+  # is a claim on a genuinely scarce budget. soon's only background work is
+  # transactional email, so one job thread is enough and the two connections
+  # saved matter more than the concurrency.
+  GOOD_JOB_MAX_THREADS: "1"
   THRUSTER_HTTP_PORT: "8080"
   THRUSTER_TARGET_PORT: "3000"
 
