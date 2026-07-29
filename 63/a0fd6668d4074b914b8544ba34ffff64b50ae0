@@ -1,0 +1,28 @@
+app/controllers/api/v1/vouchers_controller.rb
+  s_e9ed806a3d225c::t_bd672a2ba54b7e 3-6
+test/controllers/api/v1/badge_classes_controller_test.rb
+  s_e9ed806a3d225c::t_a34de76bf325b7 105-123
+app/controllers/api/v1/badges_controller.rb
+  s_e9ed806a3d225c::t_8ae2da8a3d3e79 2-3
+design/BEHAVIOR_COMPARISON.md
+  s_e9ed806a3d225c::t_615f754192802a 1-172
+app/controllers/api/v1/badge_classes_controller.rb
+  s_e9ed806a3d225c::t_110c195e736425 49
+  s_e9ed806a3d225c::t_0790f4c6cf343e 2-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "63a0fd6668d4074b914b8544ba34ffff64b50ae0",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
