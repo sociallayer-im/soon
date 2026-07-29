@@ -1,0 +1,55 @@
+test/controllers/api/v1/forms_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 283
+app/controllers/api/v1/forms_controller.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 91
+test/controllers/api/v1/groups_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 106
+test/controllers/api/v1/participants_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 30,162
+app/policies/application_policy.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 24
+app/controllers/api/v1/event_roles_controller.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 62
+app/controllers/api/v1/participants_controller.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 23
+test/controllers/api/v1/memberships_controller_test.rb
+  s_366b4800ea8f42::t_3be72898cf87f3 75,145
+  s_366b4800ea8f42::t_e5aec620c7f8d5 70,73,129,140,152,201,216
+app/models/membership.rb
+  s_366b4800ea8f42::t_84edee8749a41e 9
+test/controllers/api/v1/event_roles_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 48
+test/controllers/api/v1/events_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 323
+test/models/membership_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 26
+  s_366b4800ea8f42::t_139e5ccd081e4a 7
+test/controllers/api/v1/public_reads_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 124
+test/controllers/api/v1/vouchers_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 100,381
+  s_366b4800ea8f42::t_3be72898cf87f3 387
+app/controllers/api/v1/events_controller.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 88
+app/models/event.rb
+  s_366b4800ea8f42::t_1cadbc56a2f264 36
+test/models/group_test.rb
+  s_366b4800ea8f42::t_3be72898cf87f3 25
+  s_366b4800ea8f42::t_a575b3b9c70dfc 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5f371ddeac9292081c56a2e8bc171bff439058b9",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
