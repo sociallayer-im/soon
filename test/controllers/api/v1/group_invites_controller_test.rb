@@ -205,6 +205,39 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "request_invite sets a 30-day expiry" do
+    user = create_user
+    group = create_group
+
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite", headers: auth_headers(user)
+    assert_response :created
+    invite = GroupInvite.last
+    assert invite.expires_at.present?
+    assert_in_delta 30.days.from_now, invite.expires_at, 5.seconds
+  end
+
+  test "request_invite allows a fresh request once the prior one has expired" do
+    user = create_user
+    group = create_group
+    stale = create_group_invite(group: group, receiver_id: user.id, status: "requesting", expires_at: 1.day.ago)
+
+    post "/api/v1/groups/#{group.id}/group_invites/request_invite", headers: auth_headers(user)
+    assert_response :created
+    assert_equal "cancelled", stale.reload.status
+  end
+
+  test "accept_request rejects an expired join request" do
+    owner = create_user
+    requester = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, receiver_id: requester.id, status: "requesting", expires_at: 1.day.ago)
+
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept_request", headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_equal "requesting", invite.reload.status
+    assert_not group.memberships.exists?(user: requester)
+  end
+
   test "accept_request lets an admin approve a join request" do
     owner = create_user
     requester = create_user

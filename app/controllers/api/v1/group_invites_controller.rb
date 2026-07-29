@@ -66,6 +66,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
   def accept_request
     authorize @group, :update?, policy_class: GroupPolicy
     return render_error("invite is not a pending request") unless @invite.status == "requesting"
+    return render_error("request expired") if @invite.expired?
 
     @invite.accept!(User.find(@invite.receiver_id))
     render json: GroupInviteBlueprint.render(@invite)
@@ -78,11 +79,14 @@ class Api::V1::GroupInvitesController < Api::BaseController
     if @group.memberships.exists?(user_id: current_user.id)
       return render_error("already a member")
     end
-    if GroupInvite.exists?(group: @group, receiver_id: current_user.id, status: "requesting")
-      return render_error("request already pending")
+    pending = GroupInvite.find_by(group: @group, receiver_id: current_user.id, status: "requesting")
+    if pending
+      return render_error("request already pending") unless pending.expired?
+      pending.update(status: "cancelled")
     end
 
-    invite = GroupInvite.create(group: @group, receiver_id: current_user.id, status: "requesting", role: "member")
+    invite = GroupInvite.create(group: @group, receiver_id: current_user.id, status: "requesting", role: "member",
+      expires_at: INVITE_TTL.from_now)
     render json: GroupInviteBlueprint.render(invite), status: :created
   end
 
