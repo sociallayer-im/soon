@@ -33,7 +33,10 @@ class Group < ApplicationRecord
   # Looks a group up by primary key OR unique slug — API paths accept either
   # (/groups/0GA2... or /groups/edge-city). Raises RecordNotFound like find.
   def self.resolve!(identifier)
-    find_by(id: identifier) || find_by!(name: identifier)
+    find_by(id: identifier) || find_by(name: identifier) ||
+      (identifier.to_s.match?(/\A\d+\z/) ? find_by(ref_id: identifier.to_s) : nil) ||
+      raise(ActiveRecord::RecordNotFound,
+            "Couldn't find Group with id, name or ref_id=#{identifier.inspect}")
   end
 
   # Human-facing label — the friendly nickname when set, else the handle-like name.

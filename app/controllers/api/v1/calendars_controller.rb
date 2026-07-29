@@ -20,7 +20,36 @@ class Api::V1::CalendarsController < Api::BaseController
   # The group's public, published events as a subscribable feed. Subscribe in
   # Apple Calendar via webcal://<host>/api/v1/groups/:id/calendar.ics
   def group
-    group = Group.resolve!(params[:id]) # TSID or slug — subscription URLs use the slug
+    render_group_feed(Group.resolve!(params[:id])) # TSID or slug — subscription URLs use the slug
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
+  end
+
+  # GET /group/icalendar?group_name=<slug>   (or ?group_id=<legacy integer>)
+  #
+  # The path the legacy sails backend served. Calendar subscription URLs live
+  # inside people's calendar apps — Apple Calendar, Google, Outlook — and cannot
+  # be updated once handed out, so unlike the other legacy routes this one has
+  # to keep working indefinitely rather than just through the migration. It also
+  # fails silently: a subscriber sees a calendar that quietly stops updating,
+  # not an error, so nobody reports it.
+  #
+  # Serves exactly the same feed as /api/v1/groups/:id/calendar.ics. The UID
+  # scheme differs from sails' ("event-<tsid>@host" vs "sola-<integer>"), so
+  # subscribers' clients replace the entries once — acceptable, and far better
+  # than keeping two UID schemes alive for the same events.
+  def legacy_group
+    identifier = params[:group_name].presence || params[:group_id].presence
+    return render_not_found if identifier.blank?
+
+    render_group_feed(Group.resolve!(identifier))
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
+  end
+
+  private
+
+  def render_group_feed(group)
     events = group.events
       .where(visibility: "public", status: "published")
       .where("end_time IS NULL OR end_time > ?", 90.days.ago)
@@ -28,11 +57,7 @@ class Api::V1::CalendarsController < Api::BaseController
 
     send_calendar(EventCalendar.feed(events, name: "#{group.display_name} — #{ApplicationMailer::BRAND_NAME}"),
       filename: "group-#{group.id}.ics")
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
   end
-
-  private
 
   # A public, non-draft/archived event is world-visible (mirrors Event.visible_to
   # for anonymous callers). Private/draft events aren't exposed through the feed.
