@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_18_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -526,6 +526,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_000000) do
     t.boolean "archived", default: false, null: false
     t.integer "capacity"
     t.datetime "created_at", null: false
+    t.date "end_date"
     t.string "featured_image_url"
     t.string "group_id", null: false
     t.string "image_urls", default: [], array: true
@@ -534,6 +535,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_000000) do
     t.string "owner_id", null: false
     t.string "place_id"
     t.boolean "require_approval", default: false
+    t.date "start_date"
     t.string "tags", default: [], array: true
     t.jsonb "timeslots"
     t.string "track_ids", default: [], array: true

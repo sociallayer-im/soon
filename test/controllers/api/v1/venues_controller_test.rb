@@ -175,4 +175,31 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert inside, "within the override window should be open"
     assert_not outside, "the weekly 09:00-17:00 slot must NOT apply once an override exists"
   end
+
+  test "check_availability rejects a booking outside the venue's start_date/end_date window" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner,
+      start_date: 10.days.from_now.to_date, end_date: 20.days.from_now.to_date)
+
+    before_window, msg_before = venue.check_availability(5.days.from_now.change(hour: 10), 5.days.from_now.change(hour: 11), "UTC")
+    within_window, = venue.check_availability(15.days.from_now.change(hour: 10), 15.days.from_now.change(hour: 11), "UTC")
+    after_window, msg_after = venue.check_availability(25.days.from_now.change(hour: 10), 25.days.from_now.change(hour: 11), "UTC")
+
+    assert_not before_window
+    assert_match "not available before", msg_before
+    assert within_window
+    assert_not after_window
+    assert_match "not available after", msg_after
+  end
+
+  test "venue end_date must be after start_date" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    venue = Venue.new(name: "Bad window", group: group, owner: owner,
+      start_date: 10.days.from_now.to_date, end_date: 5.days.from_now.to_date)
+    assert_not venue.valid?
+    assert_includes venue.errors[:end_date], "must be greater than #{10.days.from_now.to_date}"
+  end
 end

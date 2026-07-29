@@ -7,9 +7,11 @@ class Venue < ApplicationRecord
 
   validates :name, presence: true, uniqueness: true
   validates :capacity, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  validates :end_date, comparison: { greater_than: :start_date }, if: -> { start_date.present? && end_date.present? }
 
   # Canonical availability + overlap check for booking an event into this venue.
   # Returns [available?, message]. Semantics (mirrors sails/ and CLAUDE.md):
+  #   - outside the venue's overall start_date/end_date window (if set) → not available
   #   - overlaps any other non-cancelled event in this venue → not available
   #   - a date override (Availability with `day == the event's date`) takes priority
   #     over weekly slots; the event must fall entirely within one of its intervals
@@ -20,6 +22,13 @@ class Venue < ApplicationRecord
     tz = timezone.presence || group&.timezone.presence || "UTC"
     start_time = event_start.in_time_zone(tz)
     end_time   = event_end.in_time_zone(tz)
+
+    if start_date && start_time.to_date < start_date
+      return [false, "venue is not available before #{start_date}"]
+    end
+    if end_date && end_time.to_date > end_date
+      return [false, "venue is not available after #{end_date}"]
+    end
 
     overlap = events.where("start_time < ? AND end_time > ?", event_end, event_start)
                     .where.not(status: "cancelled")

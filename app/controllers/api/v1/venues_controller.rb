@@ -79,6 +79,7 @@ class Api::V1::VenuesController < Api::BaseController
 
   def venue_params
     params.require(:venue).permit(:name, :capacity, :website, :about, :featured_image_url,
-      :place_id, :require_approval, :group_id, amenities: [], tags: [], image_urls: [], track_ids: [])
+      :place_id, :require_approval, :group_id, :start_date, :end_date,
+      amenities: [], tags: [], image_urls: [], track_ids: [])
   end
 end
