@@ -7,7 +7,7 @@ class Api::V1::CalendarsController < Api::BaseController
   #
   # A single event as a downloadable / subscribable calendar.
   def event
-    event = Event.find(params[:id])
+    event = Event.find_by_id_or_legacy!(params[:id])
     return render_not_found unless calendar_visible?(event)
 
     send_calendar(EventCalendar.for_event(event, method: "PUBLISH"), filename: "event-#{event.id}.ics")

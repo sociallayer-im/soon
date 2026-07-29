@@ -104,7 +104,7 @@ class Api::V1::EventsController < Api::BaseController
   private
 
   def set_event
-    @event = Event.find(params[:id])
+    @event = Event.find_by_id_or_legacy!(params[:id])
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end

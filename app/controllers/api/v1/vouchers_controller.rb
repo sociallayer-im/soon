@@ -153,7 +153,7 @@ class Api::V1::VouchersController < Api::BaseController
   private
 
   def set_voucher
-    @voucher = Voucher.find(params[:id])
+    @voucher = Voucher.find_by_id_or_legacy!(params[:id])
   end
 
   # Shared skeleton for the three send_badge_* actions: find + authorize the

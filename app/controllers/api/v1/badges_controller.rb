@@ -96,6 +96,6 @@ class Api::V1::BadgesController < Api::BaseController
   private
 
   def set_badge
-    @badge = Badge.find(params[:id])
+    @badge = Badge.find_by_id_or_legacy!(params[:id])
   end
 end
