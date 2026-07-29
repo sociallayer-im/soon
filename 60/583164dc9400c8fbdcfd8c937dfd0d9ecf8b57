@@ -1,0 +1,28 @@
+db/migrate/20260729113156_remove_unique_index_on_places_name.rb
+  s_e9ed806a3d225c::t_a5f9f5b54fa8a5 1-2,11-12
+  s_e9ed806a3d225c::t_5981d26ba358b9 3-10
+app/models/place.rb
+  s_e9ed806a3d225c::t_2d31c152a7ae49 5,11-16
+script/migrate_from_sails.rb
+  s_e9ed806a3d225c::t_bccc2425592517 267
+test/controllers/api/v1/places_controller_test.rb
+  s_e9ed806a3d225c::t_af6a8e02085304 35-51
+db/schema.rb
+  s_e9ed806a3d225c::t_cc23141926c53c 13,401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "60583164dc9400c8fbdcfd8c937dfd0d9ecf8b57",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
