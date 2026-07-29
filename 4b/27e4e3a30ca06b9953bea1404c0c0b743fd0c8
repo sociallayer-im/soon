@@ -1,0 +1,52 @@
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_d5d1175f58a9bb 217-218
+  s_e9ed806a3d225c::t_3c260b60911915 114
+test/models/group_test.rb
+  s_e9ed806a3d225c::t_0ac7361101d029 50-73
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_f3826e7ca6f6ea 129-130,133,136,138,144-147,149-152,164-165
+  s_e9ed806a3d225c::t_3de1d864afd5b1 148,154-163
+  s_e9ed806a3d225c::t_ffc06828cf3ba2 17-23,27-49
+  s_e9ed806a3d225c::t_4a29098adaa775 131-132,134-135,137,139-143
+  s_e9ed806a3d225c::t_8aa5910d91def8 153
+  s_e9ed806a3d225c::t_ee933a58ce3874 166,497-508,510-522,525
+  s_e9ed806a3d225c::t_e1239c9cbf79c4 24-26
+  s_e9ed806a3d225c::t_c919a604ad63e9 509
+  s_e9ed806a3d225c::t_256f9d21ba1bc1 167
+  s_e9ed806a3d225c::t_8c078e84d77bb7 523-524
+  s_e9ed806a3d225c::t_43213e3aa6686c 526
+script/migrate_from_sails.rb
+  s_e9ed806a3d225c::t_15a12fe90715b4 201
+  s_e9ed806a3d225c::t_ac58fab856d3bc 117-120
+  s_e9ed806a3d225c::t_d7dc1c14e21ee6 211
+app/models/group.rb
+  s_e9ed806a3d225c::t_b75ba4d1905a69 34-48
+app/models/event.rb
+  s_e9ed806a3d225c::t_a1fbfc028f3596 32,40
+  s_e9ed806a3d225c::t_6002c997f3c95c 33-39,44
+test/controllers/api/v1/recurring_controller_test.rb
+  s_e9ed806a3d225c::t_febb70d6055510 62-87
+app/controllers/api/v1/recurring_controller.rb
+  s_e9ed806a3d225c::t_7c884919f56020 164
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_cd6ae90f52a13d 25-32
+  s_e9ed806a3d225c::t_abe0f339558c29 81-170
+  s_e9ed806a3d225c::t_2a3739a6b66a7d 5-24,33-34
+  s_e9ed806a3d225c::t_22b3b3b0cfc7be 35-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4b27e4e3a30ca06b9953bea1404c0c0b743fd0c8",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
