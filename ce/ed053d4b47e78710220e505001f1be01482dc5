@@ -1,0 +1,45 @@
+app/controllers/api/v1/calendars_controller.rb
+  s_e9ed806a3d225c::t_937272231884f2 54
+app/blueprints/venue_ref_blueprint.rb
+  s_e9ed806a3d225c::t_8755c6bb92dedb 1-10
+app/blueprints/event_blueprint.rb
+  s_e9ed806a3d225c::t_a55466912f0e3b 27,29
+  s_e9ed806a3d225c::t_01d82f2b6d7178 4-8
+  s_e9ed806a3d225c::t_82362ec595b85e 32
+app/models/group.rb
+  s_e9ed806a3d225c::t_4e234e543fd040 7
+app/controllers/api/base_controller.rb
+  s_e9ed806a3d225c::t_5973c4502073d0 66-67,71
+  s_e9ed806a3d225c::t_c144adf1f22594 15-21
+app/blueprints/track_ref_blueprint.rb
+  s_e9ed806a3d225c::t_dcc58aba9a1bd5 1-10
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_bd285b28e0f55c 665-672,674-687,689-694
+  s_e9ed806a3d225c::t_0b3fbd4c729a09 673
+  s_e9ed806a3d225c::t_154ec4ff01a2e9 688
+app/models/event.rb
+  s_e9ed806a3d225c::t_ad20352d83c33e 2
+test/services/event_calendar_test.rb
+  s_e9ed806a3d225c::t_5588b4b92f1241 87-108,111-120
+  s_e9ed806a3d225c::t_14d2e9de6afa3b 110
+  s_e9ed806a3d225c::t_87739c269a18ea 109
+app/services/event_calendar.rb
+  s_e9ed806a3d225c::t_3750882c134046 114-119
+  s_e9ed806a3d225c::t_4c8f621448c7d1 120-126,129-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ceed053d4b47e78710220e505001f1be01482dc5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
