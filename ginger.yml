@@ -55,10 +55,16 @@ builder:
 
 env:
   RAILS_ENV: production
-  # Puma stays single-worker; GoodJob runs its threads inside this same process
-  # (config/initializers/good_job.rb), and config/database.yml sizes the pool as
-  # RAILS_MAX_THREADS + GOOD_JOB_MAX_THREADS + 2.
-  WEB_CONCURRENCY: "1"
+  # WEB_CONCURRENCY is deliberately NOT set. Puma treats any value — including
+  # "1" — as a request for CLUSTER mode, and config/puma.rb has no `workers`
+  # directive, so leaving it unset gives single mode.
+  #
+  # This is not just a memory tweak. GoodJob runs in-process
+  # (execution_mode :async, config/initializers/good_job.rb). Under cluster mode
+  # its scheduler and LISTEN connection start in the Puma MASTER, before the
+  # worker forks; the forked worker then hangs forever on the first request that
+  # touches the database — no SQL issued, no error, no timeout. Setting
+  # WEB_CONCURRENCY=1 reproduced exactly that on the first soon deploy.
   RAILS_MAX_THREADS: "3"
   GOOD_JOB_MAX_THREADS: "3"
   THRUSTER_HTTP_PORT: "8080"
