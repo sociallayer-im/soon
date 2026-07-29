@@ -22,6 +22,20 @@ class Api::V1::MarkersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "index excludes a removed marker but includes one with no status set" do
+    user = create_user
+    group = create_group(owner: user)
+    place = create_place
+    active = create_marker(group: group, place: place, owner: user, status: nil)
+    removed = create_marker(group: group, place: place, owner: user, status: "removed")
+
+    get "/api/v1/markers", params: { group_id: group.id }
+    assert_response :success
+    ids = json_response["data"].map { |m| m["id"] }
+    assert_includes ids, active.id
+    assert_not_includes ids, removed.id
+  end
+
   test "show returns a marker with its associations" do
     user = create_user
     group = create_group(owner: user)

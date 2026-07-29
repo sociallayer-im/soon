@@ -18,6 +18,19 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
+  test "index with group_id only returns that group's venues" do
+    user = create_user
+    owner = create_user
+    group = create_group(owner: owner)
+    other_group = create_group(owner: owner)
+    mine = create_venue(group: group, owner: owner)
+    create_venue(group: other_group, owner: owner)
+
+    get "/api/v1/venues", params: { group_id: group.id }, headers: auth_headers(user)
+    assert_response :success
+    assert_equal [mine.id], json_response["data"].map { |v| v["id"] }
+  end
+
   test "show returns a venue" do
     user = create_user
     owner = create_user

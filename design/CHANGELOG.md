@@ -2,7 +2,42 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — co-hosting/starred event lists: missing filter, N+1 star lookup
+## 2026-07-29 (latest) — audit pass over every remaining list endpoint (markers, venues, ...)
+
+Swept all 17 `index` actions under `api/v1/` for the same class of bug found
+in the events/badges/groups passes above (missing status filter, missing
+group scoping). Two real bugs found and fixed; the rest were compared and
+found equivalent to sails or currently unused by the frontend (see below).
+
+- **`markers#index` leaked soft-deleted markers**: no filter on `status` at
+  all, despite `status: "removed"` existing as a soft-delete left over from
+  migrated legacy data (soon's own `#destroy` hard-deletes, so `"removed"`
+  only ever comes from migrated rows — 103 of them locally). sails'
+  equivalent `marker#list` excludes `status != "active"`. Fixed with
+  `where(status: [nil, "active"])` — not a plain `where.not(status:
+  "removed")`, since `status` has no DB default and a plain `!=` would also
+  drop `nil`-status rows (SQL's 3-valued NULL logic) — a marker created
+  through soon's own `#create` without an explicit status is `nil`, not
+  `"active"`.
+- **`venues#index` had no `group_id` filter at all** — always returned every
+  venue across every group, unlike `tracks#index` (its closest sibling),
+  which already supported one. Not currently called by the frontend (venues
+  are read out of the embedded group-detail payload instead), so no visible
+  regression today, but a real gap — fixed to match `tracks#index`'s
+  `Group.resolve!` pattern.
+- Everything else checked (`groups#index`, `group_invites#index`,
+  `participants#index`, `tickets#index`, `event_roles#index`,
+  `activities#index`, `comments#index`, `places#index`, `tracks#index`) is
+  either already-equivalent to sails or currently unused/orphaned by the
+  frontend (embedded-in-parent payloads instead) — noted but left as-is to
+  avoid touching dead code paths speculatively. `activities#index` returns
+  more activity `action` types than sails' hardcoded whitelist
+  (`voucher/send_badge`, `group_invite/send`) — a real behavior difference,
+  but not necessarily a bug (unclear whether sails' whitelist was
+  intentional curation or just never updated), left for a follow-up if it
+  turns out to be user-visible noise.
+
+## 2026-07-29 — co-hosting/starred event lists: missing filter, N+1 star lookup
 
 `/my-events/co-hosting` and `/my-events/stared` (and the profile page's
 matching tabs) diverged from production:

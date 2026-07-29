@@ -8,7 +8,12 @@ class Api::V1::MarkersController < Api::BaseController
   # With a group filter the map is browsable anonymously; without one an
   # authenticated caller sees markers across their own groups.
   def index
-    scope = Marker.includes(:place, :group, :owner)
+    # "removed" is a soft-delete left over from migrated legacy data (soon's
+    # own #destroy hard-deletes) -- sails' equivalent list excludes it too.
+    # status has no DB default, so a marker created without one is nil, not
+    # "active" -- include nil alongside "active" rather than just excluding
+    # "removed" (a plain `!=` would drop nil rows too, per SQL's 3-valued logic).
+    scope = Marker.includes(:place, :group, :owner).where(status: [nil, "active"])
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).id)
     elsif current_user

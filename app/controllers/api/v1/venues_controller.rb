@@ -2,7 +2,9 @@ class Api::V1::VenuesController < Api::BaseController
   before_action :set_venue, only: %i[show update destroy set_availability conflict]
 
   def index
-    render_collection Venue.where(archived: false), blueprint: VenueBlueprint
+    scope = Venue.where(archived: false)
+    scope = scope.where(group_id: Group.resolve!(params[:group_id]).id) if params[:group_id].present?
+    render_collection scope, blueprint: VenueBlueprint
   end
 
   def show
