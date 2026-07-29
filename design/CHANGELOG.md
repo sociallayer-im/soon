@@ -2,7 +2,104 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-16 (latest) — wallet & third-party auth (seastar-auth migration H)
+## 2026-07-29 (latest) — behavioral parity pass vs sails/, SIWE hardening, migration tooling
+
+Suite green at 567 runs. Prompted by `soon/design/BEHAVIOR_COMPARISON.md` (new
+this pass — a functional/behavioral audit vs sails/, deeper than the existing
+`SAILS_COMPARISON.md` schema/scope audit) and a matching API-contract audit of
+seastar-app's `soon` git branch. Full findings/citations live in those two
+docs; this entry is the fix summary.
+
+**Functional bugs fixed (real divergences from sails/, not intentional):**
+
+- **Join-time capacity enforcement** — `ParticipantsController#create` had no
+  `max_participant`/venue-capacity check at all (overbooking risk); the
+  ticketed `rsvp` path already tracked `event.participant_count` for exactly
+  this, the free/direct-join path just never used it. Extended that same
+  counter to create/update/destroy/approve.
+- **Venue `start_date`/`end_date` booking window restored** — soon/'s schema
+  had dropped these entirely; a venue meant only for a fixed popup-city date
+  range could be booked outside it. Migration + `Venue#check_availability`
+  enforcement + validation.
+- **EventRole co-host rights restored** — `EventPolicy#update?` (also gates
+  approve/reject/check_in) never consulted EventRole; a co-host lost edit/
+  approve/check-in rights they'd have in sails/. Scoped to `role: "manager"`
+  specifically (soon/'s EventRole already distinguishes co-host from
+  merely-listed speaker; sails/ granted this to any assigned role, looser).
+- **Buyer confirmation email on ticket purchase** — `TicketItem#confirm_payment!`
+  only ever notified the group owner; the buyer got nothing. Added
+  `EventMailer#ticket_purchased`, fired once per purchase.
+- **Self-service join requests now expire** (30 days, matching sails/) —
+  `request_invite` never set `expires_at`, `accept_request` never checked it.
+- **One canonical, persisted timezone source for venue availability checks** —
+  four call sites (event create/update, recurring create/update) resolved the
+  zone three different ways, converging correctly today only by coincidence
+  (parallel fallback chains landing on the same group timezone). `event.timezone`
+  is now always persisted at save time instead of frequently left nil, so
+  every check site can just read it directly — immune to a group's timezone
+  setting changing after the fact. Surfaced two related gaps while making
+  recurring time/venue editing fully usable (per explicit request — sails/
+  under-supported this): `RecurringController#update` only re-checked
+  availability when `venue_id` was re-sent (a pure time-shift on a series
+  that already has a venue skipped the check entirely); and the check used
+  the stale pre-update timezone even when the same request also changed it.
+- **SIWE hardening**: `verify_wallet` passed the message's own domain/nonce
+  back into the gem's verify call as the "expected" values — a self-matching
+  no-op. Added an explicit `ALLOWED_SIWE_DOMAINS` allowlist checked before the
+  nonce lookup (so a rejected domain never burns the nonce).
+- **Replaced the unmaintained `siwe` gem with `siwe-rb`** (spruceid/siwe-ruby
+  hadn't had a real commit since 2023-07). Reviewed the replacement's full
+  `lib/` before adopting (anchored non-backtracking regexes, no eval/dynamic-
+  send on untrusted input, same underlying `eth` gem for signature recovery,
+  smart-contract-wallet RPC path unreachable since never configured). Note:
+  `signinwithethereum` (the new gem's org) is not spruceid — new org, 0 stars
+  at review time — a deliberate call to adopt via normal rubygems versioning
+  anyway; worth re-reviewing the diff on any future version bump.
+- **`EventBlueprint`/`TicketsController#index` were missing `payment_methods`**
+  on nested tickets (no `view: :extended` passed to the association/render) —
+  every ticket showed as "paid" in the event editor regardless of actual
+  price, and editing a paid ticket lost its payment methods on load.
+- **Frontend**: `admin` → `manager` Membership-role rename (landed backend-side
+  earlier) wasn't finished on the seastar-app `soon` branch — `addManager`
+  sent the dead role string (422 every time), two group-picker filters
+  silently dropped managers, and three permission checks never recognized a
+  real manager. Also fixed `createEvent` to send `event_roles`/`tickets`
+  inline (matching the backend's atomic-create contract) instead of two
+  follow-up requests that could leave a bare event behind on failure.
+
+**Deliberate design decision (not a bug fix — recorded for a later product
+call):** a parent-group manager's only capability over a child group is now
+promoting/demoting a member to/from that child group's manager role.
+Previously (matching sails/'s documented "Parent-Child Groups" contract in
+the monorepo `CLAUDE.md`) a parent manager could fully manage a child group —
+update its settings, destroy it, manage its venues/tracks/badge classes/
+invites. That full-manage path is narrowed to direct admins only;
+`GroupPolicy#can_assign_manager?` is the one surviving parent-inclusive
+check. Whether to restore broader parent-manager access is explicitly left
+open, not resolved here — see `GroupPolicy`'s comment.
+
+**Migration tooling**: `script/migrate_from_sails.rb` (a real one-shot ETL
+from sails/'s DB into soon/'s, previously written but never committed) is now
+tracked, with a `DRY_RUN` mode and a hard abort if ever pointed at a
+non-local target (it unconditionally `TRUNCATE`s every table it touches).
+Ran a dry-run + real load against local-only databases (sails/'s local dev
+DB, seeded from a prior production import — production itself was never
+touched) — see `soon/design/migration_report_2026-07-29.md` for the full
+read/skip/error breakdown and root-caused every non-zero skip count back to
+pre-existing sails/-side data-quality gaps, not script bugs. Also added a
+`GroupInvite`-based redesign of the group-ticket claim-on-signup flow
+(`ticket_id` on `GroupInvite`, previously an unused column) replacing the
+ported-verbatim sails/ mechanism that never actually bound a ticket back to
+an account on signup.
+
+**Test-environment safety**: added `.env.test` (dotenv-rails loads it before
+the plain `.env`) plus a boot-time guard in `config/environments/test.rb`
+that aborts if the resolved database host isn't local — defends against the
+exact failure mode that hit sails/ (see sails/'s own `.env.test` + guard,
+committed the same day): `DATABASE_URL` overrides `config/database.yml` for
+every Rails environment including test.
+
+## 2026-07-16 — wallet & third-party auth (seastar-auth migration H)
 
 Suite green at 528 runs.
 
