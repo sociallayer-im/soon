@@ -20,6 +20,16 @@ class Group < ApplicationRecord
   validates :name, format: { with: /\A[a-z0-9_-]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, underscores, or hyphens" },
     allow_blank: true
 
+  # Eager-loads every association GroupBlueprint's :detail view walks. Render
+  # that view without this and each group costs five extra queries, plus one
+  # per membership for its user — against a networked database that is round
+  # trips, not milliseconds. On the homepage (21 popup cities, 2407 memberships
+  # between them, one group alone with 712) it turned a ~70ms page into a
+  # 9-second one. Keep in step with GroupBlueprint's :detail view.
+  scope :with_detail_associations, -> {
+    includes(:parent, :children, { tracks: :group }, { venues: :place }, { memberships: :user })
+  }
+
   # Looks a group up by primary key OR unique slug — API paths accept either
   # (/groups/0GA2... or /groups/edge-city). Raises RecordNotFound like find.
   def self.resolve!(identifier)

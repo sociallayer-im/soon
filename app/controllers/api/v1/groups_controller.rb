@@ -9,7 +9,7 @@ class Api::V1::GroupsController < Api::BaseController
 
   # :id accepts a TSID or the group's slug (Group.resolve!).
   def show
-    group = Group.resolve!(params[:id])
+    group = Group.with_detail_associations.resolve!(params[:id])
     render json: GroupBlueprint.render(group, view: :detail)
   end
 
