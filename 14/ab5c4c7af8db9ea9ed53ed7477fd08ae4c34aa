@@ -1,0 +1,19 @@
+design/MIGRATION_PLAN.md
+  s_e9ed806a3d225c::t_bfa270e1a235b3 626-645
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "14ab5c4c7af8db9ea9ed53ed7477fd08ae4c34aa",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
