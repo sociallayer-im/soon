@@ -1,0 +1,102 @@
+require "test_helper"
+
+# The two fan-out jobs and the shared mail delivery job. The endpoints that
+# enqueue these are covered in test/integration/email_notifications_test.rb;
+# here we exercise the jobs directly — who they pick as recipients, and what
+# they do when the world changed between enqueue and execution.
+class MailJobsTest < ActiveJob::TestCase
+  include ActionMailer::TestHelper
+
+  # ---- MailDeliveryJob ----
+
+  test "deliver_later routes through MailDeliveryJob, not ActionMailer's default" do
+    assert_equal MailDeliveryJob, ActionMailer::Base.delivery_job
+    assert MailDeliveryJob < ActionMailer::MailDeliveryJob,
+      "must subclass ActionMailer::MailDeliveryJob or assert_enqueued_emails stops matching it"
+    assert_equal "mailers", MailDeliveryJob.new.queue_name
+  end
+
+  test "a mail job whose subject was deleted is discarded, not retried forever" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    mail = EventMailer.cancelled(event_id: event.id, recipient: "someone@test.com")
+    event.destroy!
+
+    # The mailer calls Event.find in the job, so this raises RecordNotFound —
+    # discard_on must swallow it rather than let it bubble and re-run.
+    assert_nothing_raised do
+      perform_enqueued_jobs { mail.deliver_later }
+    end
+    assert_empty ActionMailer::Base.deliveries
+  end
+
+  # ---- EventAttendeeMailJob ----
+
+  test "mails only attending participants who have an email" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    create_participant(event: event, user: create_user(email: "a@test.com"), status: "attending")
+    create_participant(event: event, user: create_user(email: "b@test.com"), status: "attending")
+    create_participant(event: event, user: create_user(email: "c@test.com"), status: "declined")
+    create_participant(event: event, user: create_user(email: nil, eth: "0x#{unique_suffix}"), status: "attending")
+
+    assert_enqueued_emails 2 do
+      EventAttendeeMailJob.perform_now(event_id: event.id, mailer_action: "cancelled")
+    end
+  end
+
+  test "the mailer action is allowlisted — an arbitrary method name cannot reach public_send" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    create_participant(event: event, user: create_user(email: "a@test.com"), status: "attending")
+
+    assert_raises(ArgumentError) do
+      EventAttendeeMailJob.perform_now(event_id: event.id, mailer_action: "participant_approved")
+    end
+    assert_no_enqueued_jobs only: MailDeliveryJob
+  end
+
+  test "an event deleted before the fan-out runs is discarded" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    event_id = event.id
+    event.destroy!
+
+    assert_nothing_raised do
+      perform_enqueued_jobs(only: EventAttendeeMailJob) do
+        EventAttendeeMailJob.perform_later(event_id: event_id, mailer_action: "cancelled")
+      end
+    end
+  end
+
+  # ---- GroupBroadcastMailJob / Group#member_emails ----
+
+  test "broadcasts to each active member once, skipping inactive and email-less members" do
+    owner = create_user(email: "owner@test.com")
+    group = create_group(owner: owner)
+    create_membership(user: create_user(email: "m1@test.com"), group: group)
+    create_membership(user: create_user(email: nil, eth: "0x#{unique_suffix}"), group: group)
+    inactive = create_membership(user: create_user(email: "gone@test.com"), group: group)
+    inactive.update!(active: false)
+
+    assert_enqueued_emails 2 do
+      GroupBroadcastMailJob.perform_now(group_id: group.id, subject: "Hi", content: "News")
+    end
+  end
+
+  test "member_emails is what send_email reports as sent_count — the two must not drift" do
+    owner = create_user(email: "owner@test.com")
+    group = create_group(owner: owner)
+    create_membership(user: create_user(email: "m1@test.com"), group: group)
+    create_membership(user: create_user(email: nil, eth: "0x#{unique_suffix}"), group: group)
+
+    assert_equal %w[m1@test.com owner@test.com], group.member_emails.sort
+    assert_enqueued_emails group.member_emails.size do
+      GroupBroadcastMailJob.perform_now(group_id: group.id, subject: "Hi", content: "News")
+    end
+  end
+end

@@ -17,7 +17,16 @@ default: &default
   encoding: unicode
   # For details on connection pooling, see Rails configuration guide
   # https://guides.rubyonrails.org/configuring.html#database-pooling
-  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  #
+  # GoodJob executes jobs inside the Puma process, so this one pool serves both
+  # the web threads and the job threads. It also needs a spare connection for
+  # GoodJob's Notifier, which holds one open permanently to LISTEN for new
+  # jobs. Undersize this and requests start failing with ConnectionTimeoutError
+  # under concurrent job execution.
+  #
+  # (This key used to read `max_connections`, which Active Record does not
+  # recognise — the pool was silently falling back to the default of 5.)
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + ENV.fetch("GOOD_JOB_MAX_THREADS", 5).to_i + 2 %>
 
 
 development:

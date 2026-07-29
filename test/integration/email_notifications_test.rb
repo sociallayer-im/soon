@@ -79,8 +79,12 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     create_participant(event: event, user: a2, status: "attending")
     create_participant(event: event, user: create_user, status: "declined") # not notified
 
+    # The request only enqueues the fan-out job; the per-attendee mail is
+    # enqueued when that job runs, so run it (and only it) inline.
     assert_enqueued_emails 2 do
-      delete "/api/v1/events/#{event.id}", headers: auth_headers(@owner)
+      perform_enqueued_jobs(only: EventAttendeeMailJob) do
+        delete "/api/v1/events/#{event.id}", headers: auth_headers(@owner)
+      end
     end
     assert_response :no_content
   end
@@ -127,7 +131,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     # Both mailers happen to share the method name "ticket_purchased" — assert
     # on the (mailer class, action) pair so this doesn't silently pass if one
     # of the two stops firing.
-    mailer_calls = enqueued_jobs.select { |j| j[:job] == ActionMailer::MailDeliveryJob }.map { |j| j[:args][0..1] }
+    mailer_calls = enqueued_jobs.select { |j| j[:job] == MailDeliveryJob }.map { |j| j[:args][0..1] }
     assert_includes mailer_calls, ["EventMailer", "ticket_purchased"], "expected the buyer confirmation email"
     assert_includes mailer_calls, ["GroupMailer", "ticket_purchased"], "expected the group owner notification email"
   end

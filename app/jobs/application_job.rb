@@ -1,7 +1,11 @@
 class ApplicationJob < ActiveJob::Base
-  # Automatically retry jobs that encountered a deadlock
-  # retry_on ActiveRecord::Deadlocked
+  # A row-level deadlock is by definition transient — the loser just needs to
+  # go again.
+  retry_on ActiveRecord::Deadlocked, wait: :polynomially_longer, attempts: 3
 
-  # Most jobs are safe to ignore if the underlying records are no longer available
-  # discard_on ActiveJob::DeserializationError
+  # Jobs here take ids and look records up themselves, so a record deleted
+  # between enqueue and execution surfaces as RecordNotFound rather than a
+  # deserialization failure. Either way there is no work left to do.
+  discard_on ActiveRecord::RecordNotFound
+  discard_on ActiveJob::DeserializationError
 end

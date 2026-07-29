@@ -18,7 +18,32 @@ revision.
 **Stack**: Rails 8.1 (API-only, `ActionController::API`), PostgreSQL, Puma. JSON serialization via
 `blueprinter`. Authorization via `pundit`. Pagination via `pagy` (v9+ `Pagy::Offset` API — no
 `Pagy::Backend` mixin). Auth is stateless bearer-JWT (`jwt` gem) with email one-time-codes, no
-sessions, no cookies, no OAuth. Background/async work is not yet wired up (see §9).
+sessions, no cookies, no OAuth. Background work via **GoodJob** running inside the Puma process
+(`execution_mode :async`) — no separate worker to deploy, but jobs are rows in `good_jobs`, so a
+restart doesn't drop queued mail. All outgoing email goes through it; see §1.1.
+
+### 1.1 Background jobs
+
+- `config.active_job.queue_adapter = :good_job` (`config/application.rb`); tuning lives in
+  `config/initializers/good_job.rb`. `config/environments/test.rb` overrides the adapter to
+  `:test`, so the suite asserts on enqueues and never executes anything.
+- **Everything that sends mail is async** except `AuthMailer#login_code`, which stays
+  `deliver_now` on purpose so a delivery failure surfaces on the request that asked for the code.
+- `deliver_later` routes through `MailDeliveryJob` (`config.action_mailer.delivery_job`), which
+  carries the retry policy: backoff on `Resend::Error` and socket errors, discard on
+  `ActiveRecord::RecordNotFound` (the mailers look their subject up by id, so a deleted record has
+  nothing left to send).
+- Two fan-out jobs keep per-recipient loops out of the request: `EventAttendeeMailJob`
+  (cancel/update → every attending participant) and `GroupBroadcastMailJob` (manager broadcast →
+  `Group#member_emails`). Each recipient gets its own `MailDeliveryJob`, so one bad address
+  retries alone instead of stalling the batch.
+- Because jobs share the Puma process they also share the Active Record pool — `config/database.yml`
+  sizes it `RAILS_MAX_THREADS + GOOD_JOB_MAX_THREADS + 2` (the `+2` covers GoodJob's Notifier,
+  which holds a connection open to `LISTEN`).
+- Chosen over Rails 8's default Solid Queue because Solid Queue wants a supervisor process (or a
+  Puma plugin) and a second database, whereas GoodJob's `:async` mode is exactly the
+  one-container, one-Postgres shape this app deploys in. sails also used GoodJob, so its
+  operational behaviour is already familiar.
 
 **Layering** (top to bottom, request path):
 
@@ -623,7 +648,6 @@ in earlier revisions of this doc are closed.
 - **`Venue#check_availability`**: the `Availability` data model is ported, but the canonical
   overlap-checking method described in the top-level `CLAUDE.md` (used by event/recurring
   controllers in the source design) has not been ported into `soon/`'s `Venue`/`Event` models yet.
-- **No background job runner configured**: nothing in `soon/` currently needs one (all writes are
-  synchronous), but if async mail delivery or payment-timeout sweeping (`TicketItem#timeout`) is
-  wired up later, Rails 8's default (Solid Queue) is the intended choice — not the `good_job` gem
-  the source design used (deliberately excluded, see `SAILS_COMPARISON.md`).
+- **Payment-timeout sweeping** (`TicketItem#timeout`) still has no scheduler. GoodJob is now
+  wired up (below) and supports cron, but `config.good_job.enable_cron` is off — turning it on is
+  the remaining step if that sweep is wanted.

@@ -91,9 +91,13 @@ class MapAndProfileTabsTest < ActionDispatch::IntegrationTest
     end
     assert_equal({ "sent_count" => 1, "test" => true }, json_response)
 
+    # A real broadcast only enqueues the fan-out job; run it inline so the
+    # per-member mail actually gets enqueued for the assertion.
     assert_enqueued_emails 2 do
-      post "/api/v1/groups/#{group.id}/send_email",
-        params: { subject: "Hello", content: "News" }, headers: auth_headers(owner)
+      perform_enqueued_jobs(only: GroupBroadcastMailJob) do
+        post "/api/v1/groups/#{group.id}/send_email",
+          params: { subject: "Hello", content: "News" }, headers: auth_headers(owner)
+      end
     end
     assert_equal 2, json_response["sent_count"]
 

@@ -23,5 +23,15 @@ module Sails
     #
     # config.time_zone = "Central Time (US & Canada)"
     # config.eager_load_paths << Rails.root.join("extras")
+
+    # Postgres-backed Active Job. Set here rather than per-environment so dev
+    # and production agree; config/environments/test.rb overrides it with the
+    # :test adapter (it loads after this file), which is what lets the suite
+    # assert on enqueues without running anything.
+    config.active_job.queue_adapter = :good_job
+
+    # Route every `deliver_later` through our own delivery job so mail gets a
+    # retry/discard policy instead of ActionMailer's bare default.
+    config.action_mailer.delivery_job = "MailDeliveryJob"
   end
 end

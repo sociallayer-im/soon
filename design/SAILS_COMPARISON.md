@@ -89,7 +89,7 @@ sails/ has 45 tables: 8 are infrastructure (5 GoodJob queue tables, 3 Doorkeeper
 | `venue_overrides`, `venue_timeslots` | **Zero references anywhere outside their own model files.** Dead. soon/'s already-ported `Availability` (`day`/`day_of_week` + `intervals` jsonb) is the clean, already-adopted successor design — these were superseded and never cleaned up in sails/ |
 | `custom_forms`, `submissions` | Duplicate/parallel form system alongside `forms`/`form_fields`/`form_submissions`/`form_answers`. Looks like an in-progress, never-finished migration between two form implementations inside sails/ itself. Keep the TSID-keyed `forms` cluster (§2b), drop this one |
 | `oauth_access_grants`, `oauth_access_tokens`, `oauth_applications` (Doorkeeper) | soon/'s single clean `AuthCode` + bearer-JWT flow is already simpler than sails/'s **three parallel auth paths** (Doorkeeper OAuth + raw JWT + signed cookie sessions). Don't reintroduce OAuth client/token tables — if a specific integration needs OAuth later, add it deliberately, not as a carry-over |
-| `good_job_batches`, `good_job_executions`, `good_job_processes`, `good_job_settings`, `good_jobs` | GoodJob queue-adapter infra, not domain data. Rails 8 ships **Solid Queue** as the default job backend — if soon/ needs background jobs, use that instead of porting GoodJob's tables |
+| `good_job_batches`, `good_job_executions`, `good_job_processes`, `good_job_settings`, `good_jobs` | Queue-adapter infra, not domain data — sails' rows are **not** migrated. soon/ has since adopted GoodJob itself (see ARCHITECTURE §1.1) and creates these tables fresh via its own `CreateGoodJobs` migration; nothing carries over |
 
 ## 3. Auth: `Profile` → `User` (the biggest single reconciliation item)
 

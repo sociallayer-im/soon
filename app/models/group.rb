@@ -46,6 +46,16 @@ class Group < ApplicationRecord
     venue_union.present? ? ([id] + venue_union).uniq : [id]
   end
 
+  # Distinct, deliverable addresses of the group's active members — the audience
+  # for a manager broadcast. Lives here so the controller (which reports how
+  # many people the broadcast will reach) and GroupBroadcastMailJob (which
+  # actually sends it) can never disagree about who that is.
+  def member_emails
+    memberships.where(active: true).joins(:user)
+               .where.not(users: { email: [ nil, "" ] })
+               .distinct.pluck(Arel.sql("users.email"))
+  end
+
   # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.

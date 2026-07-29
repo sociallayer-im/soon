@@ -2,7 +2,68 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — audit pass over every remaining list endpoint (markers, venues, ...)
+## 2026-07-29 (latest) — GoodJob as the Active Job backend; all mail moved onto it
+
+Background work had no durable backend: `config.active_job.queue_adapter` was
+never set, so every `deliver_later` in the app ran on Rails' built-in `:async`
+adapter — an in-memory thread pool whose queue dies with the process. A deploy
+or a crash silently dropped whatever mail was in flight: group invites, event
+cancellation notices, ticket confirmations.
+
+Adopted **GoodJob** (`~> 4.19`), running with `execution_mode :async` — i.e.
+inside the Puma process, no separate worker to deploy (the Dockerfile `CMD` is
+a bare `rails server` and stays that way). The win over the built-in `:async`
+adapter isn't *where* jobs run, it's that they're rows in `good_jobs`, so a
+restart re-picks them up. Verified end to end: a job enqueued while the server
+was down was executed on the next boot.
+
+This supersedes ARCHITECTURE §9's earlier note that Solid Queue was the
+intended backend. Solid Queue wants a supervisor process (or a Puma plugin)
+and a second database; GoodJob's `:async` mode is exactly the one-container,
+one-Postgres shape this app deploys in, and sails already ran GoodJob so its
+behaviour is familiar. Note this is the gem only — none of sails' `good_job_*`
+rows are migrated; the tables are created fresh.
+
+- **`MailDeliveryJob`** is now `config.action_mailer.delivery_job`, so every
+  `deliver_later` inherits a real failure policy instead of ActionMailer's
+  bare default: polynomial backoff on `Resend::Error` (with a longer leash for
+  `RateLimitExceededError`) and on socket-level failures, and `discard_on
+  ActiveRecord::RecordNotFound` — the mailers resolve their subject with
+  `Model.find(id)`, so a record deleted between enqueue and execution has
+  nothing left to send and must not retry forever.
+- **Two fan-out jobs** move per-recipient loops off the request. `events#destroy`
+  and `#update` used to walk every attending participant inline and enqueue one
+  delivery each (`each_attendee_email`), and `groups#send_email` did the same
+  over the membership list — so cancelling a 2,000-attendee event meant 2,000
+  job inserts before the request could respond. Now each costs one enqueue:
+  `EventAttendeeMailJob` and `GroupBroadcastMailJob` do the walk, and each
+  recipient still gets its own `MailDeliveryJob` so one bad address retries
+  alone instead of stalling the batch. `EventAttendeeMailJob` allowlists the
+  mailer action (`cancelled`/`updated`) since the name reaches `public_send`.
+- **`Group#member_emails`** extracted so `groups#send_email` (which reports
+  `sent_count`) and `GroupBroadcastMailJob` (which actually sends) can't
+  disagree about the audience. Also replaces a `.includes(:user).filter_map`
+  that loaded every membership row with a single distinct pluck.
+- **`AuthMailer#login_code` deliberately stays `deliver_now`.** It is the only
+  mail whose failure the user can act on — if the code can't be sent, the
+  request that asked for it should fail rather than return 200 and leave
+  someone waiting for a code that will never arrive.
+- **`config/database.yml` pool fix (latent bug, unrelated to jobs but exposed
+  by them)**: the pool key was spelled `max_connections`, which Active Record
+  does not recognise, so the pool had silently been the default 5 regardless of
+  `RAILS_MAX_THREADS`. Corrected to `pool:` and sized
+  `RAILS_MAX_THREADS + GOOD_JOB_MAX_THREADS + 2` — job threads draw from the
+  same pool as web threads, plus one held open by GoodJob's `LISTEN` notifier.
+  Left undersized, concurrent job execution would have starved web requests
+  with `ConnectionTimeoutError`.
+- `config/environments/test.rb` keeps the `:test` adapter (it loads after
+  `application.rb`), so the suite still asserts on enqueues without executing.
+  Three existing tests were updated for the new indirection — they now run the
+  fan-out job inline via `perform_enqueued_jobs(only:)` before asserting on the
+  mail it produces. New `test/jobs/mail_jobs_test.rb` covers recipient
+  selection, the action allowlist, and both discard paths. 615 runs, 0 failures.
+
+## 2026-07-29 — audit pass over every remaining list endpoint (markers, venues, ...)
 
 Swept all 17 `index` actions under `api/v1/` for the same class of bug found
 in the events/badges/groups passes above (missing status filter, missing

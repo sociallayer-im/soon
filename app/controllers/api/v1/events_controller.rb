@@ -188,21 +188,15 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   # Email every attending participant that the event was cancelled (with an .ics
-  # calendar cancellation). Skips participants without an email.
+  # calendar cancellation). The walk over participants happens in the job, not
+  # here, so cancelling a large event costs this request a single enqueue.
   def notify_attendees_of_cancellation
-    each_attendee_email { |email| EventMailer.cancelled(event_id: @event.id, recipient: email).deliver_later }
+    EventAttendeeMailJob.perform_later(event_id: @event.id, mailer_action: "cancelled")
   end
 
   # Email attendees an updated invite (bumped SEQUENCE) so their calendars update.
   def notify_attendees_of_update
-    each_attendee_email { |email| EventMailer.updated(event_id: @event.id, recipient: email).deliver_later }
-  end
-
-  def each_attendee_email
-    @event.participants.where(status: "attending").includes(:user).find_each do |participant|
-      email = participant.user&.email
-      yield email if email.present?
-    end
+    EventAttendeeMailJob.perform_later(event_id: @event.id, mailer_action: "updated")
   end
 
   # Only the fields that appear in the calendar entry warrant re-inviting people.

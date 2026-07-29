@@ -35,13 +35,10 @@ class Api::V1::GroupsController < Api::BaseController
       return render json: { sent_count: 1, test: true }
     end
 
-    emails = @group.memberships.where(active: true).includes(:user)
-                   .filter_map { |m| m.user&.email }.uniq
-    emails.each do |email|
-      GroupMailer.member_broadcast(group_id: @group.id, subject: subject,
-        content: content, recipient: email).deliver_later
-    end
-    render json: { sent_count: emails.size, test: false }
+    # The per-member fan-out happens in the job; the request only needs to
+    # report how many people it will reach, which is the same scope counted.
+    GroupBroadcastMailJob.perform_later(group_id: @group.id, subject: subject, content: content)
+    render json: { sent_count: @group.member_emails.size, test: false }
   end
 
   def create

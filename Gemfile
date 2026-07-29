@@ -36,6 +36,11 @@ gem "image_processing", "~> 1.2"
 
 gem "blueprinter"
 gem "pagy"
+# Postgres-backed Active Job backend. Runs inside the Puma process
+# (execution_mode :async, see config/initializers/good_job.rb) so there is no
+# separate worker to deploy — but unlike Rails' built-in :async adapter, jobs
+# are rows in the database, so a restart or crash doesn't drop queued mail.
+gem "good_job", "~> 4.19"
 gem "jwt"
 gem "pundit"
 gem "rack-cors"
