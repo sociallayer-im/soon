@@ -1,0 +1,65 @@
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_d3d125108f2ff2 191-192,194,199
+app/jobs/mail_delivery_job.rb
+  s_e9ed806a3d225c::t_b4895fb8dcebc4 1-32
+test/jobs/mail_jobs_test.rb
+  s_e9ed806a3d225c::t_4af26b1141904c 1-7,10-42,44-81,83-94,96,98,100-102
+  s_e9ed806a3d225c::t_dd656c78c7af5e 43,82,95
+  s_e9ed806a3d225c::t_2113d928cbf5ea 97,99
+  s_e9ed806a3d225c::t_eecd825c0a576f 8-9
+app/jobs/group_broadcast_mail_job.rb
+  s_e9ed806a3d225c::t_e02bfdb67b8fc7 1-19
+test/controllers/api/v1/map_and_profile_tabs_test.rb
+  s_e9ed806a3d225c::t_66dc7302f4561e 94-95,97-100
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_170f9b0d10a62f 5-66
+Gemfile
+  s_e9ed806a3d225c::t_5b854ba5582df2 39-43
+test/integration/email_notifications_test.rb
+  s_e9ed806a3d225c::t_695b6d5aaaec84 134
+  s_e9ed806a3d225c::t_23026a1d2f972e 82-83,85-87
+db/migrate/20260729151139_create_good_jobs.rb
+  s_e9ed806a3d225c::t_c619ad9811effb 1-126
+.env.example
+  s_e9ed806a3d225c::t_b1ab9237391711 22-28
+config/database.yml
+  s_e9ed806a3d225c::t_dbf1d2f0d2a140 20-29
+design/ARCHITECTURE.md
+  s_e9ed806a3d225c::t_4f6fbe57fa4b20 651-653
+  s_e9ed806a3d225c::t_468e4543559781 21-46
+app/models/group.rb
+  s_e9ed806a3d225c::t_51a9c51744785d 49-58
+app/controllers/api/v1/groups_controller.rb
+  s_e9ed806a3d225c::t_4b975e0bf25d4b 38-41
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_53279ec4fb82ac 1-42
+app/jobs/application_job.rb
+  s_e9ed806a3d225c::t_657932a252c8ee 2-4,6-10
+design/SAILS_COMPARISON.md
+  s_e9ed806a3d225c::t_b2d121714efb32 92
+app/jobs/event_attendee_mail_job.rb
+  s_e9ed806a3d225c::t_b2cdc77643553e 1-29
+config/application.rb
+  s_e9ed806a3d225c::t_f7a8ec56cfcd56 32-35
+  s_e9ed806a3d225c::t_625df3734abd00 26-31
+Gemfile.lock
+  s_e9ed806a3d225c::t_33109fa03dcfcf 124-125,149-151,154-160,282,451,517,529,531,596
+db/schema.rb
+  s_e9ed806a3d225c::t_8dbdace02a5171 13,265-364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5904939307f11980c6d4eccaf0c8799ae3c7499f",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
