@@ -1,0 +1,22 @@
+app/controllers/api/v1/discover_controller.rb
+  s_e9ed806a3d225c::t_4c9b9a031fb4eb 20
+  s_e9ed806a3d225c::t_5e47763c055e3b 29
+app/blueprints/group_blueprint.rb
+  s_e9ed806a3d225c::t_0f47487a16aa68 7-12,18-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "426b9405e1c206f8ec53c3d90088713d54afc412",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
