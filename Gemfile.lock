@@ -377,8 +377,8 @@ GEM
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
-    siwe (2.0.0)
-      eth (~> 0.5.1)
+    siwe-rb (0.2.0)
+      eth (>= 0.5.11, < 1.0)
     stimulus-rails (1.3.4)
       railties (>= 6.0.0)
     stripe (19.3.0)
@@ -453,7 +453,7 @@ DEPENDENCIES
   resend
   rubocop-rails-omakase
   selenium-webdriver
-  siwe
+  siwe-rb (~> 0.1)
   stimulus-rails
   stripe
   thruster
@@ -607,7 +607,7 @@ CHECKSUMS
   scrypt (3.1.0) sha256=67fde35bc7e3b7fe906c5be9c242acf95fe4a886c89572f405f6b11df30aa6af
   securerandom (0.4.1) sha256=cc5193d414a4341b6e225f0cb4446aceca8e50d5e1888743fac16987638ea0b1
   selenium-webdriver (4.46.0) sha256=cb6cfa6f79eac041749df0b14cdcb0e9fe5df3715a64c77bfaa56b345b99f957
-  siwe (2.0.0) sha256=dde011958aa325c94291ff88775265619cc274f4c6801cf93b2c698e78312e6e
+  siwe-rb (0.2.0) sha256=f470ad513f7c85641c76dcd1e6a45867c8c93d8383ddd3feda7549606966c3d3
   stimulus-rails (1.3.4) sha256=765676ffa1f33af64ce026d26b48e8ffb2e0b94e0f50e9119e11d6107d67cb06
   stripe (19.3.0) sha256=fcc356a2a552f8b0402dac78dfc439b6deaa77ad0203e80959558130e47e74bf
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73

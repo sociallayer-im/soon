@@ -64,7 +64,7 @@ class Api::V1::AuthController < Api::BaseController
   # Expects the raw EIP-4361 message and its signature; the message's nonce
   # must be one we minted (and not yet redeemed).
   def verify_wallet
-    message = Siwe::Message.from_message(params[:message].to_s)
+    message = Siwe::Message.parse(params[:message].to_s)
 
     unless siwe_domain_allowed?(message.domain)
       return render json: { error: "Invalid or expired nonce" }, status: :unauthorized
@@ -74,26 +74,18 @@ class Api::V1::AuthController < Api::BaseController
     return render json: { error: "Invalid or expired nonce" }, status: :unauthorized unless nonce_code
 
     # domain/nonce are passed through as the "expected" values here purely to
-    # satisfy the gem's signature — they're the message's own fields, so those
-    # two checks are trivially self-matching. The real protection is above
-    # (domain allowlist) and in the nonce_code lookup (single-use, server-
-    # minted, 15-minute TTL) — not in anything siwe's verify() checks itself.
-    message.verify(params[:signature].to_s, message.domain, message.issued_at, message.nonce)
+    # satisfy the gem's required kwargs — they're the message's own fields, so
+    # those two checks are trivially self-matching. The real protection is
+    # above (domain allowlist) and in the nonce_code lookup (single-use,
+    # server-minted, 15-minute TTL) — not in anything siwe-rb's verify! itself
+    # checks (it has no knowledge of our allowlist or minted nonces).
+    message.verify!(signature: params[:signature].to_s, domain: message.domain, nonce: message.nonce)
     nonce_code.mark_used!
 
     render_token User.find_or_create_by!(eth: message.address.downcase)
-  rescue *SIWE_ERRORS
+  rescue Siwe::Error
     render json: { error: "Invalid SIWE message or signature" }, status: :unauthorized
   end
-
-  # The siwe gem's exceptions all subclass StandardError directly (Siwe::Error
-  # is NOT their base class), so they must be listed out.
-  SIWE_ERRORS = [
-    Siwe::UnableToParseMessage, Siwe::NotValidMessage, Siwe::ExpiredMessage,
-    Siwe::InvalidSignature, Siwe::DomainMismatch, Siwe::NonceMismatch,
-    Siwe::InvalidAddress, Siwe::InvalidURI, Siwe::InvalidNonce,
-    Siwe::InvalidTimeFormat, Siwe::InvalidMessageVersion, Siwe::InvalidDomain
-  ].freeze
 
   # POST /api/v1/auth/trusted_signin
   # For the auth frontend's server-side flows (Google OAuth, Solana signature),

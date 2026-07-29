@@ -12,7 +12,7 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
   # Builds and signs a real EIP-4361 message with the given key.
   def signed_siwe_message(key, nonce, issued_at: Time.now.utc.iso8601, domain: "localhost")
     message = Siwe::Message.new(
-      domain, key.address.to_s, "http://#{domain}", "1",
+      domain: domain, address: key.address.to_s, uri: "http://#{domain}", chain_id: 1,
       nonce: nonce, issued_at: issued_at
     ).prepare_message
     signature = key.personal_sign(message)

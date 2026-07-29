@@ -44,7 +44,13 @@ gem "resend"
 gem "icalendar"
 gem "httpx"
 gem "eth"
-gem "siwe" # Sign-In with Ethereum message parsing/verification
+# Sign-In with Ethereum message parsing/verification. Not spruceid/siwe-ruby
+# (the original gem "siwe") — that's unmaintained (last real commit 2023-07,
+# published to rubygems 2022). Reviewed the full lib/ of this replacement
+# before adopting — see soon/design/ (siwe-rb code review) for notes; the
+# smart-contract-wallet (ERC-1271/6492) RPC path is intentionally never
+# configured, so it's dead code for us (EOA wallets only).
+gem "siwe-rb", "~> 0.1", require: "siwe"
 gem "stripe"
 
 group :development, :test do
