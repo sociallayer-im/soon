@@ -1,0 +1,27 @@
+app/controllers/api/v1/users_controller.rb
+  s_e9ed806a3d225c::t_a513d49789ba6f 23
+app/controllers/api/v1/badges_controller.rb
+  s_e9ed806a3d225c::t_cb6909edb23597 21
+app/controllers/api/v1/badge_classes_controller.rb
+  s_e9ed806a3d225c::t_abb04b07a1c9d8 37
+test/controllers/api/v1/users_controller_test.rb
+  s_e9ed806a3d225c::t_65a5e2bdb655d9 96-135
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_98829cf15c7dc2 5-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "017171438a5c192fbd1b965c6f6afb04c520f41f",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
