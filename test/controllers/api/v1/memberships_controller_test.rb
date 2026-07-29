@@ -75,6 +75,71 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "manager", membership.reload.role
   end
 
+  test "a parent-group manager may promote a child-group member to manager" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+    target = create_user
+    create_membership(user: target, group: child, role: "member")
+    membership = child.memberships.find_by(user: target)
+
+    patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}", params: { membership: { role: "manager" } },
+      headers: auth_headers(parent_owner)
+    assert_response :success
+    assert_equal "manager", membership.reload.role
+  end
+
+  test "a parent-group manager may demote a child-group manager back to member" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+    target = create_user
+    create_membership(user: target, group: child, role: "manager")
+    membership = child.memberships.find_by(user: target)
+
+    patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}", params: { membership: { role: "member" } },
+      headers: auth_headers(parent_owner)
+    assert_response :success
+    assert_equal "member", membership.reload.role
+  end
+
+  test "a parent-group manager cannot grant the owner role on a child group" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+    target = create_user
+    create_membership(user: target, group: child, role: "member")
+    membership = child.memberships.find_by(user: target)
+
+    patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}", params: { membership: { role: "owner" } },
+      headers: auth_headers(parent_owner)
+    assert_response :forbidden
+    assert_equal "member", membership.reload.role
+  end
+
+  test "a parent-group manager cannot directly add a new member to a child group" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+    target = create_user
+
+    post "/api/v1/groups/#{child.id}/memberships", params: { user_id: target.id, role: "member" },
+      headers: auth_headers(parent_owner)
+    assert_response :forbidden
+  end
+
+  test "a parent-group manager cannot remove a child-group member" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+    target = create_user
+    create_membership(user: target, group: child, role: "member")
+    membership = child.memberships.find_by(user: target)
+
+    delete "/api/v1/groups/#{child.id}/memberships/#{membership.id}", headers: auth_headers(parent_owner)
+    assert_response :forbidden
+  end
+
   test "update rejects an invalid role value" do
     owner = create_user
     member = create_user

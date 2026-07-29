@@ -26,9 +26,9 @@ class Api::V1::MembershipsController < Api::BaseController
 
   # PATCH /api/v1/groups/:group_id/memberships/:id
   def update
-    authorize @group, :manage?
     membership = @group.memberships.find(params[:id])
     new_role = params.dig(:membership, :role)
+    raise Pundit::NotAuthorizedError unless can_change_role?(membership.role, new_role)
 
     # Only an owner may grant the owner role or modify an existing owner's role,
     # so an admin can't self-promote to owner or demote the owner.
@@ -66,6 +66,15 @@ class Api::V1::MembershipsController < Api::BaseController
     return true if membership.user_id == current_user.id  # self-leave
     return group_owner? if membership.role == "owner"     # only owners remove owners
     GroupPolicy.new(current_user, @group).manage?         # managers remove members/admins
+  end
+
+  # A direct group admin/owner may set any role. A parent-group manager may
+  # only toggle the "manager" role specifically (promote to it or demote from
+  # it) — see GroupPolicy#can_assign_manager?.
+  def can_change_role?(current_role, new_role)
+    policy = GroupPolicy.new(current_user, @group)
+    return true if policy.manage?
+    policy.can_assign_manager? && [current_role, new_role].include?("manager")
   end
 
   def group_owner?

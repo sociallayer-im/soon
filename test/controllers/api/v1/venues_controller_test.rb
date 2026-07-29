@@ -79,6 +79,16 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 30, json_response["capacity"]
   end
 
+  test "a parent-group manager cannot create a venue for a child group (interim restriction)" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(name: "child-group", parent_id: parent.id)
+
+    post "/api/v1/venues", params: { venue: { name: "New Hall", group_id: child.id, capacity: 30 } },
+      headers: auth_headers(parent_owner)
+    assert_response :forbidden
+  end
+
   test "update requires group admin" do
     owner = create_user
     group = create_group(owner: owner)

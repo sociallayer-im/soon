@@ -79,14 +79,14 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Europe/Zurich", group.reload.timezone
   end
 
-  test "a parent-group manager can manage a child group" do
+  test "a parent-group manager cannot manage a child group's settings (interim restriction)" do
     owner = create_user
     parent = create_group(owner: owner)
     child = create_group(name: "child-group", parent_id: parent.id)
 
     patch "/api/v1/groups/#{child.id}", params: { group: { name: "child-renamed" } }, headers: auth_headers(owner)
-    assert_response :success
-    assert_equal "child-renamed", child.reload.name
+    assert_response :forbidden
+    assert_equal "child-group", child.reload.name
   end
 
   test "create under an unmanaged parent is forbidden" do

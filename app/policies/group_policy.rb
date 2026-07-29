@@ -10,18 +10,33 @@ class GroupPolicy < ApplicationPolicy
   # content, but only an owner (or a platform admin) can take it offline.
   def freeze?  = user ? (user.platform_admin? || user.memberships.exists?(group: record, role: "owner")) : false
 
-  # Who may view the member roster: members of the group, or a manager
-  # (including a parent-group manager).
+  # Who may view the member roster: members of the group, or a manager.
   def members? = group_member?(record) || manages?(record)
+
+  # Interim design decision (2026-07-29, see soon/design/CHANGELOG.md): a
+  # parent-group manager's ONLY capability over a child group is promoting/
+  # demoting a member to/from that child group's manager role — nothing else
+  # (no update/destroy/venue/track/badge-class/invite/pin access). Wired into
+  # MembershipsController#update, which checks this instead of #manage? when
+  # the caller isn't a direct admin. Recorded as a deliberate narrowing, not
+  # an oversight — a parent-manager previously had full #manage? over child
+  # groups (matching CLAUDE.md's original "Parent-Child Groups" contract);
+  # whether to restore broader parent access is intentionally left open for a
+  # later product decision, not resolved here.
+  def can_assign_manager?
+    return false unless record
+    return true if user&.platform_admin?
+    group_admin?(record) || (record.parent && group_admin?(record.parent))
+  end
 
   private
 
-  # A group is managed by its own admins/owners, by managers of its parent
-  # group (per the Parent-Child Groups contract), and by platform admins
-  # (who curate/remove popup cities).
+  # A group is managed by its own admins/owners and by platform admins (who
+  # curate/remove popup cities) — NOT by a parent group's manager (see
+  # #can_assign_manager? for the one narrow exception that still is).
   def manages?(group)
     return false unless group
     return true if user&.platform_admin?
-    group_admin?(group) || (group.parent && group_admin?(group.parent))
+    group_admin?(group)
   end
 end
