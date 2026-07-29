@@ -1,0 +1,23 @@
+test/models/group_invite_test.rb
+  s_366b4800ea8f42::t_e017db76654c12 6-9,12,14
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_366b4800ea8f42::t_e5aec620c7f8d5 26,36
+  s_366b4800ea8f42::t_3be72898cf87f3 29,77
+  s_366b4800ea8f42::t_aa501e189cff9f 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "432607d0ab23285bfa83b04b68d0b17ebc39b69e",
+  "prompts": {},
+  "sessions": {
+    "s_366b4800ea8f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf3bb3a9-c679-4178-b31f-48d8d50ea479",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
