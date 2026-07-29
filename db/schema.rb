@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_18_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -67,6 +67,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.text "metadata"
     t.string "name", null: false
     t.string "permissions", default: [], array: true
+    t.string "ref_id"
     t.boolean "revocable", default: false, null: false
     t.string "title", null: false
     t.boolean "transferable", default: false, null: false
@@ -74,6 +75,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.boolean "weighted", default: false, null: false
     t.index ["creator_id"], name: "index_badge_classes_on_creator_id"
     t.index ["group_id"], name: "index_badge_classes_on_group_id"
+    t.index ["ref_id"], name: "index_badge_classes_on_ref_id", where: "(ref_id IS NOT NULL)"
   end
 
   create_table "badges", id: :string, force: :cascade do |t|
@@ -86,6 +88,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.string "image_url"
     t.integer "index"
     t.string "owner_id", null: false
+    t.string "ref_id"
     t.datetime "start_time"
     t.string "status", default: "minted", null: false, comment: "minted | burned | accepted"
     t.string "title"
@@ -95,6 +98,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.index ["badge_class_id"], name: "index_badges_on_badge_class_id"
     t.index ["creator_id"], name: "index_badges_on_creator_id"
     t.index ["owner_id"], name: "index_badges_on_owner_id"
+    t.index ["ref_id"], name: "index_badges_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
   end
 
@@ -184,6 +188,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.boolean "pinned", default: false
     t.string "place_id"
     t.string "recurring_id"
+    t.string "ref_id"
     t.boolean "require_approval", default: false
     t.string "requirement_tags", array: true
     t.string "slug"
@@ -200,6 +205,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.index ["group_id"], name: "index_events_on_group_id"
     t.index ["owner_id"], name: "index_events_on_owner_id"
     t.index ["place_id"], name: "index_events_on_place_id"
+    t.index ["ref_id"], name: "index_events_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["track_id"], name: "index_events_on_track_id"
     t.index ["venue_id"], name: "index_events_on_venue_id"
   end
@@ -302,6 +308,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.string "op_label_list", default: [], array: true
     t.string "parent_id"
     t.string "permissions", default: [], array: true
+    t.string "ref_id"
     t.string "requirement_tag_list", default: [], array: true
     t.jsonb "social_links", default: {}
     t.date "start_date"
@@ -311,6 +318,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.string "venue_union", array: true
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
+    t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
   end
 
   create_table "markers", id: :string, force: :cascade do |t|
@@ -499,6 +507,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.string "nickname"
     t.string "permissions", default: [], array: true
     t.string "phone"
+    t.string "ref_id"
     t.jsonb "social_links", default: {}
     t.string "sol"
     t.string "telegram_id"
@@ -507,6 +516,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.index ["eth"], name: "index_users_on_eth", unique: true
     t.index ["name"], name: "index_users_on_name", unique: true
     t.index ["phone"], name: "index_users_on_phone", unique: true
+    t.index ["ref_id"], name: "index_users_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["sol"], name: "index_users_on_sol", unique: true
   end
 
@@ -549,11 +559,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000003) do
     t.string "message"
     t.string "receiver_address"
     t.string "receiver_id"
+    t.string "ref_id"
     t.string "sender_id", null: false
     t.string "strategy", default: "code", comment: "code | account | address | email | event | remember"
     t.datetime "updated_at", null: false
     t.index ["badge_class_id"], name: "index_vouchers_on_badge_class_id"
     t.index ["receiver_id"], name: "index_vouchers_on_receiver_id"
+    t.index ["ref_id"], name: "index_vouchers_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["sender_id"], name: "index_vouchers_on_sender_id"
   end
 
