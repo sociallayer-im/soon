@@ -1,0 +1,29 @@
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_557461c3ad8601 5-34
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_74e2301867e583 146-150
+  s_e9ed806a3d225c::t_d6a6feb45dd051 15-18
+  s_e9ed806a3d225c::t_ca9ac9c1acc0f1 27
+  s_e9ed806a3d225c::t_6fde246d56688b 142-145
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_effaae04da631d 58-61
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_b38ab908557e75 50-99
+  s_e9ed806a3d225c::t_a27c7afc9bed13 111-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "da4f4887423927a272a2b3c0602a6a51c4c4b27b",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
