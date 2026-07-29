@@ -623,3 +623,23 @@ UID 仍用 soon 的 `event-<tsid>@host` 而非 sails 的 `sola-<整数>`：订�
 其余三个（`/comment/list`、`/api/event/list`、`/event/discover`）仍属 §9
 已知并接受的破坏——它们来自 sola-cli / dashboard 这类会报错、有人看得见的
 调用方，后续随那些项目一起迁移。
+
+### 已知且不修：一个 group 的 handle 在迁移中变了
+
+sails 的公开 URL 按 `handle` 解析，但 ETL 把 soon 的 `name` 定义成
+`username || handle`。全库只有一个 group 两者不同：handle `edgepatagonia`
+vs username `edgpatagonia`（少一个 e，疑似当年的笔误），于是它在 soon 里
+叫 `edgpatagonia`，所有旧链接（含日历订阅）404。该 group 有 1007 个活动。
+
+profiles 侧为 0 例，groups 侧也没有"有 handle 但 username 为空"的情况，
+所以影响面就是这一个。
+
+修法是一条 `UPDATE groups SET name='edgepatagonia' WHERE ref_id='3635'`
+（该 name 在 soon 中空闲、格式合法）。**经运维判断影响不大，决定不修。**
+
+### `/comment/list` 的 404：不补
+
+来源查明是切换前打开、尚未刷新的浏览器标签页——旧前端 bundle 调
+`/comment/list`，新前端调 `/comments`（生产日志中 `/api/v1/comments` 正常 200）。
+页面本身是切换前服务端渲染的所以显示正常，只有评论面板在轮询，用户刷新即自愈。
+经运维判断不补兼容路由。
