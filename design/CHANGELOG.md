@@ -2,7 +2,36 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — profile page's groups/badges tabs diverged from production
+## 2026-07-29 (latest) — co-hosting/starred event lists: missing filter, N+1 star lookup
+
+`/my-events/co-hosting` and `/my-events/stared` (and the profile page's
+matching tabs) diverged from production:
+
+- **Co-hosting was permanently empty**: `events_controller#apply_filters`
+  had no filter for "events where this user is an `EventRole` item" at
+  all — the sola-sdk stubbed `coHosting: []` with a `TODO`. sails supported
+  this via `Event.joins(:event_roles).where(event_roles: {item_id: ...,
+  item_type: 'Profile'})`, no role restriction. Added a matching
+  `co_host_id` filter (same shape as `owner_id`/`attendee_id`), also with
+  no role restriction — a co-host is any `EventRole` row with
+  `item_type: "User"`, regardless of `role` (`member`/`manager`).
+- **Starred was a 3-round-trip N+1**: `getStaredEvent` resolved the viewer
+  via `/users/me`, listed up to 30 star `Comment`s, then fetched each
+  referenced event individually via `/events/:id` — silently dropping any
+  that 404'd (deleted/inaccessible), with a hard 30-item cap and no
+  pagination. Added a `starred_id` filter (`Comment.where(...).visible`
+  scoped to the event id) so the whole thing is one `GET /events?starred_id=`
+  query, matching `owner_id`/`attendee_id`/`co_host_id`. `getProfileEventByName`
+  now fetches `coHosting`/`starred` for real instead of stubbing them, so a
+  profile's tabs work for *any* handle, not just the logged-in viewer
+  (previously starred was viewer-only; sails' `by_profile` was never
+  restricted like that either).
+- Also wired `is_starred`/`is_attending`/`is_owner` into `events#show`
+  (previously only `#index` set them) so the event-detail page can read
+  `eventDetail.is_starred` directly instead of doing its own separate
+  "fetch my whole starred list and check if this id is in it" lookup.
+
+## 2026-07-29 — profile page's groups/badges tabs diverged from production
 
 Diffed `app.sola.day/profile/jiang?tab=groups`/`?tab=badges` against the
 local equivalent.

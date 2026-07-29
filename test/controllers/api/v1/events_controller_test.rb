@@ -47,6 +47,56 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes ids, other_event.id
   end
 
+  test "index with co_host_id returns events where the user is an EventRole item, regardless of role" do
+    co_host = create_user
+    group = create_group
+    with_role = create_event(group: group, owner: create_user, status: "published")
+    create_event_role(event: with_role, item: co_host, role: "manager")
+    without_role = create_event(group: group, owner: create_user, status: "published")
+
+    get "/api/v1/events", params: { co_host_id: co_host.id }
+    assert_response :success
+    ids = json_response["data"].map { |e| e["id"] }
+    assert_includes ids, with_role.id
+    assert_not_includes ids, without_role.id
+  end
+
+  test "index with co_host_id resolves by username too" do
+    co_host = create_user(name: "cohost_handle")
+    group = create_group
+    event = create_event(group: group, owner: create_user, status: "published")
+    create_event_role(event: event, item: co_host, role: "member")
+
+    get "/api/v1/events", params: { co_host_id: "cohost_handle" }
+    assert_response :success
+    assert_equal [event.id], json_response["data"].map { |e| e["id"] }
+  end
+
+  test "index with starred_id returns events the user has starred, in one query" do
+    starrer = create_user
+    group = create_group
+    starred = create_event(group: group, owner: create_user, status: "published")
+    create_comment(user: starrer, item: starred, comment_type: "star")
+    unstarred = create_event(group: group, owner: create_user, status: "published")
+
+    get "/api/v1/events", params: { starred_id: starrer.id }
+    assert_response :success
+    ids = json_response["data"].map { |e| e["id"] }
+    assert_includes ids, starred.id
+    assert_not_includes ids, unstarred.id
+  end
+
+  test "index with starred_id excludes a removed star comment" do
+    starrer = create_user
+    group = create_group
+    event = create_event(group: group, owner: create_user, status: "published")
+    create_comment(user: starrer, item: event, comment_type: "star", removed: true)
+
+    get "/api/v1/events", params: { starred_id: starrer.id }
+    assert_response :success
+    assert_empty json_response["data"]
+  end
+
   test "show returns a public published event to any authenticated user" do
     owner = create_user
     outsider = create_user
@@ -56,6 +106,31 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
     assert_response :success
     assert_equal event.id, json_response["id"]
+  end
+
+  test "show carries is_starred/is_attending/is_owner for an authenticated viewer" do
+    owner = create_user
+    viewer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_comment(user: viewer, item: event, comment_type: "star")
+    create_participant(event: event, user: viewer)
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(viewer)
+    assert_response :success
+    assert json_response["is_starred"]
+    assert json_response["is_attending"]
+    assert_not json_response["is_owner"]
+  end
+
+  test "show omits is_starred/is_attending/is_owner for an anonymous viewer" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+
+    get "/api/v1/events/#{event.id}"
+    assert_response :success
+    assert_not json_response.key?("is_starred")
   end
 
   test "show includes payment_methods on nested tickets (extended view)" do

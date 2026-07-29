@@ -55,6 +55,10 @@ module FactoryHelpers
     Participant.create!({ event: event, user: user, status: "attending" }.merge(attrs))
   end
 
+  def create_event_role(event:, item:, role: "member", **attrs)
+    EventRole.create!({ event: event, item: item, role: role }.merge(attrs))
+  end
+
   def create_marker(group:, place:, owner:, **attrs)
     Marker.create!({ title: "Marker #{unique_suffix}", group: group, place: place, owner: owner }.merge(attrs))
   end

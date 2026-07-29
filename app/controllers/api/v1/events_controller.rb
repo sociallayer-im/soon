@@ -12,8 +12,10 @@ class Api::V1::EventsController < Api::BaseController
   # GET /api/v1/events — the browse/schedule listing.
   # Filters: group_id (TSID or slug), collection (upcoming|past|ongoing),
   # start_date/end_date (+timezone), search_title, tags, venue_id, track_id,
-  # kind, category, pinned, skip_recurring. Anonymous → public events; with a
-  # token the response also carries is_attending/is_starred/is_owner flags.
+  # kind, category, pinned, skip_recurring, owner_id, attendee_id, co_host_id,
+  # starred_id (each of the last four accepts a TSID or username). Anonymous
+  # → public events; with a token the response also carries
+  # is_attending/is_starred/is_owner flags.
   def index
     scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
     scope = apply_filters(scope)
@@ -22,7 +24,7 @@ class Api::V1::EventsController < Api::BaseController
 
   def show
     authorize @event
-    render json: EventBlueprint.render(@event, view: :extended)
+    render json: EventBlueprint.render(@event, view: :extended, **personalization_options)
   end
 
   # Optionally accepts `event_roles: [...]` and `tickets: [...]` alongside the
@@ -136,6 +138,15 @@ class Api::V1::EventsController < Api::BaseController
     if params[:attendee_id].present?
       attendee = User.resolve!(params[:attendee_id])
       scope = scope.where(id: Participant.where(user_id: attendee.id, status: "attending").select(:event_id))
+    end
+    if params[:co_host_id].present?
+      co_host = User.resolve!(params[:co_host_id])
+      scope = scope.where(id: EventRole.where(item_type: "User", item_id: co_host.id).select(:event_id))
+    end
+    if params[:starred_id].present?
+      starrer = User.resolve!(params[:starred_id])
+      scope = scope.where(id: Comment.where(user_id: starrer.id, comment_type: "star", item_type: "Event")
+                                      .visible.select(:item_id))
     end
 
     scope = scope.where(venue_id: params[:venue_id]) if params[:venue_id].present?
