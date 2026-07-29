@@ -152,6 +152,94 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "cancelled", invite.reload.status
   end
 
+  test "destroy lets the invite recipient decline their own email invite" do
+    owner = create_user
+    invitee = create_user(email: "invitee@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "invitee@test.com", expires_at: 30.days.from_now)
+
+    delete "/api/v1/groups/#{group.id}/group_invites/#{invite.id}", headers: auth_headers(invitee)
+    assert_response :no_content
+    assert_equal "cancelled", invite.reload.status
+  end
+
+  test "destroy lets a requester withdraw their own pending join request" do
+    owner = create_user
+    requester = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, receiver_id: requester.id, status: "requesting")
+
+    delete "/api/v1/groups/#{group.id}/group_invites/#{invite.id}", headers: auth_headers(requester)
+    assert_response :no_content
+    assert_equal "cancelled", invite.reload.status
+  end
+
+  test "destroy still forbids an unrelated outsider" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    delete "/api/v1/groups/#{group.id}/group_invites/#{invite.id}", headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "show returns an email invite to its sender" do
+    owner = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/#{invite.id}", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal invite.id, json_response["id"]
+  end
+
+  test "show returns an email invite to its matched recipient" do
+    owner = create_user
+    invitee = create_user(email: "invitee@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "invitee@test.com", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/#{invite.id}", headers: auth_headers(invitee)
+    assert_response :success
+  end
+
+  test "show forbids an unrelated outsider from an email invite" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/#{invite.id}", headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "show is open to any authenticated user for a reusable code invite" do
+    owner = create_user
+    stranger = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "code",
+      receiver_address: "ABC12345", status: "sending", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/#{invite.id}", headers: auth_headers(stranger)
+    assert_response :success
+  end
+
+  test "show requires authentication" do
+    owner = create_user
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: "x@test.com", expires_at: 30.days.from_now)
+
+    get "/api/v1/group_invites/#{invite.id}"
+    assert_response :unauthorized
+  end
+
   test "revoke also works to reject a pending join request" do
     owner = create_user
     requester = create_user

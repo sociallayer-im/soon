@@ -1,5 +1,5 @@
 class Api::V1::GroupInvitesController < Api::BaseController
-  before_action :set_group, except: %i[pending]
+  before_action :set_group, except: %i[pending show]
   before_action :set_invite, only: %i[destroy accept accept_request revoke]
 
   rescue_from ActiveRecord::RecordInvalid do |e|
@@ -18,6 +18,18 @@ class Api::V1::GroupInvitesController < Api::BaseController
   def pending
     invites = GroupInvite.pending_for_email(current_user.email).includes(:group, :sender)
     render json: GroupInviteBlueprint.render(invites)
+  end
+
+  # GET /api/v1/group_invites/:id
+  #
+  # Standalone lookup for the invite-preview page (/invite/:id), which has no
+  # group_id in its URL. See GroupInvitePolicy#view? for who may see what.
+  def show
+    invite = GroupInvite.find(params[:id])
+    authorize invite, :view?
+    render json: GroupInviteBlueprint.render(invite)
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
   end
 
   # POST /api/v1/groups/:group_id/group_invites
@@ -101,7 +113,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     invite = GroupInvite.create(
       group: @group, sender: current_user, role: role,
       receiver_address_type: "code", receiver_address: code,
-      status: "sending", expires_at: INVITE_TTL.from_now
+      status: "sending", expires_at: INVITE_TTL.from_now, message: params[:message]
     )
     render json: GroupInviteBlueprint.render(invite), status: :created
   end

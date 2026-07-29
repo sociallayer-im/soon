@@ -42,6 +42,7 @@ Rails.application.routes.draw do
       end
 
       get "group_invites/pending", to: "group_invites#pending"
+      get "group_invites/:id", to: "group_invites#show"
 
       resources :groups do
         member do
