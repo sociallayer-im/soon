@@ -10,6 +10,18 @@ class Api::V1::AuthController < Api::BaseController
   # only be redeemed once — nonce reuse/replay is rejected.
   SIWE_CONTEXT = "siwe_nonce".freeze
 
+  # This API serves multiple frontend hosts by design (SG + CN auth apps), so
+  # there's no single "our host" to compare against — instead the SIWE
+  # `domain` field (what the user's wallet actually displayed while signing)
+  # must be one of these known-legitimate frontends. Without this check,
+  # `Siwe::Message#verify`'s own domain check is meaningless here (see
+  # #verify_wallet) and any domain string would be accepted.
+  ALLOWED_SIWE_DOMAINS = ENV.fetch("ALLOWED_SIWE_DOMAINS", "auth.sola.day,auth.juluo.xyz")
+    .split(",").map(&:strip).map(&:downcase).reject(&:blank?).freeze
+  # Bare hostname, optionally with a :port — matches how wagmi/viem's
+  # `window.location.host` fills the SIWE domain field in local dev.
+  LOCAL_SIWE_DOMAIN = /\A(localhost|127\.0\.0\.1)(:\d+)?\z/
+
   # POST /api/v1/auth/request_code
   # Sends a one-time code to any well-formed email — unknown addresses sign UP
   # on verify. context=bind_email mints a code for the bind flow instead.
@@ -54,9 +66,18 @@ class Api::V1::AuthController < Api::BaseController
   def verify_wallet
     message = Siwe::Message.from_message(params[:message].to_s)
 
+    unless siwe_domain_allowed?(message.domain)
+      return render json: { error: "Invalid or expired nonce" }, status: :unauthorized
+    end
+
     nonce_code = AuthCode.active.for_context(SIWE_CONTEXT).find_by(code: message.nonce)
     return render json: { error: "Invalid or expired nonce" }, status: :unauthorized unless nonce_code
 
+    # domain/nonce are passed through as the "expected" values here purely to
+    # satisfy the gem's signature — they're the message's own fields, so those
+    # two checks are trivially self-matching. The real protection is above
+    # (domain allowlist) and in the nonce_code lookup (single-use, server-
+    # minted, 15-minute TTL) — not in anything siwe's verify() checks itself.
     message.verify(params[:signature].to_s, message.domain, message.issued_at, message.nonce)
     nonce_code.mark_used!
 
@@ -115,6 +136,14 @@ class Api::V1::AuthController < Api::BaseController
 
   def normalized_email
     params[:email].to_s.strip.downcase
+  end
+
+  def siwe_domain_allowed?(domain)
+    domain = domain.to_s.downcase
+    return true if ALLOWED_SIWE_DOMAINS.include?(domain)
+    return true if !Rails.env.production? && domain.match?(LOCAL_SIWE_DOMAIN)
+
+    false
   end
 
   # Finds the newest active code for the recipient/context and checks the

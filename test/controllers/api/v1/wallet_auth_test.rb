@@ -10,9 +10,9 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
   end
 
   # Builds and signs a real EIP-4361 message with the given key.
-  def signed_siwe_message(key, nonce, issued_at: Time.now.utc.iso8601)
+  def signed_siwe_message(key, nonce, issued_at: Time.now.utc.iso8601, domain: "localhost")
     message = Siwe::Message.new(
-      "localhost", key.address.to_s, "http://localhost", "1",
+      domain, key.address.to_s, "http://#{domain}", "1",
       nonce: nonce, issued_at: issued_at
     ).prepare_message
     signature = key.personal_sign(message)
@@ -94,6 +94,29 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
   test "verify_wallet rejects garbage input" do
     post "/api/v1/auth/verify_wallet", params: { message: "not a siwe message", signature: "0x00" }
     assert_response :unauthorized
+  end
+
+  test "verify_wallet accepts a message whose domain is a known auth frontend" do
+    key = Eth::Key.new
+    message, signature = signed_siwe_message(key, mint_nonce, domain: "auth.sola.day")
+
+    assert_difference "User.count", 1 do
+      post "/api/v1/auth/verify_wallet", params: { message: message, signature: signature }
+    end
+    assert_response :success
+  end
+
+  test "verify_wallet rejects a message whose domain is not an allowlisted frontend" do
+    key = Eth::Key.new
+    message, signature = signed_siwe_message(key, mint_nonce, domain: "evil-phishing-site.com")
+
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/verify_wallet", params: { message: message, signature: signature }
+    end
+    assert_response :unauthorized
+    # the nonce must not be burned by a rejected domain — a legitimate retry
+    # from an allowlisted domain with the same nonce should still work
+    assert AuthCode.active.for_context("siwe_nonce").exists?(code: message[/Nonce: (\S+)/, 1])
   end
 
   test "trusted_signin requires the shared secret" do
