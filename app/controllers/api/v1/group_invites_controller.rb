@@ -55,20 +55,19 @@ class Api::V1::GroupInvitesController < Api::BaseController
     end
     return render_error("invite expired") if @invite.expired?
 
-    @invite.update(status: "accepted", receiver_id: current_user.id)
-    @group.add_member(current_user.id, @invite.role)
+    @invite.accept!(current_user)
     render json: GroupInviteBlueprint.render(@invite)
   end
 
   # POST /api/v1/groups/:group_id/group_invites/:id/accept_request
   #
-  # Manager approves a self-service join request.
+  # Manager approves a self-service join request. The member being granted is
+  # whoever requested (@invite.receiver_id), not the approving manager.
   def accept_request
     authorize @group, :update?, policy_class: GroupPolicy
     return render_error("invite is not a pending request") unless @invite.status == "requesting"
 
-    @invite.update(status: "accepted")
-    @group.add_member(@invite.receiver_id, @invite.role)
+    @invite.accept!(User.find(@invite.receiver_id))
     render json: GroupInviteBlueprint.render(@invite)
   end
 

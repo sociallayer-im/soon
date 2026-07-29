@@ -36,7 +36,9 @@ class Api::V1::AuthController < Api::BaseController
     code = consume_code!(recipient: email, context: LOGIN_CONTEXT, attempt: params[:code])
     return unless code
 
-    render_token User.find_or_create_by!(email: email)
+    user = User.find_or_create_by!(email: email)
+    GroupInvite.auto_accept_ticket_invites_for(user)
+    render_token user
   end
 
   # GET /api/v1/auth/nonce — mints a single-use SIWE nonce.
@@ -83,7 +85,9 @@ class Api::V1::AuthController < Api::BaseController
     end
 
     if params[:email].present?
-      render_token User.find_or_create_by!(email: params[:email].to_s.strip.downcase)
+      user = User.find_or_create_by!(email: params[:email].to_s.strip.downcase)
+      GroupInvite.auto_accept_ticket_invites_for(user)
+      render_token user
     elsif params[:sol_address].present?
       render_token User.find_or_create_by!(sol: params[:sol_address].to_s)
     else
@@ -103,6 +107,7 @@ class Api::V1::AuthController < Api::BaseController
     return render_error("email is already in use") if User.exists?(email: email)
 
     current_user.update!(email: email)
+    GroupInvite.auto_accept_ticket_invites_for(current_user)
     render json: UserBlueprint.render(current_user, view: :self)
   end
 

@@ -210,6 +210,12 @@ class Api::V1::TicketsController < Api::BaseController
   end
 
   # POST /api/v1/tickets/add_group_ticket_item
+  #
+  # Manager grants a group ticket to an email address. A matching account gets
+  # the TicketItem + membership immediately; an unknown email gets a
+  # GroupInvite (ticket_id set) that auto-accepts — see
+  # GroupInvite#auto_accept_ticket_invites_for — the moment that email is
+  # verified via signup/bind/trusted_signin.
   def add_group_ticket_item
     group = Group.find_by(nickname: params[:group_id]) || Group.find_by(id: params[:group_id])
     return render_not_found unless group
@@ -219,16 +225,20 @@ class Api::V1::TicketsController < Api::BaseController
     ticket = Ticket.find_by(content: params[:title].to_s.strip, group_id: group.id)
     return render_error("ticket type not found") unless ticket
 
-    ticket_item = TicketItem.create_with(status: "unbounded").find_or_create_by(
-      event_id: group.group_ticket_event_id, ticket_id: ticket.id,
-      selector_type: "email", selector_address: email, ticket_type: "group",
-      group_id: group.id, auth_type: "invite"
-    )
-
     user = User.find_by(email: email)
     if user
-      ticket_item.update(status: "succeeded", user_id: user.id)
+      ticket_item = TicketItem.create_with(status: "succeeded", user_id: user.id).find_or_create_by(
+        event_id: group.group_ticket_event_id, ticket_id: ticket.id,
+        selector_type: "email", selector_address: email, ticket_type: "group",
+        group_id: group.id, auth_type: "invite"
+      )
+      ticket_item.update(status: "succeeded", user_id: user.id) unless ticket_item.status == "succeeded"
       group.add_member(user.id, "member")
+    else
+      GroupInvite.find_or_create_by!(
+        group: group, ticket_id: ticket.id,
+        receiver_address_type: "email", receiver_address: email, status: "sending"
+      ) { |invite| invite.role = "member" }
     end
     render json: { result: "ok" }
   end
@@ -330,7 +340,7 @@ class Api::V1::TicketsController < Api::BaseController
 
   def event_manager?(event_id)
     event = Event.find_by(id: event_id)
-    event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[admin owner]))
+    event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[manager owner]))
   end
 
   def find_ticket_item_by_order

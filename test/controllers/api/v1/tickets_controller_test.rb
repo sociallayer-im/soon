@@ -502,18 +502,51 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert @group.memberships.exists?(user: known_user)
   end
 
-  test "add_group_ticket_item creates an unbounded placeholder for an unknown email" do
+  test "add_group_ticket_item creates a pending ticket-carrying GroupInvite for an unknown email" do
     @group.update!(group_ticket_event_id: @event.id)
-    create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+    ticket = create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
 
     post "/api/v1/tickets/add_group_ticket_item",
       params: { group_id: @group.nickname, email: "unknown@test.com", title: "Yearly Pass" },
       headers: auth_headers(@owner)
     assert_response :success
 
-    ti = TicketItem.find_by(selector_address: "unknown@test.com")
-    assert_equal "unbounded", ti.status
-    assert_nil ti.user_id
+    invite = GroupInvite.find_by(group: @group, receiver_address: "unknown@test.com")
+    assert_equal ticket.id, invite.ticket_id
+    assert_equal "sending", invite.status
+    assert_nil TicketItem.find_by(selector_address: "unknown@test.com")
+  end
+
+  test "signing up with an emailed ticket grant auto-accepts it: membership + succeeded TicketItem" do
+    @group.update!(group_ticket_event_id: @event.id)
+    ticket = create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+    post "/api/v1/tickets/add_group_ticket_item",
+      params: { group_id: @group.nickname, email: "newcomer@test.com", title: "Yearly Pass" },
+      headers: auth_headers(@owner)
+    assert_response :success
+
+    user = User.create!(email: "newcomer@test.com")
+    GroupInvite.auto_accept_ticket_invites_for(user)
+
+    invite = GroupInvite.find_by(group: @group, receiver_address: "newcomer@test.com")
+    assert_equal "accepted", invite.status
+    assert_equal user.id, invite.receiver_id
+    assert @group.memberships.exists?(user: user)
+
+    ti = TicketItem.find_by(ticket: ticket, selector_address: "newcomer@test.com")
+    assert_equal "succeeded", ti.status
+    assert_equal user.id, ti.user_id
+  end
+
+  test "a plain (non-ticket) pending invite does not auto-accept on signup" do
+    invite = GroupInvite.create!(group: @group, role: "member", receiver_address_type: "email",
+      receiver_address: "plain@test.com", status: "sending", expires_at: 30.days.from_now)
+
+    user = User.create!(email: "plain@test.com")
+    GroupInvite.auto_accept_ticket_invites_for(user)
+
+    assert_equal "sending", invite.reload.status
+    assert_not @group.memberships.exists?(user: user)
   end
 
   test "add_group_ticket_item requires group admin" do
