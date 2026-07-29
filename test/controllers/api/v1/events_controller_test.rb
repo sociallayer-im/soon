@@ -330,6 +330,30 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Renamed", event.reload.title
   end
 
+  test "update succeeds for a co-host (EventRole role: manager) who is neither owner nor group admin" do
+    owner = create_user
+    cohost = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed by co-host" } },
+      headers: auth_headers(cohost)
+    assert_response :success
+    assert_equal "Renamed by co-host", event.reload.title
+  end
+
+  test "update is forbidden for a merely-listed EventRole (role: member, e.g. a speaker)" do
+    owner = create_user
+    speaker = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    event.event_roles.create!(item_id: speaker.id, item_type: "User", role: "member")
+
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed" } }, headers: auth_headers(speaker)
+    assert_response :forbidden
+  end
+
   test "update succeeds for a group admin who isn't the owner" do
     owner = create_user
     admin = create_user
