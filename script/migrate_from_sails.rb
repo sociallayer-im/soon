@@ -264,7 +264,7 @@ MIGRATIONS = [
         user_id: mid("users", r["profile_id"]) }
     } },
 
-  { target: "places", source: "places", id: :gen, req: %i[name], suffix_dup: :name, transform: ->(r) {
+  { target: "places", source: "places", id: :gen, req: %i[name], transform: ->(r) {
       { address: r["address"], created_at: ts(r, "created_at"),
         data: (r["data"] ? { "place_id" => r["data"] } : {}), description: nil,
         latitude: r["geo_lat"], longitude: r["geo_lng"], name: bn(r["name"]),

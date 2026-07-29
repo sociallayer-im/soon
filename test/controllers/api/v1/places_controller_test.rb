@@ -32,11 +32,23 @@ class Api::V1::PlacesControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "name must be unique" do
-    create_place(name: "Duplicate Place")
-    assert_raises(ActiveRecord::RecordInvalid) do
-      Place.create!(name: "Duplicate Place")
-    end
+  test "name is not required to be unique — two different real places can share a name" do
+    first = create_place(name: "Duplicate Place", address: "1 First St")
+    second = Place.create!(name: "Duplicate Place", address: "2 Second Ave")
+    assert_not_equal first.id, second.id
+  end
+
+  test "create finds-or-creates by exact name (write-path convenience dedup, not a DB constraint)" do
+    owner = create_user
+    post "/api/v1/places", params: { place: { name: "Shared Spot", address: "1 First St" } },
+      headers: auth_headers(owner)
+    assert_response :created
+    first_id = json_response["id"]
+
+    post "/api/v1/places", params: { place: { name: "Shared Spot", address: "ignored on reuse" } },
+      headers: auth_headers(owner)
+    assert_response :success
+    assert_equal first_id, json_response["id"]
   end
 
   test "latitude is bounded to +/-90 and longitude to +/-180" do
