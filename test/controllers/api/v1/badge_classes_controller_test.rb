@@ -102,6 +102,25 @@ class Api::V1::BadgeClassesControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes invite_ids, expired_invite.id
   end
 
+  test "invites requires group manager — an outsider is forbidden" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    bc = create_badge_class(creator: owner, group: group)
+
+    get "/api/v1/badge_classes/#{bc.id}/invites", headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "invites requires authentication" do
+    owner = create_user
+    group = create_group(owner: owner)
+    bc = create_badge_class(creator: owner, group: group)
+
+    get "/api/v1/badge_classes/#{bc.id}/invites"
+    assert_response :unauthorized
+  end
+
   test "invites returns an empty list for a groupless badge class" do
     user = create_user
     bc = create_badge_class(creator: user)

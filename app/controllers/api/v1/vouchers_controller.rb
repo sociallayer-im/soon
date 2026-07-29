@@ -1,5 +1,9 @@
 class Api::V1::VouchersController < Api::BaseController
   ADDRESS_REGEXP = /\A0x[a-fA-F0-9]{40}\z/
+  # Voucher browsing (sender/group lists, detail) is public; actions that
+  # touch a specific voucher (code reveal, revoke, use, reject) still require
+  # auth via `authenticate!`, which is only skipped for index/show here.
+  skip_before_action :authenticate!, only: %i[index show]
   before_action :set_voucher, only: %i[show get_code revoke use reject_badge]
 
   # Raised inside an issue_vouchers batch to roll the whole batch back.

@@ -1,4 +1,6 @@
 class Api::V1::BadgesController < Api::BaseController
+  # Badge browsing pages (profile badges, badge detail) are public.
+  skip_before_action :authenticate!, only: %i[index show]
   before_action :set_badge, only: %i[show update transfer burn swap swap_code]
 
   # GET /api/v1/badges/:id

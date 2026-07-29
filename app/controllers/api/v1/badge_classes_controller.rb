@@ -1,4 +1,9 @@
 class Api::V1::BadgeClassesController < Api::BaseController
+  # Badge class browsing (group badge lists, detail, by_user) is public.
+  # `invites` is NOT public: GroupInviteBlueprint exposes receiver_address
+  # (an email for email-type invites), so it stays behind authenticate! plus
+  # an explicit group-manager check below.
+  skip_before_action :authenticate!, only: %i[index show by_user]
   before_action :set_badge_class, only: %i[show invites]
 
   # POST /api/v1/badge_classes
@@ -41,6 +46,7 @@ class Api::V1::BadgeClassesController < Api::BaseController
 
   # GET /api/v1/badge_classes/:id/invites
   def invites
+    authorize @badge_class.group, :update?, policy_class: GroupPolicy if @badge_class.group
     invites = @badge_class.group ? @badge_class.group.group_invites.where("expires_at > ? OR expires_at IS NULL", Time.current) : GroupInvite.none
     render json: {
       badge_class: BadgeClassBlueprint.render_as_hash(@badge_class),
