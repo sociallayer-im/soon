@@ -1,0 +1,29 @@
+app/controllers/api/v1/venues_controller.rb
+  s_e9ed806a3d225c::t_5cedb0d99df5ce 5-7
+app/controllers/api/v1/markers_controller.rb
+  s_e9ed806a3d225c::t_27f875fe915fb9 14-16
+  s_e9ed806a3d225c::t_9d94dca94f758c 11-12
+  s_e9ed806a3d225c::t_fa9a279a8a8bd6 13
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_ba1a3af1709cc6 5-40
+test/controllers/api/v1/venues_controller_test.rb
+  s_e9ed806a3d225c::t_64b54429f177c4 21-33
+test/controllers/api/v1/markers_controller_test.rb
+  s_e9ed806a3d225c::t_3e832b7dc4ded7 25-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d41953c5f474e3eb99481e21642b39f703ea688e",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
