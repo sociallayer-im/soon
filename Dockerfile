@@ -30,9 +30,16 @@ ENV RAILS_ENV="production" \
 # Throw-away build stage to reduce size of final image
 FROM base AS build
 
-# Install packages needed to build gems and node modules
+# Install packages needed to build gems and node modules.
+#
+# autoconf/automake/libtool/libgmp-dev are for rbsecp256k1, which siwe-rb pulls
+# in via eth for SIWE signature verification. That gem compiles a vendored
+# libsecp256k1 from source with autotools; without them `bundle install` fails
+# at the native-extension step.
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential git libpq-dev libvips libyaml-dev pkg-config unzip && \
+    apt-get install --no-install-recommends -y \
+      build-essential git libpq-dev libvips libyaml-dev pkg-config unzip \
+      autoconf automake libtool libgmp-dev && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 ENV BUN_INSTALL=/usr/local/bun

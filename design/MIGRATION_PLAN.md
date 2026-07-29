@@ -1,0 +1,421 @@
+# sails → soon 生产迁移方案
+
+**日期**: 2026-07-30
+**状态**: 待确认 — 本文档是执行前的完整方案，所有步骤在用户确认后才实际操作。
+
+## 0. 目标与原则
+
+把 `api.sola.day` 的后端从 sails（Rails 7.2，Fly 时代遗留、现跑在 sg.sola.day）
+切换到 soon（Rails 8.1，TSID 主键，GoodJob 进程内异步），数据迁入 PlanetScale
+新建的 `sola_soon_db`。原则：
+
+- **sails 及其数据库全程只读、原样保留**，出问题随时把域名切回去（观察期 7 天）。
+- **尽可能重用现有 secret**（用户指令）：JWT 密钥、NEXT_TOKEN 必须与 sails 完全一致。
+- sg.sola.day 只有 **4GB 内存**，过渡期 sails + soon 并存，资源参数要压着配。
+- 数据库 dump 优先在服务端做（网络近、快），但**稳定为主**——所有长任务放
+  tmux/nohup，用 `-Fc` 自定义格式。
+- API 冻结范围：**event create/update + recurring create/update**（用户确认此范围足够）。
+- juluo.xyz 国内站、sola-event-dashboard、sola-cli 后续单独迁移，本次不处理
+  （CN 部署继续用 before-migration 的代码，不受影响；dashboard/cli 打到新后端
+  会 404，属已知并接受）。
+
+## 1. 现状盘点
+
+| 项 | 值 |
+|---|---|
+| 服务器 | `root@sg.sola.day`（172.81.108.136，4GB RAM） |
+| 构建机 | `ubuntu@wamo.city`（amd64） |
+| 部署工具 | ginger **0.7**（Nomad 调度 + **Traefik** 流量路由；Traefik 按容器 label 自动发现，同一 host 规则不能被两个 service 同时声明。0.7 的 nomad job-template 模式本次不需要——生成式 spec 够用） |
+| 镜像仓库 | `ghcr.io/sociallayer-im/<service>` |
+| DNS | Cloudflare zone `sola.day`（`cf` CLI，DNS-only CNAME → sg.sola.day） |
+| sails 生产库 | PlanetScale Postgres（`DATABASE_URL` in `sails/.env.production`） |
+| soon 目标库 | PlanetScale 新建 `sola_soon_db`（待创建） |
+| 前端分支 | seastar-app / seastar-auth 均在 `soon` 分支（未 push），`main` 为旧版 |
+
+关键差异（决定了迁移不能是简单 dump/restore）：
+
+- sails 整数 PK ↔ soon TSID 字符串 PK；60 张表 ↔ 34 张表；profiles → users
+  且做身份合并。唯一通路是 `soon/script/migrate_from_sails.rb`（已在本地全量
+  演练过一次，见 `design/migration_report_2026-07-29.md`）。
+- ETL 脚本**硬性拒绝远程目标**（检测到 host / DATABASE_URL 即 abort，因为它
+  TRUNCATE 目标表）——所以 ETL 只在本地跑，结果再导入 PlanetScale。
+- 路由前缀：sails 在根路径（`/event/create`），soon 全部在 `/api/v1/`。
+
+## 2. Secret 对照与重用（用户指令：尽量重用）
+
+sails `.env.production` → soon `.env.production` 映射：
+
+| sails 变量 | soon 变量 | 处理 |
+|---|---|---|
+| `JWT_SECRET_KEY` | `JWT_SECRET` | **同值复制，必须对齐**（见 §3 token 兼容） |
+| `NEXT_TOKEN` | `NEXT_TOKEN` | **同值复制，必须对齐**（seastar-auth trusted_signin / Stripe 回调共用） |
+| `SECRET_KEY_BASE` | `SECRET_KEY_BASE` | 同值复制（省得再生成；soon JWT 不回退到它，因为 JWT_SECRET 已显式设置） |
+| `RESEND_KEY` | `RESEND_API_KEY` | 同值复制（变量名不同） |
+| `CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_ACCOUNT_ID` | 同值复制 |
+| `CLOUDFLARE_IMAGE_API_KEY` | `CLOUDFLARE_IMAGES_TOKEN` | 同值复制（变量名不同） |
+| `DATABASE_URL` | `DATABASE_URL` | **不同**：指向新建 `sola_soon_db` |
+| `AWS_*` / `S3_URL` / `BUCKET_NAME` | — | soon 不用 S3（图片全走 Cloudflare Images），不迁 |
+| `SKYLIGHT_AUTHENTICATION` / `ALCHEMY_API_KEY` | — | soon 不用，不迁 |
+
+soon 新增变量（sails 没有）：
+
+| 变量 | 值 |
+|---|---|
+| `ALLOWED_SIWE_DOMAINS` | `auth.sola.day,auth.juluo.xyz`（默认值即可，可不设） |
+| `WEB_URL` | `https://app.sola.day`（默认值即可） |
+| `APP_HOST` | `app.sola.day`（默认值即可） |
+| `MAIL_FROM` / `MAIL_LOGO_URL` | 沿用现有邮件发件配置 |
+| `RAILS_MAX_THREADS` | `3`（见 §5 内存预算） |
+| `GOOD_JOB_MAX_THREADS` | `3`（同上；连接池自动 = 3+3+2 = 8） |
+| `WEB_CONCURRENCY` | `1`（单 Puma worker，压内存） |
+| `STRIPE_*` | 暂缓（支付系统后续整体过一遍时再配，含 TicketItem#timeout TODO） |
+
+## 3. 前置代码变更（切换前必须完成）
+
+### 3.1 soon：legacy token 兼容（防全员登出）
+
+**已核实的硬伤**：sails token payload 是 `{id: <整数>, address_type, hasura claims}`
+（无 exp），soon `authenticate!` 读 `payload["user_id"]`（TSID）。密钥对齐只让
+签名验过，用户身份仍解不出来 → 所有已登录用户在切换瞬间被登出。
+
+修复：`Api::BaseController#authenticate!` / `authenticate_optional!` 增加回退——
+`payload["user_id"]` 缺失时取 `payload["id"]`，按 `User.find_by(ref_id: id.to_s)`
+查（`users.ref_id` 存的正是旧整数 id，有部分索引）。JWT gem 对无 `exp` 的
+payload 不做过期校验，旧 token 天然长效，行为与 sails 一致。加测试：伪造一枚
+sails 格式 token（同密钥）能通过 soon 认证并解析到正确用户。
+
+### 3.2 sails：API 冻结开关
+
+`EventController` create/update + `RecurringController` create/update 入口检查
+`ENV["MIGRATION_FREEZE"]`，为真则返回 503 + 明确报错信息。**用环境变量开关**，
+回滚/解冻只改 `.env.production` 重启容器，不用重新构建镜像。默认不设 = 行为
+完全不变，可以提前部署好待命。
+
+### 3.3 校验脚本
+
+`soon/script/verify_migration.rb`（rails runner，只读，双库连接）：
+
+- 每表行数对照：source 读数 − 预期 skip/merge 数 = target 行数
+  （预期值以 `migration_report_2026-07-29.md` 的口径为准：users −66 合并、
+  events −3、venues −22、markers −16、participants −19 去重、event_roles −264）。
+- 按 `ref_id` 抽样全字段 diff（每表随机 ≥200 行或全量，取小者），字段映射复用
+  ETL 的 transform 定义。
+- 悬空 FK 全表扫（必填 FK 必须为 0）。
+- 关键不变量：每个 group 的 owner membership 存在；badge→badge_class 计数一致；
+  ticket_items 金额汇总一致。
+- 输出 PASS/FAIL 摘要，**任何一项 FAIL 不切域名**。
+
+### 3.4 前端分支整理
+
+```bash
+# seastar-app / seastar-auth 各自：
+git branch before-migration main   # 备份分支（等价于用户要的"main 改名备份"，但不动 GitHub 默认分支）
+git checkout main && git merge soon
+git push origin main before-migration
+```
+
+不直接 rename main 的原因：GitHub 默认分支、`origin/HEAD`、可能残留的 Vercel
+webhook 都会被 rename 牵动；备份分支 + 正常合并达到同样效果、零副作用。
+CN 站（`ginger.cn.yml`）下次部署前先 checkout `before-migration` 即可不受影响。
+
+## 4. soon 的 ginger 部署配置（新建 `soon/ginger.yml`）
+
+以 `sails/ginger.yml` 为模板，差异点：
+
+```yaml
+service: soon
+image: ghcr.io/sociallayer-im/soon
+
+runner: nomad
+egress: traefik
+
+servers:
+  web:
+    hosts: [sg.sola.day]
+    primary: true
+
+registry:
+  server: ghcr.io
+  username: jiangplus
+  password: GHCR_TOKEN
+
+proxy:
+  hosts: [soon-api.sola.day]     # 切换时改为 [api.sola.day, soon-api.sola.day]（见 §7）
+  app_port: 8080
+  ssl: true                      # Traefik 自动处理 Let's Encrypt
+  health_check_path: /up
+  # 注：deploy_timeout/drain_timeout 是 kamal-proxy 专属参数，Nomad+Traefik 栈不用；
+  # 健康门禁由 ginger 轮询 nomad deployments + ProgressDeadline 完成
+
+resources:                       # Nomad 资源（4GB 服务器上必须显式设，见 §5）
+  cpu: 256
+  memory: 300                    # 预留压低——Nomad 按预留调度，预留设大了部署直接排不进去
+  memory_max: 1024               # 实际可用走 oversubscription 突发上限（over-provision，必设）
+
+ssh:
+  user: root
+  command_timeout: 600
+
+builder:
+  arch: amd64
+  remote: ssh://ubuntu@wamo.city
+
+env:
+  RAILS_ENV: production
+  WEB_CONCURRENCY: "1"
+  RAILS_MAX_THREADS: "3"
+  GOOD_JOB_MAX_THREADS: "3"
+  THRUSTER_HTTP_PORT: "8080"     # soon Dockerfile EXPOSE 80，用 Thruster 环境变量对齐到 8080
+  THRUSTER_TARGET_PORT: "3000"
+
+secrets:
+  load: [.env.production]
+  inject:
+    - DATABASE_URL
+    - SECRET_KEY_BASE
+    - JWT_SECRET
+    - NEXT_TOKEN
+    - RESEND_API_KEY
+    - CLOUDFLARE_ACCOUNT_ID
+    - CLOUDFLARE_IMAGES_TOKEN
+
+retain_containers: 5
+```
+
+`soon/.env.production`（git-ignored）按 §2 的映射从 `sails/.env.production` 生成。
+
+DNS：`cf dns records create ... '{"type":"CNAME","name":"soon-api","content":"sg.sola.day","proxied":false}'`。
+
+seastar-app / seastar-auth 的 `ginger.yml` 不变（`NEXT_PUBLIC_API_URL` 保持
+`https://api.sola.day`，前端镜像一次构建到底；切换只动 proxy 的 host 归属）。
+
+## 5. 内存预算（4GB 硬约束）
+
+**2026-07-30 实测（此前的估算是错的——这台机器上不止 3 个服务）：**
+
+```
+free -m:   total 3915   used 2785   available 1130   swap used 1000/2047
+vmstat:    si/so 稳定为 0 —— 那 1GB swap 是冷页，不是在颠簸
+nomad:     12 个 running allocation，已分配 3.8GiB / 8.0GiB
+           （节点被有意配置成 8GiB，物理只有 3.9GB，即 over-provision）
+```
+
+同机运行的 12 个服务：`sails-web`、`seastar-app-web`、`seastar-auth-web`、
+`loop-app-web`、`loop-backend-web`、`semi-app-web`、`semi-backend-web`、
+`wave-web`、`flow-circle-web`、`hometown-web`、`xray`、`yatch-mirror`，
+外加 `ginger-traefik`。容器实测 RSS 合计约 1.65GB，最大的单个是 352MB。
+
+| 项 | 实测 / 预算 |
+|---|---|
+| 当前已用（12 服务 + 系统） | 2785 MB |
+| 当前可用 | 1130 MB |
+| **soon 预留（Nomad 调度依据）** | 300 MB |
+| **soon 上限 `memory_max`** | 640 MB（约为 sails 实测 ~350MB 的 2 倍） |
+| 加入 soon 后预计可用 | ~750 MB |
+
+**为什么 `memory_max` 从 1024 收到 640**：可用内存只有 ~1.1GB 且被 12 个服务
+共享，1GB 的上限意味着单个泄漏就能把整机拖进 swap。640 给了 soon 约 2 倍于
+同类工作负载（sails）的余量，同时保住其余服务。
+
+- **Nomad 按 `resources.memory` 预留调度，4GB 机器必须走内存 over-provision**：
+  预留（memory）压低到 ~300MB 保证排得进去，实际用量靠 `memory_max` 突发上限
+  兜住（需 Nomad 开启 memory oversubscription：server 配置
+  `memory_oversubscription_enabled = true`——部署 soon 前先在服务器上确认，
+  未开则 `memory_max` 被忽略、突发直接按预留 OOM）。
+- **滚动部署瞬间新旧 alloc 并存**，预留×2 计入调度——这也是预留必须压低的原因；
+  所有服务的预留总和 + 一份最大服务的预留 必须 < Nomad allocatable memory。
+- 构建全部在 wamo.city 远程构建机，**服务器上不发生 docker build**。
+- 数据导入 PlanetScale 从本地发起（§6），不占服务器内存；服务端只跑
+  `pg_dump`（流式，内存占用可忽略）。
+- 部署时 nomad 短暂新旧容器并存，峰值 +450 MB，仍有余量。
+- 观察期结束下线 sails 容器后回收 ~500 MB。
+
+## 6. 数据迁移路径（五步，先演练后正式）
+
+ETL 不能直连远程（脚本硬性拒绝 + TRUNCATE 危险），实际链路：
+
+```
+[1] 服务端 pg_dump（PlanetScale sola_sails_db → sg.sola.day 上的 .dump 文件）
+      tmux 内: pg_dump "$SAILS_DATABASE_URL" -Fc -Z 6 -f /root/sails_prod_$(date +%Y%m%d).dump
+      （服务器网络离库近，快且稳；-Fc 支持并行 restore 与断点重试）
+[2] scp 到本地 → pg_restore 到本地 Postgres 新库 sails_prod_mirror
+[3] 本地跑 ETL：
+      bin/rails db:schema:load（本地全新 soon_prod_stage 库）
+      SOURCE_DB=sails_prod_mirror DRY_RUN=1 bin/rails runner script/migrate_from_sails.rb   # 先干跑
+      SOURCE_DB=sails_prod_mirror bin/rails runner script/migrate_from_sails.rb             # 真跑
+[4] 本地跑校验脚本（§3.3），必须全 PASS
+[5] 导入 PlanetScale：
+      pg_dump soon_prod_stage -Fc | pg_restore -d "$SOLA_SOON_DB_URL" --no-owner --no-acl -j 4
+      （排除 good_job* 数据，只建空表；若本地上行带宽成为瓶颈，把 stage dump
+       scp 回服务器、从服务端 restore——两条路径演练时各测一次取快且稳者）
+```
+
+### 演练结果（2026-07-30，全链路真实生产数据，已完成）
+
+| 步骤 | 耗时 | 备注 |
+|---|---:|---|
+| [1] 生产 `pg_dump` → 本地 | **2:00** | 67MB（`-Fc -Z 6`），零报错 |
+| [2] `pg_restore` → 本地 `sails_prod_mirror` | **0:04** | 仅 2 个 `hypopg` 报错，PlanetScale 的索引顾问扩展，与应用数据无关 |
+| [3] ETL（`DRY_RUN` 0:08 + 实跑 0:34） | **0:34** | |
+| [4] 本地校验 | **0:02** | 38 PASS / 0 FAIL |
+| [5a] `pg_dump` stage（排除 `auth_codes`/`good_job*` 数据） | **0:04** | 64MB |
+| [5b] `pg_restore` → PlanetScale `sola_soon_db` | **0:39** | 零报错 |
+| [6] 对生产库跑校验 | **0:36** | 38 PASS / 0 FAIL |
+| **合计** | **≈ 4 分钟** | |
+
+**冻结窗口按 15 分钟准备**（4 分钟流水线 + 切域名 + 冒烟 + 缓冲）。
+
+生产数据规模：34291 profiles / 18184 events / 55443 participants / 31303 domains，
+库 167MB。全部行数差为 0，身份合并 66 人（0 人不可达），必填外键 0 悬空，
+6 张表 × 1800 行字段级 diff 全等。`sails_sails_db` 全程只读，演练后大小和行数不变。
+
+**修正原计划的两点**：
+
+1. **dump 在本地做，不在服务端。** 服务器上没装 `pg_dump`，而且 ETL 必须在本地跑，
+   所以服务端 dump 反而多一跳（Sydney→新加坡→本地）。本地直连 2 分钟就够，
+   不必为此在生产机上装 postgresql-client。
+2. **导出 stage 时必须排除 `auth_codes` 和 `good_job*` 的数据**——本地 dev 库里
+   有 3 条登录验证码和 2 条 GoodJob 执行记录，不能带进生产。已在命令里加
+   `--exclude-table-data`，并验证生产库这两张表为空。
+
+## 7. 执行顺序
+
+### 阶段 A：准备（不碰线上行为，可随时做）
+
+1. soon legacy-token 兼容 + 测试（§3.1）
+2. sails `MIGRATION_FREEZE` 开关（§3.2），部署 sails（开关不设，行为不变）
+3. 校验脚本（§3.3）
+4. 前端分支合并 + `before-migration` 备份分支（§3.4）
+5. `soon/ginger.yml` + `.env.production`（§2/§4）；PlanetScale 创建 `sola_soon_db`
+6. Cloudflare 加 `soon-api` CNAME
+7. 服务器上确认 Nomad 已开启 memory oversubscription
+   （`nomad operator scheduler get-config`；未开则先
+   `nomad operator scheduler set-config -memory-oversubscription=true`，
+   否则 §4 的 `memory_max` 不生效，soon 会按 300MB 预留被 OOM）
+8. **演练**：§6 全链路计时 + 校验全 PASS
+
+### 阶段 B：soon 预上线（线上仍由 sails 服务，无风险）
+
+9. `cd soon && GHCR_TOKEN=... ginger deploy` → `soon-api.sola.day`，接演练数据
+10. 冒烟：`/up`；**拿一枚真实 sails 生产 token 调 soon 认证接口**（验证 §3.1）；
+    邮箱验证码登录；建 event / RSVP（演练库随便写）；邮件实际送达（GoodJob 进程内执行）
+11. 本地起 seastar-app/seastar-auth 指向 `soon-api.sola.day` 完整过主流程
+    （登录、建活动、报名、群组管理、徽章、售票）——把前端集成从代码审查变成实测
+
+### 阶段 C：正式窗口（低峰时段，提前公告）
+
+12. **开冻结**：sails `.env.production` 设 `MIGRATION_FREEZE=1`，重启 sails 容器
+13. 跑 §6 [1]–[5]（正式数据、目标 `sola_soon_db`；先 `TRUNCATE`/重建掉演练数据）
+14. 校验脚本全 PASS（任何 FAIL → 中止，解冻结，择日重来——此时线上零损伤）
+15. soon 指到正式库（`.env.production` 确认 `DATABASE_URL`），重启，soon-api 冒烟
+16. **域名交接**（Traefik 按容器 label 路由：同一 Host 规则若被两个 service
+    同时声明，路由行为不确定——必须先摘后挂，顺序不能反）：
+    a. `sails/ginger.yml` proxy.hosts 去掉 `api.sola.day`（留占位
+       `sails-old.sola.day`）→ `ginger deploy --skip-push`（Nomad 重提交 job、
+       换 label，Traefik 秒级感知）
+    b. `soon/ginger.yml` proxy.hosts 改为 `[api.sola.day, soon-api.sola.day]`
+       → `ginger deploy --skip-push`
+    c. 两步之间 api.sola.day 有数秒 404 窗口，属预期（冻结窗口内）
+17. 部署 seastar-app / seastar-auth（main 分支镜像，`NEXT_PUBLIC_API_URL` 仍是
+    `https://api.sola.day`，无需改动——如 B 阶段镜像已构建可直接复用；两个服务
+    可用 group deploy 一条命令走：`ginger deploy -c seastar-app/ginger.yml -c seastar-auth/ginger.yml`）
+18. 生产冒烟：老 cookie 直接访问（legacy token 生效）、新登录、建 event、RSVP、
+    邮件、图片上传、日历订阅
+19. 冒烟通过 → sails 保持 `MIGRATION_FREEZE=1` 不解除（它已不接流量，冻结留作
+    防御：万一有旧客户端直连容器）
+
+### 阶段 D：观察期（7 天）
+
+20. sails 容器与 PlanetScale 旧库**原样保留、不动**
+21. 每日看 soon 日志 + GoodJob dashboard（失败任务）+ 内存水位（`free -m`）
+22. 7 天无恙 → 下线 sails 容器（镜像和库仍保留），出迁移收尾报告
+
+## 8. 回滚
+
+| 时点 | 动作 | 数据损失 |
+|---|---|---|
+| 阶段 C 步骤 14 前（校验失败等） | 解冻结即可，什么都没发生 | 无 |
+| 域名已切、**尚无实质写入 soon** | 步骤 16 反向执行（sails 收回 api.sola.day host → 解冻结）；前端无需动 | 无 |
+| **已有写入 soon** | 原则上不回退（无反向 ETL：TSID→整数、身份合并均不可逆）。极端情况下回切 = 放弃切换后产生的数据 | 切换后新增数据 |
+
+一分钟回滚命令（预演过再进窗口）：
+
+```bash
+cd soon  && ginger deploy --skip-push   # proxy.hosts 已改回 [soon-api.sola.day]（先摘）
+cd sails && ginger deploy --skip-push   # proxy.hosts 已改回 [api.sola.day]（后挂）
+# sails .env.production 去掉 MIGRATION_FREEZE，重启
+```
+
+（把两份 ginger.yml 的"回滚版"提前写好放在分支/stash 里，窗口内不现场手改。）
+
+镜像层面回滚另有 `ginger rollback <version>`（切回旧容器）+ `ginger history`
+（查版本号），适用于"soon 新镜像有 bug"而非"整体切回 sails"的场景，两者不要混。
+
+## 9. 已知并接受的破坏（用户确认）
+
+- **juluo.xyz 国内站**：继续跑 sails + before-migration 前端，后续单独迁移。
+- **sola-event-dashboard / sola-cli**：打 `api.sola.day` 根路径老路由会 404
+  （soon 全在 `/api/v1/`），后续迁移时一并升级。
+- 未迁移的 sails 表（votes、points、orders、estores、map_checkins 等 26 张）
+  数据留在旧库，soon 无对应功能。
+
+## 10. 进度
+
+### 已完成（本地，未触碰线上）
+
+- [x] **§3.1 soon legacy-token 兼容** — `app/controllers/api/base_controller.rb`
+      新增 `user_from_payload`，`payload["user_id"]`（soon）优先，回退
+      `payload["id"]` → `User.find_by(ref_id:)`（sails）。
+      `test/controllers/api/legacy_token_test.rb` 10 例覆盖：跨格式认证、
+      无 `exp` 不被拒、错密钥拒绝、`ref_id` 为空的新用户不可被旧 token 命中、
+      `user_id` 优先于 `id`、可选认证降级为匿名。soon 全量 625 runs / 0 failures。
+- [x] **§3.2 sails 冻结开关** — `ApiController#block_during_migration!`
+      （`MIGRATION_FREEZE`，未设或 `0/false/no` 即关闭），挂在
+      `EventController` / `RecurringController` 的 `create`/`update` 上，
+      返回 503 + `Retry-After: 600`。`test/controllers/api/migration_freeze_test.rb` 4 例。
+      基线对比确认零回归：改动前后同为 5 failures + 4 errors，均为既有问题
+      （`popup_cities`/`PopupCity` 模型缺失、`custom_form_id` schema 漂移、
+      payment-methods 校验、fixture 数据）。
+- [x] **§3.3 校验脚本** — `script/verify_migration.rb`，只读，双库对照。
+      四段：行数对照 / 身份合并可达性 / 去重后精确计数 / 外键+字段 diff+业务不变量。
+      本地对 07-29 的迁移结果实跑通过：34 PASS，身份合并 0 人不可达，必填外键 0 悬空，
+      6 张表 × 1800 行字段级 diff 全等。
+- [x] **§4 `soon/ginger.yml`**（Nomad+Traefik、`memory:300`/`memory_max:1024`、
+      Thruster 8080）与 **`soon/.env.production`**（已 gitignore）。
+      secret 已从 `sails/.env.production` 重用并逐项校验一致：
+      `JWT_SECRET_KEY→JWT_SECRET`、`NEXT_TOKEN`、`SECRET_KEY_BASE`、
+      `RESEND_KEY→RESEND_API_KEY`、`CLOUDFLARE_IMAGE_API_KEY→CLOUDFLARE_IMAGES_TOKEN`。
+      `DATABASE_URL` **故意留占位符**，待 `sola_soon_db` 建好后填入——绝不可指向 sails 生产库。
+
+### 校验脚本的一个关键发现
+
+ETL 的 `req:` 检查作用于**映射后**的值，所以源库中「非 NULL 但指向已不存在的父行」
+的外键，和 NULL 一样会导致整行被跳过。本地数据里这样的行有：
+`badge_classes` 1（悬空 `creator_id`）、`ticket_items` 3（悬空 `ticket_id`）、
+`comments` 2（悬空 `profile_id`）、`form_submissions` 1（悬空 `user_id`）。
+校验脚本的预期损失规则据此改成检查**可解析性**而非是否为 NULL——生产数据的数字
+会不同，必须在演练时重新导出，不能沿用这里的值。
+
+### 阶段 A 已全部完成（2026-07-30）
+
+- [x] **§3.4 前端分支** — seastar-app / seastar-auth 各自建 `before-migration`
+      备份分支（指向合并前的 main），soon 快进合并进 main，两者均已 push。
+      推送前确认过：三个生产域名都 CNAME 到 sg.sola.day，不走 Vercel，
+      所以即使仓库还挂着 Vercel 集成也影响不到线上流量。
+- [x] **PlanetScale `sola_soon_db`** — 在 sails 所在实例上
+      `CREATE DATABASE`（该角色 `rolcreatedb = t`）。`soon/.env.production`
+      的 `DATABASE_URL` 已回填，凭据与 sails 相同、仅库名不同，
+      并断言了字符串里不再含 `sola_sails_db`。
+- [x] **Cloudflare `soon-api` CNAME** → sg.sola.day，已生效。
+      注意 zone 里有 `*.sola.day → cname.vercel-dns.com` 通配符，
+      所以显式记录是必需的，否则会落到 Vercel。
+- [x] **Nomad memory oversubscription** — 已开启（`= true`），`memory_max` 会生效。
+      同时发现这台机器实际跑着 12 个服务而非 3 个，据此重写了 §5 并把
+      `memory_max` 从 1024 收紧到 640。
+- [x] **§6 演练** — 全链路真实生产数据跑通，38 PASS / 0 FAIL，合计约 4 分钟。
+
+### 下一步（阶段 B，待确认）
+
+- [ ] `cd soon && GHCR_TOKEN=... ginger deploy` → soon-api.sola.day
+- [ ] 后端冒烟，重点是拿真实 sails 生产 token 验证 §3.1 的 legacy-token 兼容
+- [ ] 前端指向 soon-api 过一遍主流程
