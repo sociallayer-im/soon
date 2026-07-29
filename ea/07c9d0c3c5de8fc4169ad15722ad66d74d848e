@@ -1,0 +1,25 @@
+config/routes.rb
+  s_e9ed806a3d225c::t_00d21e926aa17d 8-12
+app/controllers/api/v1/calendars_controller.rb
+  s_e9ed806a3d225c::t_5bd74bcc8e6f1f 23-52
+test/controllers/api/legacy_icalendar_test.rb
+  s_e9ed806a3d225c::t_70cf91b1f98885 1-80
+app/models/group.rb
+  s_e9ed806a3d225c::t_9e4151b232915d 36-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ea07c9d0c3c5de8fc4169ad15722ad66d74d848e",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
