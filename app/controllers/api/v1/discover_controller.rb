@@ -4,13 +4,22 @@ class Api::V1::DiscoverController < Api::BaseController
   skip_before_action :authenticate!
 
   # GET /api/v1/discover
-  # The homepage: featured communities, popup cities (groups with a date range
-  # + location), and the next public events.
+  # The homepage: featured communities, popup cities, and the next public events.
+  #
+  # "Popup cities" is a curated list, not "any group that happens to have
+  # dates" — homepage curation is a deploy-side decision (see
+  # GroupsController::PRIVILEGED_TAGS), matching sails' equivalent
+  # `event/discover` (Group tagged "top", excluding "hidden", ordered by
+  # start_date desc). The frontend further splits "featured" out of this same
+  # list client-side by checking group_tags for "featured" — see
+  # sola-sdk/popup_city.ts — so "featured" groups must also carry "top" to
+  # appear in the popup-city carousel at all, same as sails.
   def index
     featured = Group.where(active: true).where("group_tags && ARRAY['featured','top']::varchar[]")
                     .order(:created_at).limit(20)
-    popups = Group.where(active: true).where.not(start_date: nil).where.not(location: [nil, ""])
-                  .order(end_date: :desc).limit(50)
+    popups = Group.where(active: true).where("group_tags && ARRAY['top']::varchar[]")
+                  .where.not("group_tags && ARRAY['hidden']::varchar[]")
+                  .order(start_date: :desc).limit(50)
     events = Event.includes(:group, :place, :venue, :owner, :track)
                   .where(visibility: "public", status: "published")
                   .where("end_time >= ?", Time.current).order(:start_time).limit(20)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_111650) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -297,6 +297,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_000000) do
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true
     t.integer "events_count", default: 0, null: false
+    t.string "featured_image_url"
     t.string "group_tags", default: [], array: true
     t.string "group_ticket_event_id"
     t.string "image_url"

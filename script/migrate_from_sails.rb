@@ -199,7 +199,14 @@ MIGRATIONS = [
         can_join_event: r["can_join_event"], can_publish_event: r["can_publish_event"],
         can_view_event: r["can_view_event"], created_at: ts(r, "created_at"), data: {},
         end_date: r["end_date"], event_tag_list: r["event_tags"] || [], event_union: mids("groups", r["group_union"]),
-        events_count: r["events_count"] || 0, group_tags: r["group_tags"] || [],
+        events_count: r["events_count"] || 0,
+        # sails stores homepage-curation tags with a leading colon (:top,
+        # :featured, :hidden, plus location codes like :cnx) -- soon's own
+        # code (GroupsController::PRIVILEGED_TAGS, DiscoverController) always
+        # compares colon-less strings, so strip it here rather than needing
+        # every tag comparison to handle both forms.
+        group_tags: (r["group_tags"] || []).map { |t| t.to_s.sub(/\A:/, "") },
+        featured_image_url: r["featured_image_url"],
         group_ticket_event_id: mid("events", r["group_ticket_event_id"]),
         image_url: r["image_url"], location: r["location"], logo_url: r["logo_url"],
         memberships_count: r["memberships_count"] || 0, name: bn(r["username"] || r["handle"]),

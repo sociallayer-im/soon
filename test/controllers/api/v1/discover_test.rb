@@ -6,7 +6,7 @@ class DiscoverTest < ActionDispatch::IntegrationTest
   test "discover returns featured groups, popup cities, and upcoming public events" do
     owner = create_user
     featured = create_group(owner: owner, group_tags: ["featured"])
-    popup = create_group(owner: owner, start_date: Date.new(2026, 9, 1),
+    popup = create_group(owner: owner, group_tags: ["top"], start_date: Date.new(2026, 9, 1),
       end_date: Date.new(2026, 10, 1), location: "Chiang Mai")
     plain = create_group(owner: owner)
     upcoming = create_event(group: plain, owner: owner, status: "published")
@@ -19,6 +19,41 @@ class DiscoverTest < ActionDispatch::IntegrationTest
     popup_entry = json_response["popup_cities"].find { |g| g["id"] == popup.id }
     assert_equal "Chiang Mai", popup_entry["location"]
     assert_includes json_response["events"].map { |e| e["id"] }, upcoming.id
+  end
+
+  test "popup_cities is curated by the 'top' tag, not just having dates+location" do
+    owner = create_user
+    curated = create_group(owner: owner, group_tags: ["top"], start_date: Date.new(2026, 9, 1),
+      end_date: Date.new(2026, 10, 1), location: "Chiang Mai")
+    uncurated = create_group(owner: owner, start_date: Date.new(2026, 9, 1),
+      end_date: Date.new(2026, 10, 1), location: "Somewhere Else")
+
+    get "/api/v1/discover"
+    assert_response :success
+    ids = json_response["popup_cities"].map { |g| g["id"] }
+    assert_includes ids, curated.id
+    assert_not_includes ids, uncurated.id
+  end
+
+  test "popup_cities excludes a 'top'-tagged group also tagged 'hidden'" do
+    owner = create_user
+    hidden = create_group(owner: owner, group_tags: ["top", "hidden"], start_date: Date.new(2026, 9, 1),
+      end_date: Date.new(2026, 10, 1), location: "Chiang Mai")
+
+    get "/api/v1/discover"
+    assert_response :success
+    assert_not_includes json_response["popup_cities"].map { |g| g["id"] }, hidden.id
+  end
+
+  test "popup_cities exposes featured_image_url for the card image" do
+    owner = create_user
+    popup = create_group(owner: owner, group_tags: ["top"], start_date: Date.new(2026, 9, 1),
+      end_date: Date.new(2026, 10, 1), location: "Chiang Mai",
+      featured_image_url: "https://cdn.test/banner.png")
+
+    get "/api/v1/discover"
+    entry = json_response["popup_cities"].find { |g| g["id"] == popup.id }
+    assert_equal "https://cdn.test/banner.png", entry["featured_image_url"]
   end
 
   test "search finds public content only" do
