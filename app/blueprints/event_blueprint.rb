@@ -27,6 +27,6 @@ class EventBlueprint < Blueprinter::Base
   view :extended do
     association :event_roles, blueprint: EventRoleBlueprint
     association :participants, blueprint: ParticipantBlueprint
-    association :tickets, blueprint: TicketBlueprint
+    association :tickets, blueprint: TicketBlueprint, view: :extended
   end
 end

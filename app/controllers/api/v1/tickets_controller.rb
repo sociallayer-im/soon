@@ -49,7 +49,7 @@ class Api::V1::TicketsController < Api::BaseController
   # GET /api/v1/events/:event_id/tickets
   def index
     event = Event.find(params[:event_id])
-    render_collection event.tickets, blueprint: TicketBlueprint
+    render_collection event.tickets, blueprint: TicketBlueprint, view: :extended
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end

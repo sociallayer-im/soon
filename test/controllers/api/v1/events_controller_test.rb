@@ -25,6 +25,20 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal event.id, json_response["id"]
   end
 
+  test "show includes payment_methods on nested tickets (extended view)" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    ticket = create_ticket(event: event)
+    create_payment_method(item: ticket, chain: "stripe", price: 1000)
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_response :success
+
+    ticket_json = json_response["tickets"].find { |t| t["id"] == ticket.id }
+    assert ticket_json["payment_methods"].present?, "expected payment_methods on event show's nested tickets"
+  end
+
   test "show hides a draft event from a non-manager" do
     owner = create_user
     outsider = create_user

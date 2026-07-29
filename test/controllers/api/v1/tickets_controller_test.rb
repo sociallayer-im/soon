@@ -484,6 +484,19 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     ENV.delete("NEXT_TOKEN")
   end
 
+  # ---------------------------------------------------------------- index
+
+  test "index (GET /events/:event_id/tickets) includes payment_methods" do
+    ticket = create_ticket(event: @event)
+    create_payment_method(item: ticket, chain: "stripe", price: 1000)
+
+    get "/api/v1/events/#{@event.id}/tickets", headers: auth_headers(@owner)
+    assert_response :success
+
+    body = json_response["data"].find { |t| t["id"] == ticket.id }
+    assert body["payment_methods"].present?, "expected payment_methods on the ticket index response"
+  end
+
   # ---------------------------------------------------------------- add_group_ticket_item / list_group_ticket_types
 
   test "add_group_ticket_item immediately succeeds and grants membership for a known email" do
