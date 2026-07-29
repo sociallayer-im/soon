@@ -23,17 +23,17 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "GroupInvite.count" do
       post "/api/v1/groups/#{group.id}/group_invites",
-        params: { receivers: [target.name], role: "admin" }, headers: auth_headers(owner)
+        params: { receivers: [target.name], role: "manager" }, headers: auth_headers(owner)
     end
     assert_equal "role_updated", json_response["results"].first["result"]
-    assert_equal "admin", group.memberships.find_by(user: target).role
+    assert_equal "manager", group.memberships.find_by(user: target).role
   end
 
   test "create errors when the known user is already a member at an equal/higher role" do
     owner = create_user
     target = create_user
     group = create_group(owner: owner)
-    create_membership(user: target, group: group, role: "admin")
+    create_membership(user: target, group: group, role: "manager")
 
     post "/api/v1/groups/#{group.id}/group_invites",
       params: { receivers: [target.name], role: "member" }, headers: auth_headers(owner)
@@ -74,7 +74,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference "GroupInvite.count" do
       post "/api/v1/groups/#{group.id}/group_invites",
-        params: { receivers: ["nobody@test.com"], role: "manager" }, headers: auth_headers(owner)
+        params: { receivers: ["nobody@test.com"], role: "superadmin" }, headers: auth_headers(owner)
     end
     result = json_response["results"].first
     assert_equal "error", result["result"]
@@ -88,7 +88,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     create_membership(user: target, group: group, role: "member")
 
     post "/api/v1/groups/#{group.id}/group_invites",
-      params: { receivers: [target.name], role: "manager" }, headers: auth_headers(owner)
+      params: { receivers: [target.name], role: "superadmin" }, headers: auth_headers(owner)
     result = json_response["results"].first
     assert_equal "error", result["result"]
     assert_equal "member", group.memberships.find_by(user: target).role
