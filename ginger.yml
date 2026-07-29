@@ -22,7 +22,7 @@ proxy:
   # design/MIGRATION_PLAN.md §7 changes it to [api.sola.day, soon-api.sola.day]
   # AFTER sails has released api.sola.day — Traefik routes by Host rule, and a
   # rule claimed by two services at once resolves unpredictably.
-  hosts: [soon-api.sola.day]
+  hosts: [api.sola.day, soon-api.sola.day]
   app_port: 8080
   ssl: true
   health_check_path: /up
