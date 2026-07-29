@@ -1,0 +1,32 @@
+test/integration/email_notifications_test.rb
+  s_e9ed806a3d225c::t_24c047fb9929cd 127-132
+  s_e9ed806a3d225c::t_d2fb1d8fa41ef6 116,122,126
+app/views/event_mailer/ticket_purchased.text.erb
+  s_e9ed806a3d225c::t_85a08b0fb9794e 1-8
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_6d1803434c04e0 16,25-26
+  s_e9ed806a3d225c::t_892714d7b7e663 27-29
+  s_e9ed806a3d225c::t_300d07c7f714b4 14,17-18
+app/mailers/event_mailer.rb
+  s_e9ed806a3d225c::t_b94c285cadf681 14-26
+app/models/ticket_item.rb
+  s_e9ed806a3d225c::t_b9b5d1b1a13b3f 54,60,62-64
+app/views/event_mailer/ticket_purchased.html.erb
+  s_e9ed806a3d225c::t_0d925951a7f16e 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "772bae11acc9a7b0318bd30793933903e8cb472b",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
