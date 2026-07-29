@@ -1,0 +1,32 @@
+app/models/application_record.rb
+  s_e9ed806a3d225c::t_8be202b5dfbdfa 6-24
+app/controllers/api/v1/badge_classes_controller.rb
+  s_e9ed806a3d225c::t_517d24bf35e051 62
+app/controllers/api/v1/badges_controller.rb
+  s_e9ed806a3d225c::t_517d24bf35e051 99
+app/controllers/api/v1/calendars_controller.rb
+  s_e9ed806a3d225c::t_4e3b2a820023e9 10
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_cd9ae111b25699 107
+app/controllers/api/v1/vouchers_controller.rb
+  s_e9ed806a3d225c::t_517d24bf35e051 156
+test/controllers/api/legacy_id_test.rb
+  s_e9ed806a3d225c::t_02510430315d0c 1-56,59-86
+  s_e9ed806a3d225c::t_b7ef01567575aa 57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "9b96840055b383f8a22a1dd3998834e9d9c3ffa9",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
