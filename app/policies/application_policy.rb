@@ -21,7 +21,7 @@ class ApplicationPolicy
   end
 
   def group_admin?(group)
-    user&.memberships&.exists?(group: group, role: %w[admin owner])
+    user&.memberships&.exists?(group: group, role: %w[manager owner])
   end
 
   def group_member?(group)

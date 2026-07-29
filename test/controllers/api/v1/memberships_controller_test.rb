@@ -67,12 +67,12 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     create_membership(user: member, group: group, role: "member")
     membership = group.memberships.find_by(user: member)
 
-    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "admin" } }, headers: auth_headers(member)
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "manager" } }, headers: auth_headers(member)
     assert_response :forbidden
 
-    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "admin" } }, headers: auth_headers(owner)
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "manager" } }, headers: auth_headers(owner)
     assert_response :success
-    assert_equal "admin", membership.reload.role
+    assert_equal "manager", membership.reload.role
   end
 
   test "update rejects an invalid role value" do
@@ -126,7 +126,7 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     admin = create_user
     target = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
 
     post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "owner" }, headers: auth_headers(admin)
     assert_response :forbidden
@@ -137,19 +137,19 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     membership = group.memberships.find_by(user: admin)
 
     patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}", params: { membership: { role: "owner" } }, headers: auth_headers(admin)
     assert_response :forbidden
-    assert_equal "admin", membership.reload.role
+    assert_equal "manager", membership.reload.role
   end
 
   test "update forbids a non-owner admin from demoting the owner" do
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     owner_membership = group.memberships.find_by(user: owner)
 
     patch "/api/v1/groups/#{group.id}/memberships/#{owner_membership.id}", params: { membership: { role: "member" } }, headers: auth_headers(admin)
@@ -198,7 +198,7 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     admin = create_user
     target = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
 
     post "/api/v1/groups/#{group.id}/memberships", params: { user_id: target.id, role: "member" }, headers: auth_headers(admin)
     assert_response :created
@@ -213,7 +213,7 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     owner_membership = group.memberships.find_by(user: owner)
 
     delete "/api/v1/groups/#{group.id}/memberships/#{owner_membership.id}", headers: auth_headers(admin)

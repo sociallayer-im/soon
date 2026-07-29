@@ -97,7 +97,7 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     admin = create_user
     receiver = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     bc = create_badge_class(creator: owner, group: group)
 
     post "/api/v1/vouchers/send_badge", params: { badge_class_id: bc.id, receivers: [receiver.name] }, headers: auth_headers(admin)
@@ -378,13 +378,13 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     claimer = create_user
     group = create_group(owner: creator)
     bc = create_badge_class(creator: creator, group: group, permissions: ["group_member_pass"])
-    create_membership(user: claimer, group: group, role: "admin")
+    create_membership(user: claimer, group: group, role: "manager")
     voucher = create_voucher(sender: creator, badge_class: bc, strategy: "code", code: "SECRET1", counter: 1)
 
     post "/api/v1/vouchers/#{voucher.id}/use", params: { code: "SECRET1" }, headers: auth_headers(claimer)
     assert_response :success
     # find_or_create_by must not touch the existing admin role
-    assert_equal "admin", group.memberships.find_by(user: claimer).role
+    assert_equal "manager", group.memberships.find_by(user: claimer).role
   end
 
   # ---------- get_code ----------

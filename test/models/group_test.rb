@@ -19,10 +19,10 @@ class GroupTest < ActiveSupport::TestCase
     assert_equal 1, group.reload.memberships_count
 
     assert_no_difference "group.memberships.count" do
-      group.add_member(user.id, "admin")
+      group.add_member(user.id, "manager")
     end
     assert_equal 1, group.reload.memberships_count
-    assert_equal "admin", group.memberships.find_by(user: user).role
+    assert_equal "manager", group.memberships.find_by(user: user).role
   end
 
   test "add_member raises on an invalid role and does not increment memberships_count" do

@@ -27,7 +27,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     event = create_event(group: group, owner: owner, require_approval: true)
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(admin)
@@ -159,7 +159,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     admin = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     event = create_event(group: group, owner: owner, require_approval: true)
     participant = create_participant(event: event, user: attendee, status: "pending")
 

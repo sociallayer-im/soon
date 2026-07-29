@@ -45,7 +45,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
     event = create_event(group: group, owner: owner)
     target = create_user
 

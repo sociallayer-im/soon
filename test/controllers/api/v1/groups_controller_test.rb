@@ -103,7 +103,7 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     admin = create_user
     group = create_group(owner: owner)
-    create_membership(user: admin, group: group, role: "admin")
+    create_membership(user: admin, group: group, role: "manager")
 
     patch "/api/v1/groups/#{group.id}", params: { group: { nickname: "By Admin" } }, headers: auth_headers(admin)
     assert_response :success

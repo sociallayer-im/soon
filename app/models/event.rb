@@ -33,7 +33,7 @@ class Event < ApplicationRecord
   # everyone, plus anything they own or manage (group admin/owner). Callers still
   # scope by group membership on top of this.
   scope :visible_to, ->(user) {
-    managed = Membership.where(user_id: user&.id, role: %w[admin owner]).select(:group_id)
+    managed = Membership.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
     where(
       "(events.visibility = 'public' AND events.status NOT IN ('draft', 'archived')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed)",

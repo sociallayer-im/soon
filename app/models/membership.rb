@@ -6,5 +6,5 @@ class Membership < ApplicationRecord
   belongs_to :group, counter_cache: :memberships_count
 
   validates :user_id, uniqueness: { scope: :group_id, message: "can only join a group once" }
-  validates :role, inclusion: { in: %w(member admin owner) }
+  validates :role, inclusion: { in: %w(member manager owner) }
 end

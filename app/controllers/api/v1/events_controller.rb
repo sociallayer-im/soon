@@ -85,7 +85,7 @@ class Api::V1::EventsController < Api::BaseController
   # GET /api/v1/events/pending_approval — events awaiting review in groups the
   # caller manages (the dashboard inbox).
   def pending_approval
-    managed = current_user.memberships.where(role: %w[admin owner]).select(:group_id)
+    managed = current_user.memberships.where(role: %w[manager owner]).select(:group_id)
     scope = Event.includes(:group, :place, :venue, :owner, :track)
                  .where(status: "pending", group_id: managed).order(:start_time)
     render_collection scope, blueprint: EventBlueprint

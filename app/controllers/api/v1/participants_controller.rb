@@ -20,7 +20,7 @@ class Api::V1::ParticipantsController < Api::BaseController
       end
     end
 
-    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[admin owner])
+    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
     status = params.dig(:participant, :status) || "attending"
     status = "pending" if (@event.require_approval || @event.form_id.present?) && !is_manager
 

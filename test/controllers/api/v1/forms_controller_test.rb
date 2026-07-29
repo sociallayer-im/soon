@@ -280,7 +280,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     admin = create_user
-    create_membership(user: admin, group: @group, role: "admin")
+    create_membership(user: admin, group: @group, role: "manager")
     get "/api/v1/events/#{@event.id}/form/submission",
       params: { user_id: joiner.id }, headers: auth_headers(admin)
     assert_response :success
