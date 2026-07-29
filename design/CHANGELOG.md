@@ -59,6 +59,12 @@ docs; this entry is the fix summary.
   on nested tickets (no `view: :extended` passed to the association/render) —
   every ticket showed as "paid" in the event editor regardless of actual
   price, and editing a paid ticket lost its payment methods on load.
+- **`VenueBlueprint` was missing `require_approval`/`group_id`/`image_urls`/
+  `track_ids`/`archived`** — all writable via `venue_params`, never exposed on
+  read. Worse than a display gap: seastar-app's venue edit form hydrates its
+  draft straight from the GET response and saves the whole draft back on
+  update, so every edit of an existing venue silently wiped these fields to
+  blank/false/[] even when the user never touched them.
 - **Frontend**: `admin` → `manager` Membership-role rename (landed backend-side
   earlier) wasn't finished on the seastar-app `soon` branch — `addManager`
   sent the dead role string (422 every time), two group-picker filters
