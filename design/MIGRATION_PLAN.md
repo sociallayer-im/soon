@@ -596,12 +596,30 @@ groups 用 slug 寻址，slug 跨迁移不变，无需处理。
 （"cybernetic economy for the AI Age"），日志里其余 7 个整数 ID 全部恢复 200，
 TSID 照常工作，不存在的 ID 仍正确 404。
 
-### 仍未处理的旧路由 404
+### 旧路由 404 的处理
 
 同一批日志里还有几个 sails 时代的路径被请求：`/comment/list`（4 次）、
 `/api/event/list`（2 次）、`/group/icalendar`（1 次）、`/event/discover`（1 次）。
-其中 **`/group/icalendar` 是日历订阅**——用户在 Apple Calendar / Google
-里订阅过的 URL 现在失效了，soon 的等价路径是
-`/api/v1/groups/:id/calendar.ics`。这类旧路径兼容属于 §9 已知并接受的破坏
-（sola-cli / dashboard 后续迁移），但日历订阅是普通用户可见的，值得单独决定
-是否加一层重定向。
+
+**`/group/icalendar` 已修复**（`Api::V1::CalendarsController#legacy_group`）。
+它和其他旧路由性质不同：订阅 URL 存在用户的 Apple Calendar / Google /
+Outlook 里，发出去就再也改不了，所以这条路径要**长期保留**而不只是过渡；
+而且它是静默失败的——订阅者只会看到日历悄悄不再更新，永远不会收到报错，
+也就不会有人来报。日志里那个 404 是唯一的发现途径。
+
+路由挂在 `/api/v1` 命名空间之外（因为订阅 URL 就长在那个位置），接受 sails
+的 `group_name`（slug）和 `group_id`（整数）两种参数，输出与
+`/api/v1/groups/:id/calendar.ics` **逐字节相同**。同时 `Group.resolve!` 也加了
+数字标识符回退到 `ref_id`，顺带让 `/api/v1/groups/<旧整数id>` 可用。
+
+UID 仍用 soon 的 `event-<tsid>@host` 而非 sails 的 `sola-<整数>`：订阅日历是
+整份 feed 同步的，换 UID 只会让客户端替换一次条目，这比为同一批活动维持
+两套 UID 方案要好。
+
+生产验证：`?group_name=edgeesmeralda`、`?group_id=3409`、
+`/api/v1/groups/3409/calendar.ics`、`/api/v1/groups/edgeesmeralda/calendar.ics`
+四种寻址全部 200，未知 group 正确 404。
+
+其余三个（`/comment/list`、`/api/event/list`、`/event/discover`）仍属 §9
+已知并接受的破坏——它们来自 sola-cli / dashboard 这类会报错、有人看得见的
+调用方，后续随那些项目一起迁移。
