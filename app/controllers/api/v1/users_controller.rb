@@ -22,7 +22,10 @@ class Api::V1::UsersController < Api::BaseController
     user = User.resolve!(params[:id])
     scope = user.memberships.joins(:group).includes(:group).where(active: true, groups: { active: true })
     scope = scope.where(role: params[:role].to_s.split(",")) if params[:role].present?
-    render json: MembershipBlueprint.render(scope.order(:created_at), view: :with_group)
+    # sails' equivalent (`Group.where(id: ...)`) returns rows in the GROUP's
+    # own primary-key order — i.e. when each group was created — not when
+    # this user joined it. Match that: order by the group, not the membership.
+    render json: MembershipBlueprint.render(scope.order("groups.created_at ASC"), view: :with_group)
   end
 
   def update

@@ -133,4 +133,18 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/users/#{user.id}/groups"
     assert_response :success
   end
+
+  test "groups orders by when the group was created, not when the user joined it" do
+    user = create_user
+    older_group = create_group(created_at: 2.days.ago)
+    newer_group = create_group(created_at: 1.day.ago)
+    # join the newer group first, so a join-time sort would list them reversed
+    create_membership(user: user, group: newer_group, created_at: 2.hours.ago)
+    create_membership(user: user, group: older_group, created_at: 1.hour.ago)
+
+    get "/api/v1/users/#{user.id}/groups"
+    assert_response :success
+    ids = json_response.map { |m| m["group"]["id"] }
+    assert_equal [older_group.id, newer_group.id], ids
+  end
 end

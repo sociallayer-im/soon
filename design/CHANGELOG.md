@@ -23,6 +23,12 @@ local equivalent.
   production. Fixed by switching `getBadgesByOwnerName`/
   `getBadgeClassesByCreatorName` (sola-sdk) to `requestAllPages` instead of
   reading only page 1.
+- **Groups tab (order)**: sails' `Group.where(id: role_by_group.keys)` returns
+  rows in the *group's own* primary-key order (creation order), independent
+  of when the viewed user joined each one. soon ordered by
+  `memberships.created_at` (join time) instead — a different sort key that
+  produces a different order whenever join order and group-creation order
+  diverge. Fixed to order by `groups.created_at` instead.
 - **Badges tab (order)**: neither `badges_controller#index` nor
   `badge_classes_controller#index` had an explicit `ORDER BY` — both relied
   on implicit DB row order, which is not guaranteed and legitimately
