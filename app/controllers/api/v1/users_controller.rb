@@ -27,7 +27,7 @@ class Api::V1::UsersController < Api::BaseController
     # (an artifact of `Group.where(id: ...)`'s natural PK order, not a
     # deliberate choice), but join time is the more sensible sort for "this
     # person's communities" and is what we intentionally keep here.
-    render json: MembershipBlueprint.render(scope.order(:created_at), view: :with_group)
+    render json: MembershipBlueprint.render(scope.order(created_at: :asc, id: :asc), view: :with_group)
   end
 
   def update

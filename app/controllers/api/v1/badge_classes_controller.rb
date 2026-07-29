@@ -34,7 +34,9 @@ class Api::V1::BadgeClassesController < Api::BaseController
     scope = scope.where(badge_type: params[:badge_type]) if params[:badge_type].present?
     scope = scope.joins(:creator).where(users: { name: params[:creator_handle] }) if params[:creator_handle].present?
     scope = scope.joins(:group).where(groups: { name: params[:group_handle] }) if params[:group_handle].present?
-    render_collection scope.order(created_at: :desc), blueprint: BadgeClassBlueprint
+    # See badges_controller#index: created_at alone isn't a stable sort key,
+    # and ties would shuffle between pages under requestAllPages.
+    render_collection scope.order(created_at: :desc, id: :asc), blueprint: BadgeClassBlueprint
   end
 
   # GET /api/v1/badge_classes/by_user

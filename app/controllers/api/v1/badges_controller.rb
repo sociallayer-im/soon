@@ -18,7 +18,12 @@ class Api::V1::BadgesController < Api::BaseController
     end
     badges = badges.joins(:owner).where(users: { name: params[:owner_handle] }) if params[:owner_handle].present?
     badges = badges.where(badge_class_id: params[:badge_class_id]) if params[:badge_class_id].present?
-    render_collection badges.includes(:badge_class, :creator, :owner).order(created_at: :desc), blueprint: BadgeBlueprint
+    # created_at alone isn't a stable sort key — many rows share an identical
+    # timestamp (e.g. everything the migration backfilled with `NOW`), and an
+    # undecided tiebreak would let ties shuffle between pages, causing
+    # requestAllPages callers to see duplicate/missing rows across pages.
+    render_collection badges.includes(:badge_class, :creator, :owner).order(created_at: :desc, id: :asc),
+      blueprint: BadgeBlueprint
   end
 
   # PATCH /api/v1/badges/:id
