@@ -468,8 +468,46 @@ ETL 的 `req:` 检查作用于**映射后**的值，所以源库中「非 NULL �
 
 soon 容器内存 **268MB / 640MB 上限**，机器可用内存 ~1GB，Puma 已是 single mode。
 
-### 下一步（待确认）
+### 阶段 C 第一次尝试：已中止并回滚（2026-07-29 18:02–18:07 UTC）
 
-- [ ] 前端指向 soon-api.sola.day 完整过一遍主流程（登录、建活动、报名、
-      群组管理、徽章、售票）——把前端集成从代码审查变成实测
-- [ ] 阶段 C 正式窗口
+冻结窗口 **4 分 45 秒**（凌晨低谷），已完全解冻，生产恢复正常。
+
+流水线本身全部成功，问题出在基础设施容量：
+
+| 步骤 | 结果 |
+|---|---|
+| 12 开冻结 | ✅ 写接口 503，读接口 200 |
+| 13 [1] 生产 dump | ✅ 18 秒 / 67MB |
+| 13 [2] restore 本地镜像 | ✅ 4 秒 |
+| 13 [3] ETL | ✅ 32 秒 |
+| 14 本地校验 | ✅ 38 PASS / 0 FAIL |
+| 13 [5] 导入 PlanetScale | ❌ **连接槽耗尽** |
+
+**根因：实例 `max_connections = 25`，其中 3 个保留给 superuser，可用 22。**
+当时分布：`loop_prod` **10（全部 idle）**、后台 9、`sola_sails_db` 5、
+`postgres` 2、`sola_soon_db` 2、`pscale_exporter` 1。`pg_restore -j 4` 再要
+4 个直接打爆。
+
+这是选择"在 sails 现有实例上 `CREATE DATABASE`"而非独立托管库所带来的代价——
+连接预算是**整个实例共享的**，包括正在服务线上流量的 sails 库。
+
+`-j 1` 单连接重试成功（49 秒）。schema 对象数与本地 stage 完全一致
+（36 表 / 152 索引 / 279 约束），对生产库跑校验 38 PASS / 0 FAIL，
+soon-api 已恢复服务。**所以数据导入不是真正的阻塞点。**
+
+**真正的阻塞点是切换后的稳态容量**：soon 承接全量流量需要约 6 个连接
+（`RAILS_MAX_THREADS 3` + `GOOD_JOB_MAX_THREADS 3` + 2），加上 sails 的 5、
+`loop_prod` 的 10、系统的 3，合计约 24 > 可用的 22。切过去会在生产上
+撞到 "remaining connection slots" 错误。
+
+### 待决策：连接容量（阻塞阶段 C）
+
+| 方案 | 效果 | 代价 |
+|---|---|---|
+| A. 降低 `loop_prod` 连接池 | 释放最多 10 个槽，是最大单一消费者且**全部 idle** | 那是另一个应用，需要评估其真实需求 |
+| B. soon 迁到独立 PlanetScale 库 | 独立连接预算，彻底隔离；本来就是最初的推荐方案 | 需要 `pscale auth login`（交互式），新凭据 |
+| C. 提升实例规格 / `max_connections` | 直接解决 | PlanetScale 控制台操作，可能涉及费用 |
+| D. 走 6432 连接池端点 | 已验证可连 | **GoodJob 依赖 LISTEN 和 session 级 advisory lock，transaction 池化模式下会坏**；只让 Web 走池、GoodJob 走直连是可行的，但迁移前引入这种复杂度风险高 |
+
+无论选哪个，都应顺带把 `GOOD_JOB_MAX_THREADS` 降到 1 —— soon 的异步任务
+目前只有事务性邮件，3 个线程是浪费，降到 1 可省 2 个连接。
