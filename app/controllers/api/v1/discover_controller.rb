@@ -17,8 +17,7 @@ class Api::V1::DiscoverController < Api::BaseController
   def index
     featured = Group.where(active: true).where("group_tags && ARRAY['featured','top']::varchar[]")
                     .order(:created_at).limit(20)
-    popups = Group.with_detail_associations
-                  .where(active: true).where("group_tags && ARRAY['top']::varchar[]")
+    popups = Group.where(active: true).where("group_tags && ARRAY['top']::varchar[]")
                   .where.not("group_tags && ARRAY['hidden']::varchar[]")
                   .order(start_date: :desc).limit(50)
     events = Event.includes(:group, :place, :venue, :owner, :track)
@@ -27,7 +26,7 @@ class Api::V1::DiscoverController < Api::BaseController
 
     render json: {
       groups: JSON.parse(GroupBlueprint.render(featured)),
-      popup_cities: JSON.parse(GroupBlueprint.render(popups, view: :detail)),
+      popup_cities: JSON.parse(GroupBlueprint.render(popups, view: :card)),
       events: JSON.parse(EventBlueprint.render(events))
     }
   end

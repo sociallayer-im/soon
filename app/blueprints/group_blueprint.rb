@@ -4,14 +4,24 @@ class GroupBlueprint < Blueprinter::Base
   # Default view stays light — it's embedded in events, invites, tracks, etc.
   fields :name, :nickname, :image_url, :logo_url, :created_at
 
-  # Full group-page payload: everything the frontend group/popup-city pages
-  # render, plus sub-resources (memberships, tracks, venues, parent/children).
-  view :detail do
+  # Every scalar a group page or popup-city card needs, and no sub-resources.
+  # Use this for LISTS. :detail on a list embeds each group's whole membership
+  # roster: the homepage's 21 popup cities carry 2407 memberships between them,
+  # which is a 726KB response against sails' 16KB for the same page — and the
+  # consumer (sola-sdk popup_city.ts toPopupCity) reads only scalars.
+  view :card do
     fields :bio, :location, :timezone, :start_date, :end_date, :active,
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
            :can_publish_event, :can_join_event, :can_view_event,
            :memberships_count, :events_count, :parent_id
+  end
+
+  # Full group-page payload: the card fields plus sub-resources. Only ever
+  # render this for a SINGLE group, and off Group.with_detail_associations —
+  # the associations below are a per-record N+1 otherwise.
+  view :detail do
+    include_view :card
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint
