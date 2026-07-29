@@ -30,6 +30,22 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 50, json_response["capacity"]
   end
 
+  test "show returns require_approval/group_id/image_urls/track_ids/archived — the edit form hydrates from these" do
+    owner = create_user
+    group = create_group(owner: owner)
+    track = create_track(group: group)
+    venue = create_venue(group: group, owner: owner, require_approval: true,
+      image_urls: ["https://example.com/a.png"], track_ids: [track.id])
+
+    get "/api/v1/venues/#{venue.id}", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal true, json_response["require_approval"]
+    assert_equal group.id, json_response["group_id"]
+    assert_equal ["https://example.com/a.png"], json_response["image_urls"]
+    assert_equal [track.id], json_response["track_ids"]
+    assert_equal false, json_response["archived"]
+  end
+
   test "show 404s for an unknown id" do
     user = create_user
     get "/api/v1/venues/does-not-exist", headers: auth_headers(user)
