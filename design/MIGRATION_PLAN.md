@@ -511,3 +511,68 @@ soon-api 已恢复服务。**所以数据导入不是真正的阻塞点。**
 
 无论选哪个，都应顺带把 `GOOD_JOB_MAX_THREADS` 降到 1 —— soon 的异步任务
 目前只有事务性邮件，3 个线程是浪费，降到 1 可省 2 个连接。
+
+### 容量问题的解决（方案 A）
+
+`loop_prod` 是 **Elixir/Phoenix** 应用（`sola-loop/loop-backend`），Ecto 的
+`pool_size` 默认就是 10，在启动时一次性建满并靠定时保活维持。采样确认：
+10 个连接完全同步地每 2 秒变一次状态，其中 9 个的 `query` 始终为空——
+从未跑过应用查询。`config/runtime.exs:47` 已经是 `System.get_env("POOL_SIZE")`
+驱动，所以只需加环境变量，无需改代码。设 `POOL_SIZE=3` 后释放 7 个槽，
+loop-api 与 loop.sola.day 均保持 200。
+
+同时把 soon 的 `GOOD_JOB_MAX_THREADS` 从 3 降到 1（连接池 8 → 6）。
+
+非后台连接从 20 降到 13–15，可用 22。
+
+## 11. 切换完成（2026-07-29 18:18–18:39 UTC）
+
+| 步骤 | 时刻 UTC | 结果 |
+|---|---|---|
+| 开冻结 | 18:18 | 写 503 / 读 200 |
+| 生产 dump | 18:19 | 19 秒 |
+| 本地 restore + ETL | 18:19–18:20 | 35 秒 |
+| 本地校验 | 18:20 | 38 PASS / 0 FAIL |
+| 重建并导入 `sola_soon_db` | 18:20–18:21 | 44 秒（`-j 1` 单连接） |
+| 对生产库校验 | 18:21 | 38 PASS / 0 FAIL，schema 对象 36/152/279 全等 |
+| sails 释放 api.sola.day | 18:22 | 转到 sails-old.sola.day |
+| soon 接管 api.sola.day | 18:23 | 旧路由 404、`/api/v1/` 200 |
+| 前端部署 | 18:24–18:38 | 两个 Next.js 镜像构建 |
+| 生产冒烟 | 18:39 | 全绿 |
+
+**终态**：`api.sola.day` → soon；`app.sola.day` / `auth.sola.day` → 新前端；
+sails 仍在运行且保持冻结，经 `sails-old.sola.day` 可直达（回滚通路）。
+首页 161KB 渲染出真实数据，登录端点（`auth/nonce` / `request_code` /
+`verify_code`）行为正确，legacy sails token 认证通过。
+连接占用 13 / 22。
+
+### 这次窗口暴露的流程缺陷
+
+**前端镜像应当在窗口开始之前就构建好。** 18:24–18:38 这 14 分钟里，
+`api.sola.day` 已经是 soon，而 `app.sola.day` 上跑的还是对着 sails API 写的
+旧前端——这段时间前端是坏的。写接口从 18:23 起就可用了，真正的用户可见
+中断是这 14 分钟的前后端不匹配，而不是 5 分钟的写冻结。
+
+下次（或国内站迁移时）：**先 `ginger deploy` 构建并推送前端镜像到 registry，
+窗口内只做 `--skip-push` 的滚动**，可把这段压到 1 分钟以内。
+
+### 切换后：loop 已停机
+
+按运维决定，`loop-app-web` 与 `loop-backend-web` 两个 job 已 `ginger remove`
+下线（`loop.sola.day` / `loop-api.sola.day` 现返回 404）。这让先前的
+`POOL_SIZE=3` 调整变成历史记录——loop 重新上线时那个设置仍然有效且仍然正确。
+
+腾出的资源：非后台连接 **10 / 22**，服务器可用内存 1136MB。
+
+### 观察期（7 天）
+
+- sails 容器与 `sola_sails_db` **原样保留、不动**，冻结开关保持开启。
+  经 `sails-old.sola.day` 可直达，是回滚通路。
+- 每日检查 soon 日志、GoodJob 失败任务、内存水位（`free -m`）、
+  连接数（应稳定在 ~10/22）。
+- 7 天无恙后再下线 sails 容器（镜像与数据库仍保留）。
+
+**回滚边界提醒**：切换后已有用户写入 soon，反向 ETL 不存在
+（TSID 转不回整数、合并掉的 66 个身份拆不开），所以整体回切 sails
+等于放弃切换后产生的全部数据。镜像层面的回滚（`ginger rollback`）
+仍然可用，那解决的是"soon 新镜像有 bug"，不是"切回 sails"。
