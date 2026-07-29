@@ -11,15 +11,22 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
   test "rsvp on a free ticket succeeds immediately with amount 0" do
     ticket = create_ticket(event: @event)
-    buyer = create_user
+    buyer = create_user(email: "buyer@test.com")
 
-    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_enqueued_emails 1 do
+      post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    end
     assert_response :success
 
     assert_equal "succeeded", json_response["ticket_item"]["status"]
     assert_equal 0, json_response["ticket_item"]["amount"]
     assert_equal "attending", json_response["participant"]["status"]
     assert_equal "succeeded", json_response["participant"]["payment_status"]
+
+    participant = Participant.find(json_response["participant"]["id"])
+    job = enqueued_jobs.find { |j| j[:args][1] == "ticket_purchased" }
+    assert job, "expected EventMailer#ticket_purchased to be enqueued"
+    assert_equal participant.id, job[:args][3]["args"][0]["participant_id"]
   end
 
   test "rsvp rolls back atomically when a later step fails after the ticket_item saved" do

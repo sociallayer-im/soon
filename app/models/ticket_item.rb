@@ -51,15 +51,17 @@ class TicketItem < ApplicationRecord
     attrs[:txhash] = txhash if txhash.present?
     attrs[:sender_address] = sender_address if sender_address.present?
 
+    newly_paid = participant && participant.payment_status != "succeeded"
     transaction do
       update!(attrs)
       if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
         group.add_member(user_id, "member")
       end
-      if participant && participant.payment_status != "succeeded"
-        participant.update!(payment_status: "succeeded")
-      end
+      participant.update!(payment_status: "succeeded") if newly_paid
     end
+    # Only on the first confirmation — a repeat webhook/callback for an
+    # already-succeeded purchase shouldn't re-email the buyer.
+    EventMailer.ticket_purchased(participant_id: participant.id).deliver_later if newly_paid
     notify_group_owner
   end
 

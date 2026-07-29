@@ -1,0 +1,20 @@
+<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">You're confirmed 🎉</h1>
+<p style="margin: 0 0 16px; color: #4b5563;">
+  Your ticket for <strong><%= @event.title %></strong> is confirmed. We've attached a calendar
+  invite to this email.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 16px;">
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">When</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %></td>
+  </tr>
+  <% if @event.location_text.present? %>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Where</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.location_text %></td>
+  </tr>
+  <% end %>
+</table>
+
+<%= cta_button "View event", "#{MailerHelper::WEB_URL}/event/detail/#{@event.id}" %>

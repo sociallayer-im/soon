@@ -1,0 +1,8 @@
+You're confirmed
+
+Your ticket for <%= @event.title %> is confirmed. A calendar invite is attached.
+
+When: <%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %>
+<% if @event.location_text.present? %>Where: <%= @event.location_text %>
+<% end %>
+View event: <%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>

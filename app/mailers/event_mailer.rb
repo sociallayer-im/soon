@@ -11,6 +11,19 @@ class EventMailer < ApplicationMailer
     mail(to: recipient, subject: "You're in! — #{@event.title}")
   end
 
+  # A ticket purchase (paid or free, via TicketsController#rsvp) just succeeded —
+  # confirms to the buyer, distinct from participant_approved's "your
+  # application was approved" copy, which doesn't fit a direct ticket purchase.
+  def ticket_purchased(participant_id:)
+    @participant = Participant.find(participant_id)
+    @event = @participant.event
+    recipient = @participant.user&.email
+    return if recipient.blank?
+
+    attach_invite(recipient, method: "REQUEST")
+    mail(to: recipient, subject: "You're confirmed — #{@event.title}")
+  end
+
   # A pending applicant was declined.
   def participant_rejected(participant_id:)
     @participant = Participant.find(participant_id)

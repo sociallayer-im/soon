@@ -113,15 +113,22 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
 
   # ---- group ticket purchase (deliver_later) ----
 
-  test "buying a group ticket notifies the group owner" do
+  test "buying a group ticket notifies the group owner and confirms the buyer" do
     event = create_event(group: @group, owner: @owner)
     event.update_column(:kind, "group_ticket")
     ticket = create_ticket(event: event) # free -> succeeds immediately, ticket_type group
     buyer = create_user
 
-    assert_enqueued_emails 1 do
+    assert_enqueued_emails 2 do
       post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
     end
     assert_response :success
+
+    # Both mailers happen to share the method name "ticket_purchased" — assert
+    # on the (mailer class, action) pair so this doesn't silently pass if one
+    # of the two stops firing.
+    mailer_calls = enqueued_jobs.select { |j| j[:job] == ActionMailer::MailDeliveryJob }.map { |j| j[:args][0..1] }
+    assert_includes mailer_calls, ["EventMailer", "ticket_purchased"], "expected the buyer confirmation email"
+    assert_includes mailer_calls, ["GroupMailer", "ticket_purchased"], "expected the group owner notification email"
   end
 end
