@@ -1,0 +1,21 @@
+app/blueprints/venue_blueprint.rb
+  s_e9ed806a3d225c::t_6e8f88245254e8 4-5
+test/controllers/api/v1/venues_controller_test.rb
+  s_e9ed806a3d225c::t_7aacfb4c1f3ba9 33-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "cbb66f6e1a3745dccf0cefa55db2e08f136961f2",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
