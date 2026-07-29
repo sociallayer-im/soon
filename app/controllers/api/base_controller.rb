@@ -16,9 +16,8 @@ class Api::BaseController < ActionController::API
   private
 
   def authenticate!
-    token = request.headers["Authorization"]&.split(" ")&.last
-    payload = JwtService.decode(token)
-    @current_user = User.find(payload["user_id"])
+    payload = JwtService.decode(bearer_token)
+    @current_user = user_from_payload(payload) or raise ActiveRecord::RecordNotFound
   rescue JwtService::Error, ActiveRecord::RecordNotFound
     render json: { error: "Unauthorized" }, status: :unauthorized
   end
@@ -27,12 +26,29 @@ class Api::BaseController < ActionController::API
   # lists with attendance flags): sets current_user on a valid token, stays
   # anonymous otherwise — never 401s. Pair with skip_before_action :authenticate!.
   def authenticate_optional!
-    token = request.headers["Authorization"]&.split(" ")&.last
+    token = bearer_token
     return if token.blank?
-    payload = JwtService.decode(token)
-    @current_user = User.find_by(id: payload["user_id"])
+    @current_user = user_from_payload(JwtService.decode(token))
   rescue JwtService::Error
     @current_user = nil
+  end
+
+  def bearer_token
+    request.headers["Authorization"]&.split(" ")&.last
+  end
+
+  # soon mints {"user_id" => <tsid>}. The legacy sails backend minted
+  # {"id" => <integer profile id>} with no `exp`, and those tokens are still in
+  # users' browsers at cutover — without this fallback every signed-in user is
+  # logged out the moment api.sola.day switches over. `users.ref_id` holds the
+  # legacy integer id (populated by script/migrate_from_sails.rb) and carries a
+  # partial index. Remove once legacy tokens have aged out.
+  def user_from_payload(payload)
+    if (id = payload["user_id"]).present?
+      User.find_by(id: id)
+    elsif (legacy_id = payload["id"]).present?
+      User.find_by(ref_id: legacy_id.to_s)
+    end
   end
 
   def current_user
