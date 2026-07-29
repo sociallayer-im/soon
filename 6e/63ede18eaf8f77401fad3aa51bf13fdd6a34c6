@@ -1,0 +1,26 @@
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_47bf3b751888c4 141-148
+  s_e9ed806a3d225c::t_bcf50e86dbc756 13-24
+  s_e9ed806a3d225c::t_6bdcd6bedce39b 69-72,76-80
+.env.example
+  s_e9ed806a3d225c::t_2689d8c109c0bc 5-8
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_d96d16c8ebfceb 13,15
+  s_e9ed806a3d225c::t_71efe9faba38fa 99-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "6e63ede18eaf8f77401fad3aa51bf13fdd6a34c6",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
