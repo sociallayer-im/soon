@@ -34,7 +34,7 @@ class Api::V1::BadgeClassesController < Api::BaseController
     scope = scope.where(badge_type: params[:badge_type]) if params[:badge_type].present?
     scope = scope.joins(:creator).where(users: { name: params[:creator_handle] }) if params[:creator_handle].present?
     scope = scope.joins(:group).where(groups: { name: params[:group_handle] }) if params[:group_handle].present?
-    render_collection scope, blueprint: BadgeClassBlueprint
+    render_collection scope.order(created_at: :desc), blueprint: BadgeClassBlueprint
   end
 
   # GET /api/v1/badge_classes/by_user

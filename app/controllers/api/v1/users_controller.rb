@@ -20,7 +20,7 @@ class Api::V1::UsersController < Api::BaseController
   # memberships (their profile page's "communities"), optionally by role.
   def groups
     user = User.resolve!(params[:id])
-    scope = user.memberships.includes(:group).where(active: true)
+    scope = user.memberships.joins(:group).includes(:group).where(active: true, groups: { active: true })
     scope = scope.where(role: params[:role].to_s.split(",")) if params[:role].present?
     render json: MembershipBlueprint.render(scope.order(:created_at), view: :with_group)
   end

@@ -93,4 +93,44 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [badge.id], json_response["data"].map { |b| b["id"] }
   end
+
+  test "groups lists a user's active memberships in active groups" do
+    user = create_user
+    active_group = create_group(owner: user)
+
+    get "/api/v1/users/#{user.id}/groups"
+    assert_response :success
+    ids = json_response.map { |m| m["group"]["id"] }
+    assert_equal [active_group.id], ids
+  end
+
+  test "groups excludes memberships in a deactivated (frozen) group" do
+    user = create_user
+    active_group = create_group(owner: user)
+    frozen_group = create_group(owner: user, active: false)
+
+    get "/api/v1/users/#{user.id}/groups"
+    assert_response :success
+    ids = json_response.map { |m| m["group"]["id"] }
+    assert_equal [active_group.id], ids
+    assert_not_includes ids, frozen_group.id
+  end
+
+  test "groups excludes an inactive membership" do
+    user = create_user
+    group = create_group
+    create_membership(user: user, group: group, active: false)
+
+    get "/api/v1/users/#{user.id}/groups"
+    assert_response :success
+    assert_empty json_response
+  end
+
+  test "groups does not require authentication" do
+    user = create_user
+    create_group(owner: user)
+
+    get "/api/v1/users/#{user.id}/groups"
+    assert_response :success
+  end
 end

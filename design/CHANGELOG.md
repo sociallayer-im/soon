@@ -2,7 +2,51 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — homepage popup-city list wasn't curated, and its card image was wrong
+## 2026-07-29 (latest) — profile page's groups/badges tabs diverged from production
+
+Diffed `app.sola.day/profile/jiang?tab=groups`/`?tab=badges` against the
+local equivalent.
+
+- **Groups tab**: `UsersController#groups` filtered `Membership#active`
+  but never checked `Group#active`, so a group frozen/deactivated by an
+  admin (sails: `status == 'freezed'`) kept appearing in a user's Groups
+  tab locally, though sails' `profile#groups` explicitly excludes it. The
+  `groups.active` column was already populated correctly by
+  `migrate_from_sails.rb` — the controller just never read it. Fixed by
+  joining and filtering on `groups: { active: true }`.
+- **Badges tab (count)**: `BadgesController#index`/`BadgeClassesController#index`
+  go through `render_collection`, which paginates at 20/page (Pagy) by
+  default. sails' `badge#list` has no limit at all (returns every minted
+  badge); `badge_class#list` hard-caps at 20 with no offset/paging. Since
+  the sola-sdk badge calls never requested extra pages, profiles with more
+  than 20 badges/badge-classes silently showed fewer locally than on
+  production. Fixed by switching `getBadgesByOwnerName`/
+  `getBadgeClassesByCreatorName` (sola-sdk) to `requestAllPages` instead of
+  reading only page 1.
+- **Badges tab (order)**: neither `badges_controller#index` nor
+  `badge_classes_controller#index` had an explicit `ORDER BY` — both relied
+  on implicit DB row order, which is not guaranteed and legitimately
+  differs between two separately-populated databases (sails' original data
+  vs soon's freshly-migrated copy). Added `.order(created_at: :desc)` to
+  both, matching the pattern already used by `vouchers_controller`/
+  `comments_controller`/`activities_controller`.
+
+## 2026-07-29 — `Place#name` had a bogus global-uniqueness constraint
+
+Diffed `app.sola.day/event/edgeesmeralda/schedule/compact` against local:
+the same real-world venue showed as "Hotel Trio - Patio" on production but
+"Hotel Trio - Patio (2)" locally. Root cause: `places.name` had a DB unique
+index + model `uniqueness: true`, which don't exist in sails — two
+genuinely different real-world locations can share a name (a hotel chain's
+"Patio" in different cities), and `migrate_from_sails.rb`'s dup-suffixing
+(`"... (2)"`) was fabricating a distinguishing name that never existed in
+production. `PlacesController#create`'s find-by-exact-name-then-create is a
+sufficient soft convenience on the write path; a hard DB constraint isn't
+needed and actively corrupts migrated data. Removed the index and
+validation (`20260729113156_remove_unique_index_on_places_name.rb`); the
+migration now imports all 2280 places 1:1 with no merging/suffixing.
+
+## 2026-07-29 — homepage popup-city list wasn't curated, and its card image was wrong
 
 Third round of local-vs-production diffing (`localhost:4001/` vs
 `app.sola.day/`): the homepage popup-city carousel showed 50 uncurated

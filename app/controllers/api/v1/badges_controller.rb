@@ -18,7 +18,7 @@ class Api::V1::BadgesController < Api::BaseController
     end
     badges = badges.joins(:owner).where(users: { name: params[:owner_handle] }) if params[:owner_handle].present?
     badges = badges.where(badge_class_id: params[:badge_class_id]) if params[:badge_class_id].present?
-    render_collection badges.includes(:badge_class, :creator, :owner), blueprint: BadgeBlueprint
+    render_collection badges.includes(:badge_class, :creator, :owner).order(created_at: :desc), blueprint: BadgeBlueprint
   end
 
   # PATCH /api/v1/badges/:id
