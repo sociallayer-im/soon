@@ -1,7 +1,11 @@
 class EventBlueprint < Blueprinter::Base
   identifier :id
 
-  fields :title, :content, :start_time, :end_time, :timezone, :status, :visibility,
+  # Default view stays light — it's used for LISTS (index, pending_approval)
+  # and echoed back on create/update. `content` is excluded: some events carry
+  # markdown with embedded base64 images running into multiple MB, and no list
+  # or card UI renders it — the detail page always re-fetches via :extended.
+  fields :title, :start_time, :end_time, :timezone, :status, :visibility,
          :meeting_url, :external_url, :category, :kind, :tags, :pinned,
          :max_participant, :participant_count, :require_approval, :requirement_tags,
          :image_url, :recurring_id, :form_id, :notes, :created_at
@@ -20,11 +24,12 @@ class EventBlueprint < Blueprinter::Base
 
   association :group, blueprint: GroupBlueprint
   association :place, blueprint: PlaceBlueprint
-  association :venue, blueprint: VenueBlueprint
+  association :venue, blueprint: VenueRefBlueprint
   association :owner, blueprint: UserBlueprint
-  association :track, blueprint: TrackBlueprint
+  association :track, blueprint: TrackRefBlueprint
 
   view :extended do
+    field :content
     association :event_roles, blueprint: EventRoleBlueprint
     association :participants, blueprint: ParticipantBlueprint
     association :tickets, blueprint: TicketBlueprint, view: :extended

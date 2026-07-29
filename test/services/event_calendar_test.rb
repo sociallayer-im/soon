@@ -84,6 +84,40 @@ class EventCalendarTest < ActiveSupport::TestCase
     assert_equal 2, ics.scan("BEGIN:VEVENT").size
   end
 
+  test "embedded base64 images are stripped from the description, not just truncated away" do
+    tiny = "See you there!"
+    huge_image = "![](data:image/png;base64,#{"A" * 2000})"
+    event = create_event(group: @group, owner: @owner, title: "With image",
+      content: "#{tiny}\n\n#{huge_image}")
+
+    ics = unfold(EventCalendar.for_event(event))
+
+    assert_includes ics, tiny
+    assert_not_includes ics, "base64"
+    assert_not_includes ics, "data:image"
+  end
+
+  test "a long description is truncated and the event URL still follows it" do
+    event = create_event(group: @group, owner: @owner, title: "Long",
+      content: "A" * 2000)
+
+    ics = unfold(EventCalendar.for_event(event))
+    description = ics[/DESCRIPTION:(.*?)(?:\r?\n[A-Z]+[:;])/m, 1]
+
+    assert_operator description.length, :<, 2000
+    assert_includes description, "…"
+    assert_operator description.scan("A").size, :<=, EventCalendar::DESCRIPTION_TRUNCATE_LENGTH
+    assert_includes ics, "URL;VALUE=URI:#{ApplicationMailer::WEB_URL}/event/detail/#{event.id}"
+  end
+
+  test "a short description is left untouched" do
+    event = create_event(group: @group, owner: @owner, title: "Short", content: "Quick note.")
+    ics = unfold(EventCalendar.for_event(event))
+
+    assert_includes ics, "Quick note."
+    assert_not_includes ics, "…"
+  end
+
   private
 
   def sequence_of(ics)

@@ -662,6 +662,36 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_match "capacity", json_response["error"]
   end
 
+  test "index payload is the lightweight list shape: no content, venue/track trimmed to id+label" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, about: "A very long venue write-up")
+    track = create_track(group: group, description: "A very long track write-up")
+    create_event(group: group, owner: owner, venue: venue, track: track,
+      content: "A" * 2000)
+
+    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
+    assert_response :success
+    event = json_response["data"].first
+
+    assert_nil event["content"]
+    assert_equal({ "id" => venue.id, "name" => venue.name }, event["venue"])
+    assert_equal({ "id" => track.id, "title" => track.title }, event["track"])
+  end
+
+  test "show payload is the full detail shape: content present, venue/track still trimmed" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, about: "A very long venue write-up")
+    event = create_event(group: group, owner: owner, venue: venue, content: "Full body")
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_response :success
+
+    assert_equal "Full body", json_response["content"]
+    assert_equal({ "id" => venue.id, "name" => venue.name }, json_response["venue"])
+  end
+
   test "index is public but write actions require authentication" do
     get "/api/v1/events"
     assert_response :success

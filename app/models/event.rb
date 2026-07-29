@@ -1,5 +1,5 @@
 class Event < ApplicationRecord
-  belongs_to :group
+  belongs_to :group, inverse_of: :events
   belongs_to :owner, class_name: "User"
   belongs_to :place, optional: true
   belongs_to :track, optional: true

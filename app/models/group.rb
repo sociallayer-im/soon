@@ -4,7 +4,7 @@ class Group < ApplicationRecord
 
   has_many :memberships, dependent: :delete_all
   has_many :users, through: :memberships
-  has_many :events, dependent: :destroy
+  has_many :events, dependent: :destroy, inverse_of: :group
   has_many :markers, dependent: :destroy
   has_many :tracks, dependent: :destroy
   has_many :venues, dependent: :destroy

@@ -111,9 +111,25 @@ class EventCalendar
     "#{ApplicationMailer::WEB_URL}/event/detail/#{event.id}"
   end
 
+  # Markdown data-URI images (some event descriptions have base64-embedded
+  # images pasted directly into the rich-text editor, occasionally multiple
+  # MB each) render as nothing useful in a calendar app's DESCRIPTION field,
+  # so strip them rather than balloon every .ics download/feed refresh.
+  DATA_URI_IMAGE = /!\[[^\]]*\]\(data:[^)]+\)/.freeze
+
+  # Calendar apps show DESCRIPTION as a short popover preview, not a reader —
+  # the event URL is always appended right after, so a full multi-KB writeup
+  # (some run 20-30KB) buys nothing but bandwidth. Same cap for single-event
+  # invites and feeds: there's no reason an invite email needs more text than
+  # a subscription feed does when both link to the full page.
+  DESCRIPTION_TRUNCATE_LENGTH = 500
+
   def self.description_for(event)
     parts = []
-    parts << event.content if event.content.present?
+    if event.content.present?
+      text = event.content.gsub(DATA_URI_IMAGE, "").strip
+      parts << text.truncate(DESCRIPTION_TRUNCATE_LENGTH, omission: "…")
+    end
     parts << event_url(event)
     parts.join("\n\n")
   end

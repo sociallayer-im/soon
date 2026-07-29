@@ -12,6 +12,13 @@ class Api::BaseController < ActionController::API
   end
 
   PAGY_DEFAULT_LIMIT = 20
+  # No caller-supplied ?limit needs to exceed this — the highest legitimate
+  # frontend request is 400 (the schedule-grid view, which renders a whole
+  # date-bounded range and can't paginate a visual calendar). Without a cap,
+  # one oversized request can pull a group's entire event history (with full
+  # nested associations) in one response; this bounds the damage regardless
+  # of who's asking, with headroom above every current caller.
+  PAGY_MAX_LIMIT = 500
 
   private
 
@@ -56,10 +63,12 @@ class Api::BaseController < ActionController::API
   end
 
   def render_collection(scope, blueprint:, **blueprint_opts)
+    limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i
+    limit = PAGY_DEFAULT_LIMIT if limit <= 0
     pagy = Pagy::Offset.new(
       count: scope.count,
       page: params.fetch(:page, 1).to_i,
-      limit: params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i
+      limit: [limit, PAGY_MAX_LIMIT].min
     )
     records = pagy.records(scope)
     render json: {
