@@ -414,8 +414,62 @@ ETL 的 `req:` 检查作用于**映射后**的值，所以源库中「非 NULL �
       `memory_max` 从 1024 收紧到 640。
 - [x] **§6 演练** — 全链路真实生产数据跑通，38 PASS / 0 FAIL，合计约 4 分钟。
 
-### 下一步（阶段 B，待确认）
+### 阶段 B 进行中（2026-07-30）
 
-- [ ] `cd soon && GHCR_TOKEN=... ginger deploy` → soon-api.sola.day
-- [ ] 后端冒烟，重点是拿真实 sails 生产 token 验证 §3.1 的 legacy-token 兼容
-- [ ] 前端指向 soon-api 过一遍主流程
+- [x] **sails 部署**（`d71c53e`）——带冻结开关但开关关闭。线上验证：
+      `POST /event/create` 返回 403 鉴权错误而非 503，行为与部署前一致。
+      ginger 的 `secrets.inject` 是精确名单且会校验非空，所以用 glob
+      `"MIGRATION_*"` 而非直接写 `MIGRATION_FREEZE`，否则冻结未启用时每次
+      部署都会失败。启用时改 `.env.production` + `ginger deploy --skip-push`。
+- [x] **GitHub `sociallayer-im/soon`** 已创建（**私有**——`design/` 下有服务器
+      IP、PlanetScale 主机名等基础设施细节；sails 仓库是公开的，如需对齐可改）
+      并推送。
+- [x] **soon 部署到 soon-api.sola.day**，接生产数据副本。
+- [x] **legacy-token 端到端验证通过**：用生产 `JWT_SECRET_KEY` 铸造 sails 格式
+      token（profile id=1），soon 正确解析为迁移后的用户（TSID、钱包地址、
+      nickname、权限全部吻合）。`/users/me`、`/group_invites/pending`、
+      `/activities` 均 200，无 token 时 401。**这是整个迁移风险最高的一项。**
+
+#### 部署过程中发现并修复的三个问题
+
+1. **构建失败**：`rbsecp256k1`（siwe-rb → eth）用 autotools 编译 vendored
+   libsecp256k1，Dockerfile 缺 `autoconf/automake/libtool/libgmp-dev`。
+
+2. **`WEB_CONCURRENCY=1` 导致所有 DB 请求永久挂起**（最隐蔽的一个）。
+   Puma 把任何值——包括 `"1"`——都当作要求 **cluster 模式**；`config/puma.rb`
+   里没有 `workers` 指令，不设这个变量才是 single 模式。而 GoodJob 是
+   `execution_mode :async` 进程内运行，cluster 模式下它的调度器和 LISTEN 连接
+   在 fork **之前**的 master 进程里启动，fork 出的 worker 随后在第一个碰数据库的
+   请求上永久卡死——**不发 SQL、不报错、不超时**。
+   `/up` 不碰数据库所以一直返回 200，**Nomad 健康检查全程是绿的**。
+   教训：健康检查必须至少碰一次数据库，否则这类故障对编排系统不可见。
+
+3. **首页 726KB / 9-10 秒**（对比 sails 同一页面 16KB / 0.73 秒）。两层原因：
+   - `GroupBlueprint` 的 `:detail` 视图走 5 个关联，而 `discover` 的查询没有
+     `includes` → 每条记录 N+1，跨网络就是上百次往返。
+   - 更根本的是 `:detail` 把每个 popup city 的**完整成员名单**塞进了首页：
+     21 个 group 共 2407 条 membership（单组最多 712），而前端的
+     `toPopupCity` 只读 10 个标量字段，一条都没用。
+
+   拆成 `:card`（标量）+ `:detail`（`include_view :card` + 关联），
+   discover 用 `:card`，`groups#show` 保留 `:detail` 但走
+   `Group.with_detail_associations`。结果 **726KB → 62KB，9-10s → 0.92s**。
+
+#### 当前线上实测
+
+| 端点 | 状态 | 耗时 | 大小 |
+|---|---|---:|---:|
+| `/up` | 200 | 0.67s | 73B |
+| `/api/v1/discover` | 200 | 0.87s | 62KB |
+| `/api/v1/events?limit=20` | 200 | 0.90s | 30KB |
+| `/api/v1/groups/edgeesmeralda`（712 成员） | 200 | 1.15s | 167KB |
+| `/api/v1/search?keyword=edge` | 200 | 0.98s | 41KB |
+| `/api/v1/groups/edgeesmeralda/calendar.ics` | 200 | 0.73s | 1.9KB |
+
+soon 容器内存 **268MB / 640MB 上限**，机器可用内存 ~1GB，Puma 已是 single mode。
+
+### 下一步（待确认）
+
+- [ ] 前端指向 soon-api.sola.day 完整过一遍主流程（登录、建活动、报名、
+      群组管理、徽章、售票）——把前端集成从代码审查变成实测
+- [ ] 阶段 C 正式窗口
