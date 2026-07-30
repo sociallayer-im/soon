@@ -106,6 +106,15 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_match "crypto payment", json_response["error"]
 
+    # A card method with no key at all is unsellable — reject at creation
+    # rather than letting a buyer hit "stripe is not configured" at checkout.
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Keyless", ticket_type: "event",
+                          payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500 }] } },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "required for card payments", json_response["error"]
+
     # stripe_setting_id must survive the permit list (silently-dropped params
     # have caused real data loss here before).
     setting = StripeSetting.create!(user: @owner, name: "K", secret_key: "sk_live_k")
@@ -1021,10 +1030,11 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create builds nested payment_methods for a paid ticket" do
+    setting = StripeSetting.create!(user: @owner, name: "K", secret_key: "sk_test_k")
     post "/api/v1/events/#{@event.id}/tickets", params: {
       ticket: {
         title: "Paid", ticket_type: "event",
-        payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500 }]
+        payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500, stripe_setting_id: setting.id }]
       }
     }, headers: auth_headers(@owner)
     assert_response :created

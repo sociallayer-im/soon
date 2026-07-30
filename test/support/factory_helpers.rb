@@ -93,7 +93,20 @@ module FactoryHelpers
   end
 
   def create_payment_method(item:, **attrs)
-    PaymentMethod.create!({ item: item, chain: "stripe", kind: "fiat", price: 1000 }.merge(attrs))
+    attrs = { item: item, chain: "stripe", kind: "fiat", price: 1000 }.merge(attrs)
+    # A card method is invalid without a collecting key, so supply the event
+    # owner's (creating one on demand) unless the caller pinned it.
+    if Array(attrs[:chains]).push(attrs[:chain]).include?("stripe") && !attrs.key?(:stripe_setting_id)
+      attrs[:stripe_setting_id] = default_stripe_setting_for(item).id
+    end
+    PaymentMethod.create!(attrs)
+  end
+
+  def default_stripe_setting_for(item)
+    user_id = item.is_a?(User) ? item.id : item.try(:event)&.owner_id
+    user_id ||= create_user.id
+    StripeSetting.find_by(user_id: user_id) ||
+      StripeSetting.create!(user_id: user_id, name: "Factory key", secret_key: "sk_test_factory")
   end
 
   def create_coupon(event:, **attrs)

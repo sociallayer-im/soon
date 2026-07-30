@@ -18,6 +18,12 @@ class PaymentMethod < ApplicationRecord
   # Guarded so pre-existing rows saved for unrelated reasons don't suddenly
   # fail validation — only new methods and price changes are held to the floor.
   validate :stripe_price_meets_minimum, if: -> { new_record? || will_save_change_to_price? }
+  # A card method with no key cannot be charged at all — the buyer would only
+  # find out at checkout, which PAYMENTS_PLAN decision #5 rules out. Applies
+  # to every save, including edits of keyless sails-era rows: those were
+  # never chargeable (Stripe was non-functional before this work), so the
+  # organizer picking a key is the repair, not a regression.
+  validate :stripe_method_has_a_key
 
   enum :kind, { crypto: "crypto", fiat: "fiat", credit: "credit" }
 
@@ -34,6 +40,13 @@ class PaymentMethod < ApplicationRecord
   def chains_must_be_supported
     invalid = Array(chains) - SUPPORTED_CHAINS
     errors.add(:chains, "contains unsupported chains: #{invalid.join(', ')}") if invalid.any?
+  end
+
+  def stripe_method_has_a_key
+    return unless effective_chains.include?("stripe")
+    return if stripe_setting_id.present?
+
+    errors.add(:stripe_setting_id, "is required for card payments — pick which Stripe key collects the money")
   end
 
   def stripe_price_meets_minimum
