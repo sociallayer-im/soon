@@ -10,22 +10,22 @@ class Api::V1::UploadsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
-  test "image forwards the file to Cloudflare and returns the delivery URL" do
+  test "image stores the file and returns its datastore URL" do
     user = create_user
     delivered = nil
-    stub = ->(io:, filename:, content_type:) {
-      delivered = { filename: filename, content_type: content_type }
-      "https://imagedelivery.net/hash/abc/public"
+    stub = ->(io:, content_type:) {
+      delivered = { content_type: content_type, bytes: io.read }
+      "https://datastore.sola.day/0123456789abcdef"
     }
 
-    CloudflareImages.stub :upload, stub do
+    ObjectStore.stub :upload, stub do
       post "/api/v1/upload/image", params: { file: png_upload }, headers: auth_headers(user)
     end
 
     assert_response :success
-    assert_equal "https://imagedelivery.net/hash/abc/public", json_response["url"]
-    assert_equal "pixel.png", delivered[:filename]
+    assert_equal "https://datastore.sola.day/0123456789abcdef", json_response["url"]
     assert_equal "image/png", delivered[:content_type]
+    assert delivered[:bytes].present?
   end
 
   test "image rejects a missing file" do
@@ -43,13 +43,13 @@ class Api::V1::UploadsControllerTest < ActionDispatch::IntegrationTest
     assert_match "unsupported", json_response["error"]
   end
 
-  test "image surfaces a Cloudflare failure as 502" do
+  test "image surfaces a storage failure as 502" do
     user = create_user
-    boom = ->(**) { raise CloudflareImages::Error, "Cloudflare upload failed (HTTP 500)" }
-    CloudflareImages.stub :upload, boom do
+    boom = ->(**) { raise ObjectStore::Error, "upload failed: Access Denied" }
+    ObjectStore.stub :upload, boom do
       post "/api/v1/upload/image", params: { file: png_upload }, headers: auth_headers(user)
     end
     assert_response :bad_gateway
-    assert_match "Cloudflare upload failed", json_response["error"]
+    assert_match "upload failed", json_response["error"]
   end
 end

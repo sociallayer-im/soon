@@ -48,6 +48,10 @@ gem "oga"
 gem "resend"
 gem "icalendar"
 gem "httpx"
+# Image uploads go to the Cloudflare R2 bucket behind datastore.sola.day over
+# its S3-compatible API — see app/services/object_store.rb for why that host
+# and not Cloudflare Images.
+gem "aws-sdk-s3", "~> 1.0", require: false
 gem "eth"
 # Sign-In with Ethereum message parsing/verification. Not spruceid/siwe-ruby
 # (the original gem "siwe") — that's unmaintained (last real commit 2023-07,

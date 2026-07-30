@@ -60,8 +60,14 @@ secrets:
     - JWT_SECRET
     - NEXT_TOKEN
     - RESEND_API_KEY
-    - CLOUDFLARE_ACCOUNT_ID
-    - CLOUDFLARE_IMAGES_TOKEN
+    # Same R2 bucket as SG — see ginger.yml. It matters more here: the
+    # imagedelivery.net URLs the old uploader produced are unreachable from
+    # mainland China, datastore.sola.day is not.
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_HOST
+    - AWS_BUCKET
+    - S3_URL
     - MAIL_FROM
     - WEB_URL
     - APP_HOST
