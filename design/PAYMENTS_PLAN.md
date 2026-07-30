@@ -347,9 +347,14 @@ reserved ──(session/intent created)──► awaiting_payment ──(verifie
                                                                          └─(dispute.created)──► disputed ──(dispute.closed won)──► paid
 ```
 
-- **States**: `reserved`, `awaiting_payment`, `paid`, `cancelled`, `expired`,
-  `refunded`, `partially_refunded`, `disputed`. Legacy mapping for existing
-  rows: `pending → awaiting_payment`, `succeeded → paid`,
+- **States** *(implementation note, Phase 3)*: the wire keeps the existing
+  names — `pending` (= awaiting_payment), `succeeded` (= paid), `timeout`
+  (= expired), `cancelled` — because the deployed frontend/SDK match on
+  those strings and renaming is cosmetic; `refunded`, `partially_refunded`,
+  `disputed` are added. The conceptual model below is unchanged.
+  Original naming for reference: `reserved`, `awaiting_payment`, `paid`,
+  `cancelled`, `expired`, `refunded`, `partially_refunded`, `disputed`.
+  Legacy mapping for existing rows: `pending → awaiting_payment`, `succeeded → paid`,
   `timeout → expired`, `cancelled → cancelled`. `unbounded` (sails' "granted
   to an email with no account yet, waiting to be claimed" state) is
   **removed entirely** (decided 2026-07-30): the grant-to-unregistered-email

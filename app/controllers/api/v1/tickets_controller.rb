@@ -5,6 +5,11 @@ class Api::V1::TicketsController < Api::BaseController
 
   STRIPE_MIN_CENTS = PaymentMethod::STRIPE_MIN_CENTS
 
+  # How long an unpaid order holds its inventory before the sweeper expires
+  # it. Uniform across rails (PAYMENTS_PLAN §6.5): sized to Stripe's 30-min
+  # Checkout Session floor plus slack.
+  RESERVATION_TTL = 35.minutes
+
   # Raised when a coupon is exhausted between quoting and checkout; rolls back rsvp.
   class CouponUnavailable < StandardError; end
 
@@ -88,7 +93,7 @@ class Api::V1::TicketsController < Api::BaseController
       if @ticket.payment_methods.any?
         build_paid_ticket_item(participant)
       else
-        TicketItem.new(ticket_type: @ticket.ticket_type, status: "succeeded", user: current_user, ticket: @ticket, event: @event, participant: participant, amount: 0, original_price: 0)
+        TicketItem.new(ticket_type: @ticket.ticket_type, status: "succeeded", user: current_user, ticket: @ticket, event: @event, participant: participant, amount: 0, original_price: 0, payment_provider: "free", paid_at: Time.current)
       end
     if performed? # an inline error was already rendered by build_paid_ticket_item
       @ticket.release!
@@ -285,23 +290,19 @@ class Api::V1::TicketsController < Api::BaseController
   # GET /api/v1/tickets/coupon_price?code=&payment_method_id=&amount=
   #
   # The quote must agree with what rsvp will actually accept, or the buyer
-  # sees one price and checkout rejects it — so the applicability and
-  # card-floor checks here mirror build_paid_ticket_item.
+  # sees one price and checkout rejects it — both paths run Ticketing::Quote.
   def coupon_price
     coupon = Coupon.find_by(selector_type: "code", code: params[:code])
     return render_error("coupon not found") if coupon.nil? || coupon.removed
 
     paymethod = PaymentMethod.find_by(id: params[:payment_method_id])
-    if paymethod&.item_type == "Ticket" && paymethod.item_id.present? &&
-       !(coupon.applicable_ticket_ids.blank? || coupon.applicable_ticket_ids.include?(paymethod.item_id))
-      return render_error("coupon not applicable to this ticket")
-    end
-
-    amount, = coupon.get_discounted_price(params[:amount], paymethod)
-    # Only for unambiguously-stripe methods: a multi-chain quote has no chain
-    # context here, and its crypto amounts are scaled far above the floor anyway.
-    if paymethod&.chain == "stripe" && amount.positive? && amount < STRIPE_MIN_CENTS
-      return render_error("coupon not applicable to this payment method")
+    if paymethod
+      quote = Ticketing::Quote.call(paymethod: paymethod, coupon: coupon, base_amount: params[:amount])
+      return render_error(quote.error) unless quote.ok?
+      amount = quote.amount
+    else
+      # Legacy chainless preview: no payment context at all, discount as-is.
+      amount, = coupon.get_discounted_price(params[:amount], nil)
     end
     render json: { coupon_id: coupon.id, amount: amount }
   end
@@ -459,61 +460,30 @@ class Api::V1::TicketsController < Api::BaseController
       return nil
     end
 
-    # Resolve the chain first: the coupon amount-scaling depends on it, and for
-    # multi-chain methods paymethod.chain is blank.
-    selected_chain =
-      if paymethod.chains.present?
-        requested = params[:chain].to_s
-        unless paymethod.chains.include?(requested)
-          render_error("chain not supported by this payment method")
-          return nil
-        end
-        requested
-      else
-        paymethod.chain
-      end
-
-    amount = paymethod.price
-    coupon_id = nil
-    discount_value = nil
-    discount_data = nil
-
-    if params[:coupon].present?
-      coupon = Coupon.find_by(selector_type: "code", event_id: @event.id, code: params[:coupon])
-      unless coupon
-        render_error("coupon not found")
-        return nil
-      end
-      unless coupon.applicable_to?(@ticket)
-        render_error("coupon not applicable to this ticket")
-        return nil
-      end
-      unless coupon.available?
-        render_error("coupon is not available")
-        return nil
-      end
-      amount, discount_value, discount_data = coupon.get_discounted_price(amount, paymethod, chain: selected_chain)
-      # Record the coupon on the item; usage is consumed only once the item
-      # actually persists (see consume_coupon!), never on an aborted request.
-      coupon_id = coupon.id if discount_value
-    end
-
-    # Card payments have a price floor (see PaymentMethod::STRIPE_MIN_CENTS).
-    # Ticket creation already enforces it on the base price, so landing here
-    # means a coupon discounted into (0, min) — reject rather than the old
-    # behaviour of silently waiving the ticket to free. Exactly 0 stays valid
-    # (a deliberate 100% coupon).
-    if selected_chain == "stripe" && amount.positive? && amount < STRIPE_MIN_CENTS
-      render_error(coupon ? "coupon not applicable to this payment method" : "amount is below the minimum for card payments")
+    quote = Ticketing::Quote.call(
+      paymethod: paymethod, requested_chain: params[:chain].presence,
+      require_chain: true, coupon_code: params[:coupon].presence,
+      event: @event, ticket: @ticket
+    )
+    unless quote.ok?
+      render_error(quote.error)
       return nil
     end
-    status = amount.zero? ? "succeeded" : "pending"
+
+    status = quote.amount.zero? ? "succeeded" : "pending"
 
     TicketItem.new(
       status: status, ticket_type: @ticket.ticket_type, user: current_user, ticket: @ticket, event: @event,
-      chain: selected_chain, protocol: paymethod.protocol, participant: participant, amount: amount,
+      chain: quote.chain, protocol: paymethod.protocol, participant: participant, amount: quote.amount,
       original_price: paymethod.price, payment_method_id: paymethod.id,
-      discount_value: discount_value, discount_data: discount_data, coupon_id: coupon_id
+      discount_value: quote.discount_value, discount_data: quote.discount_data,
+      # Record the coupon on the item; usage is consumed only once the item
+      # actually persists (see consume_coupon!), never on an aborted request.
+      coupon_id: quote.discount_value ? quote.coupon&.id : nil,
+      payment_provider: quote.chain == "stripe" ? "stripe" : "evm",
+      currency: quote.chain == "stripe" ? "usd" : nil,
+      paid_at: status == "succeeded" ? Time.current : nil,
+      reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )
   end
 
