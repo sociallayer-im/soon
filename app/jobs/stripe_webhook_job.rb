@@ -23,30 +23,43 @@ class StripeWebhookJob < ApplicationJob
 
     case record.event_type
     when "checkout.session.completed"
-      item = find_item(object, by_session: object["id"])
-      return unless item&.status == "pending"
+      item = find_item(record, object, by_session: object["id"])
       return unless object["payment_status"] == "paid"
+      # A paid session whose order is missing or already settled with a
+      # DIFFERENT payment is an orphan charge — money taken, no ticket to
+      # give. Never transition; flag for manual refund.
+      if item.nil?
+        # (find_item may already have recorded a setting-mismatch error.)
+        record.update!(error: "orphan payment: no matching pending order for session #{object['id']}") if record.error.blank?
+        return
+      end
+      unless item.status == "pending"
+        if object["payment_intent"].present? && object["payment_intent"] != item.txhash
+          record.update!(error: "orphan payment: session #{object['id']} paid but order #{item.id} already settled via #{item.txhash}")
+        end
+        return
+      end
       # Verify amount + currency against the order before flipping to paid.
       return record_mismatch(record, item) unless amounts_match?(object, item)
 
       item.confirm_payment!(txhash: object["payment_intent"])
 
     when "checkout.session.expired"
-      item = find_item(object, by_session: object["id"])
+      item = find_item(record, object, by_session: object["id"])
       item.timeout if item&.status == "pending"
 
     when "charge.refunded"
-      item = find_item(object, by_intent: object["payment_intent"])
+      item = find_item(record, object, by_intent: object["payment_intent"])
       return unless item
 
       finalize_refunds(item, object)
 
     when "charge.dispute.created"
-      item = find_item_by_intent(object["payment_intent"])
+      item = find_item(record, object, by_intent: object["payment_intent"])
       item.transition!(:disputed) if item && %w[succeeded partially_refunded].include?(item.status)
 
     when "charge.dispute.closed"
-      item = find_item_by_intent(object["payment_intent"])
+      item = find_item(record, object, by_intent: object["payment_intent"])
       return unless item&.status == "disputed"
 
       if object["status"] == "won"
@@ -62,18 +75,24 @@ class StripeWebhookJob < ApplicationJob
   end
 
   # Orders are resolved by metadata.ticket_item_id first (survives a lost
-  # provider_ref write), then by the stored reference (§2.4).
-  def find_item(object, by_session: nil, by_intent: nil)
+  # provider_ref write), then by the stored reference (§2.4) — and are ONLY
+  # accepted when snapshotted to the SAME stripe_setting whose endpoint
+  # received the event. Without that binding, a signed webhook from account A
+  # (metadata is attacker-controlled at session creation) could confirm,
+  # expire, or "refund" an order whose money lives in account B. Mismatches
+  # are recorded for audit and never transition anything.
+  def find_item(record, object, by_session: nil, by_intent: nil)
     metadata_id = object.dig("metadata", "ticket_item_id")
     item = TicketItem.find_by(id: metadata_id) if metadata_id.present?
     item ||= TicketItem.find_by(provider_ref: by_session) if by_session.present?
-    item ||= find_item_by_intent(by_intent)
-    item
-  end
+    item ||= TicketItem.find_by(txhash: by_intent, payment_provider: "stripe") if by_intent.present?
+    return nil unless item
 
-  def find_item_by_intent(intent_id)
-    return nil if intent_id.blank?
-    TicketItem.find_by(txhash: intent_id, payment_provider: "stripe")
+    unless item.stripe_setting_id == record.stripe_setting_id
+      record.update!(error: "setting mismatch: event for setting #{record.stripe_setting_id} referenced order #{item.id} (setting #{item.stripe_setting_id})")
+      return nil
+    end
+    item
   end
 
   def amounts_match?(session, item)

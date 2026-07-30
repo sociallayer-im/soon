@@ -203,18 +203,37 @@ class Api::V1::TicketsController < Api::BaseController
       return render_error("stripe is not configured for this ticket")
     end
 
-    if ticket_item.provider_ref.present?
-      existing = StripeGateway.retrieve_checkout_session(setting, ticket_item.provider_ref)
-      if existing&.status == "open"
-        return render json: { result: "ok", checkout_url: existing.url, session_id: existing.id }
+    # The whole lookup-or-create runs under a row lock: two double-clicked
+    # requests would otherwise BOTH create payable sessions carrying the same
+    # metadata before either provider_ref write lands — both chargeable, only
+    # one order. The lock holds across the Stripe call; that's a per-order
+    # serialization, acceptable and simpler than any optimistic scheme.
+    checkout = nil
+    stale = false
+    ticket_item.with_lock do
+      # Re-check under the lock — the pre-lock check can go stale.
+      if ticket_item.status != "pending"
+        stale = true
+        next
       end
-    end
 
-    session = StripeGateway.create_checkout_session(setting, ticket_item)
-    # Keep the reservation alive at least as long as the session Stripe will
-    # happily accept payment on, plus sweeper slack.
-    ticket_item.update!(provider_ref: session.id, reserved_until: Time.zone.at(session.expires_at) + 2.minutes)
-    render json: { result: "ok", checkout_url: session.url, session_id: session.id }
+      if ticket_item.provider_ref.present?
+        existing = StripeGateway.retrieve_checkout_session(setting, ticket_item.provider_ref)
+        if existing&.status == "open"
+          checkout = existing
+          next
+        end
+      end
+
+      session = StripeGateway.create_checkout_session(setting, ticket_item)
+      # Keep the reservation alive at least as long as the session Stripe
+      # will happily accept payment on, plus sweeper slack.
+      ticket_item.update!(provider_ref: session.id, reserved_until: Time.zone.at(session.expires_at) + 2.minutes)
+      checkout = session
+    end
+    return render_error("ticket_item is not pending") if stale
+
+    render json: { result: "ok", checkout_url: checkout.url, session_id: checkout.id }
   rescue Stripe::StripeError => e
     render_error("stripe error: #{e.message}")
   end

@@ -73,6 +73,47 @@ class StripeWebhookJobTest < ActiveSupport::TestCase
     assert_equal quantity_after_release, @ticket.reload.quantity, "no double release / no oversell"
   end
 
+  test "an event from another account's endpoint cannot touch an order it doesn't own" do
+    # Attacker's own setting + endpoint; victim's pending order under @setting.
+    attacker = create_user
+    attacker_setting = StripeSetting.create!(user: attacker, name: "A", secret_key: "sk_live_a", webhook_secret: "whsec_a")
+    victim_item = create_order(provider_ref: "cs_victim")
+
+    # A validly-signed event from the ATTACKER's account, with crafted
+    # metadata pointing at the victim's order.
+    ev = StripeEvent.create!(id: "evt_cross", stripe_setting_id: attacker_setting.id,
+      event_type: "checkout.session.completed",
+      payload: { "data" => { "object" => {
+        "id" => "cs_attacker", "payment_status" => "paid", "amount_total" => 1000, "currency" => "usd",
+        "payment_intent" => "pi_attacker", "metadata" => { "ticket_item_id" => victim_item.id }
+      } } })
+    StripeWebhookJob.perform_now(ev.id)
+
+    assert_equal "pending", victim_item.reload.status, "cross-account webhook must never confirm the order"
+    assert_match "setting mismatch", ev.reload.error
+
+    # Same for destructive paths: expired / refunded.
+    ev2 = StripeEvent.create!(id: "evt_cross2", stripe_setting_id: attacker_setting.id,
+      event_type: "checkout.session.expired",
+      payload: { "data" => { "object" => { "id" => "cs_victim" } } })
+    StripeWebhookJob.perform_now(ev2.id)
+    assert_equal "pending", victim_item.reload.status
+  end
+
+  test "a paid session with no matching pending order is flagged as an orphan payment" do
+    item = create_order(provider_ref: "cs_orphan", txhash: "pi_first")
+    item.update!(status: "succeeded") # settled via a first session/intent
+
+    ev = record_event("checkout.session.completed",
+      { "id" => "cs_orphan2", "payment_status" => "paid", "amount_total" => 1000, "currency" => "usd",
+        "payment_intent" => "pi_second", "metadata" => { "ticket_item_id" => item.id } })
+    StripeWebhookJob.perform_now(ev.id)
+
+    assert_equal "succeeded", item.reload.status
+    assert_equal "pi_first", item.txhash, "the settled payment reference must not be overwritten"
+    assert_match "orphan payment", ev.reload.error
+  end
+
   test "checkout.session.expired times out a pending order and releases inventory once" do
     item = create_order(provider_ref: "cs_exp")
     ev = record_event("checkout.session.expired",
