@@ -1,0 +1,29 @@
+test/controllers/api/v1/recurring_controller_test.rb
+  s_e9ed806a3d225c::t_d37f67705cda09 270-297
+app/controllers/api/v1/forms_controller.rb
+  s_e9ed806a3d225c::t_484743ac4f06f2 62-64
+  s_e9ed806a3d225c::t_977a3083f89d12 2-7
+app/blueprints/recurring_blueprint.rb
+  s_e9ed806a3d225c::t_e201e911e6e885 7-12
+test/controllers/api/v1/forms_controller_test.rb
+  s_e9ed806a3d225c::t_c3c89ab12e16b2 140,150,159-184
+  s_e9ed806a3d225c::t_f58ec20c3c52d5 185
+app/controllers/api/v1/recurring_controller.rb
+  s_e9ed806a3d225c::t_bca153091a585c 2-10,14-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c58d7126ddb5d31973f27fdfbb2d6966d340d77b",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
