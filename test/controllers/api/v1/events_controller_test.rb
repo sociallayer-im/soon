@@ -335,6 +335,37 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "GA", event.tickets.first.title
   end
 
+  test "an inline card payment method keeps its stripe key and must be the owner's" do
+    owner = create_user
+    group = create_group(owner: owner)
+    place = create_place
+    setting = StripeSetting.create!(user: owner, name: "K", secret_key: "sk_test_k")
+
+    post "/api/v1/events", params: {
+      event: { title: "Paid", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, place_id: place.id },
+      tickets: [{ title: "GA", ticket_type: "event",
+                  payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500,
+                                                 stripe_setting_id: setting.id }] }]
+    }, headers: auth_headers(owner)
+    assert_response :created
+    # A dropped permit entry would fail the card-payment validation instead.
+    pm = Event.find(json_response["id"]).tickets.sole.payment_methods.sole
+    assert_equal setting.id, pm.stripe_setting_id
+
+    # Someone else's key cannot collect this event's ticket money.
+    outsider_key = StripeSetting.create!(user: create_user, name: "Theirs", secret_key: "sk_test_x")
+    post "/api/v1/events", params: {
+      event: { title: "Hijack", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+               group_id: group.id, place_id: place.id },
+      tickets: [{ title: "GA", ticket_type: "event",
+                  payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500,
+                                                 stripe_setting_id: outsider_key.id }] }]
+    }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "belong to the event owner", json_response["error"]
+  end
+
   test "create rolls the whole event back when an inline ticket is invalid" do
     owner = create_user
     group = create_group(owner: owner)

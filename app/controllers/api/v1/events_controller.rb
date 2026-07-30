@@ -260,6 +260,21 @@ class Api::V1::EventsController < Api::BaseController
     end
   end
 
+  # Money always lands in the event owner's account, so a card payment method
+  # may only name one of the owner's keys — same rule TicketsController
+  # enforces on the standalone ticket endpoints.
+  def reject_foreign_stripe_settings!(event, payment_methods)
+    ids = Array(payment_methods).filter_map { |pm| pm[:stripe_setting_id].presence }
+    return if ids.empty?
+
+    owned = StripeSetting.where(id: ids.uniq, user_id: event.owner_id).pluck(:id)
+    return if (ids.uniq - owned).empty?
+
+    raise ActiveRecord::RecordInvalid.new(event.tickets.new.tap { |t|
+      t.errors.add(:stripe_setting_id, "must belong to the event owner")
+    })
+  end
+
   # Create tickets (and their payment methods) passed inline with the event.
   # group_id defaults to the event's group so group tickets resolve correctly.
   def create_nested_tickets!(event, tickets, group_id)
@@ -268,8 +283,9 @@ class Api::V1::EventsController < Api::BaseController
         :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
         days_allowed: [], tracks_allowed: [],
         payment_methods_attributes: [:chain, :kind, :token_name, :token_address,
-          :receiver_address, :price, :protocol, chains: []]).to_h
+          :receiver_address, :price, :protocol, :stripe_setting_id, chains: []]).to_h
       permitted["group_id"] = group_id if permitted["group_id"].blank?
+      reject_foreign_stripe_settings!(event, permitted["payment_methods_attributes"])
       event.tickets.create!(permitted)
     end
   end
