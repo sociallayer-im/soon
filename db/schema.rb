@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_190000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -457,17 +457,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_190000) do
 
   create_table "participants", id: :string, force: :cascade do |t|
     t.string "badge_id"
+    t.datetime "cancelled_at"
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
     t.string "event_id", null: false
     t.string "message"
-    t.string "payment_status"
+    t.string "payment_status", comment: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!"
     t.datetime "registered_at"
-    t.string "status", default: "attending", null: false, comment: "attending | declined | maybe"
-    t.string "ticket_id"
+    t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.string "voucher_id"
+    t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["user_id", "event_id"], name: "index_participants_on_user_id_and_event_id", unique: true
     t.index ["user_id"], name: "index_participants_on_user_id"
@@ -767,7 +768,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_190000) do
   add_foreign_key "memberships", "users"
   add_foreign_key "participants", "badges"
   add_foreign_key "participants", "events"
-  add_foreign_key "participants", "tickets"
   add_foreign_key "participants", "users"
   add_foreign_key "participants", "vouchers"
   add_foreign_key "ticket_items", "coupons"

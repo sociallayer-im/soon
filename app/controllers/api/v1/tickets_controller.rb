@@ -84,15 +84,25 @@ class Api::V1::TicketsController < Api::BaseController
     end
     return render_error("run out of ticket") unless @ticket.reserve!
 
+    # Buying a ticket does not skip the door: an event that requires approval,
+    # carries an application form, or sells a need_approval ticket puts the
+    # buyer in "pending" until a manager approves them. rsvp used to hardcode
+    # "attending", so paying bypassed approval entirely — while the free join
+    # path (participants#create) honoured it.
+    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
+    needs_approval = !is_manager &&
+      (@event.require_approval || @event.form_id.present? || @ticket.need_approval)
+    new_status = needs_approval ? "pending" : "attending"
+
     # A withdrawn (soft-deleted) participant is reused rather than re-inserted
     # — (user_id, event_id) is unique — and registered_at is re-stamped since
     # they signed up again.
     participant = Participant.find_by(event: @event, user: current_user)
-    already_counted = participant&.status == "attending"
+    was_seated = participant&.seated?
     if participant.nil?
-      participant = @event.participants.new(user: current_user, status: "attending", payment_status: "pending", registered_at: Time.current, message: params[:message])
-    elsif participant.status == "cancelled"
-      participant.assign_attributes(status: "attending", payment_status: "pending", registered_at: Time.current, message: params[:message])
+      participant = @event.participants.new(user: current_user, status: new_status, registered_at: Time.current, message: params[:message])
+    elsif participant.cancelled? || participant.status == "declined"
+      participant.assign_attributes(status: new_status, registered_at: Time.current, message: params[:message])
     end
 
     ticket_item =
@@ -113,14 +123,21 @@ class Api::V1::TicketsController < Api::BaseController
     # only thing we must hand back on failure.
     ActiveRecord::Base.transaction do
       participant.save!
-      # Only when they weren't already occupying a seat — buying a second
-      # ticket for an event you're already attending must not count twice.
-      @event.increment!(:participant_count) unless already_counted
+      # Only a seated participant counts, and only once — buying a second
+      # ticket for an event you already attend must not count twice, and a
+      # pending (unapproved) buyer holds no seat until approval.
+      @event.increment!(:participant_count) if participant.seated? && !was_seated
       ticket_item.save!
-      participant.update!(ticket_id: ticket_item.ticket_id)
       consume_coupon!(ticket_item)
       save_form_submission! if params[:answers].present? && @event.form_id
-      ticket_item.confirm_payment! if ticket_item.status == "succeeded"
+      # payment_status is a summary of the orders, never set by hand:
+      # confirm_payment! refreshes it for a settled order, so only an order
+      # still awaiting payment needs the explicit call.
+      if ticket_item.status == "succeeded"
+        ticket_item.confirm_payment!
+      else
+        participant.refresh_payment_status!
+      end
     end
 
     render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }

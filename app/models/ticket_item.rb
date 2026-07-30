@@ -103,7 +103,7 @@ class TicketItem < ApplicationRecord
       if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
         group.add_member(user_id, "member")
       end
-      participant.update!(payment_status: "succeeded") if newly_paid
+      participant.refresh_payment_status! if participant
     end
     # Only on the first confirmation — a repeat webhook/callback for an
     # already-succeeded purchase shouldn't re-email the buyer.
@@ -128,11 +128,28 @@ class TicketItem < ApplicationRecord
   # checkouts.
   def close!(new_status)
     transaction do
-      if participant&.payment_status == "pending"
-        participant.update!(payment_status: "cancelled", status: "cancelled")
-      end
+      closing_participant = participant
       transition!(new_status, participant_id: nil)
       release_resources!
+      # Withdraw the person only when this was their LAST live order. They may
+      # hold several for one event (a second ticket type, a re-purchase after
+      # an abandoned checkout); cancelling one used to flip the participant to
+      # cancelled outright, dropping an attendance they had already paid for.
+      settle_participant!(closing_participant)
+    end
+  end
+
+  # Keeps the participant's summary in step with its orders, and withdraws
+  # them only if nothing live is left.
+  def settle_participant!(target = participant)
+    return unless target
+
+    live = TicketItem.where(participant_id: target.id, status: %w[pending succeeded partially_refunded disputed])
+                     .where.not(id: id)
+    if live.none? && !target.cancelled?
+      target.transition!(:cancelled)
+    else
+      target.refresh_payment_status!
     end
   end
 
@@ -144,9 +161,10 @@ class TicketItem < ApplicationRecord
     transaction do
       refund.update!(status: "succeeded")
       if refund.full_refund
+        holder = participant
         transition!(:refunded)
         release_resources!
-        participant&.update!(status: "cancelled", payment_status: "cancelled")
+        settle_participant!(holder)
         revoke_purchase_membership!
       else
         transition!(:partially_refunded)

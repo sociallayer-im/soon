@@ -286,6 +286,89 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_nil participant.reload.checked_in_at
   end
 
+  test "buying a ticket for an approval-required event does not skip approval" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, require_approval: true)
+    ticket = create_ticket(event: event, quantity: 5)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    participant = Participant.find(json_response["participant"]["id"])
+    assert_equal "pending", participant.status, "paying must not bypass the organizer's approval"
+    assert_equal 0, event.reload.participant_count, "an unapproved buyer holds no seat"
+
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "attending", participant.reload.status
+    assert_equal 1, event.reload.participant_count
+  end
+
+  test "a need_approval ticket puts the buyer in pending even without event-level approval" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    ticket = create_ticket(event: event, quantity: 5, need_approval: true)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal "pending", Participant.find(json_response["participant"]["id"]).status
+  end
+
+  test "cancelling one of several orders does not withdraw a participant who still has a paid one" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    paid_ticket = create_ticket(event: event, quantity: 5)
+    extra_ticket = create_ticket(event: event, quantity: 5)
+    paid_pm = create_payment_method(item: paid_ticket, chain: "stripe", price: 1000)
+    extra_pm = create_payment_method(item: extra_ticket, chain: "stripe", price: 1000)
+
+    post "/api/v1/events/#{event.id}/tickets/#{paid_ticket.id}/rsvp",
+      params: { payment_method_id: paid_pm.id }, headers: auth_headers(buyer)
+    paid_item = TicketItem.find(json_response["ticket_item"]["id"])
+    participant = Participant.find(json_response["participant"]["id"])
+    paid_item.confirm_payment!(txhash: "pi_kept")
+
+    # A second, unpaid order for the same event.
+    post "/api/v1/events/#{event.id}/tickets/#{extra_ticket.id}/rsvp",
+      params: { payment_method_id: extra_pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+    extra_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    extra_item.cancel
+
+    assert_equal "attending", participant.reload.status,
+      "abandoning one checkout must not drop an attendance already paid for"
+    assert_equal "succeeded", participant.payment_status,
+      "payment_status summarises the orders — a paid one is still there"
+  end
+
+  test "approve and reject advance the application form submission too" do
+    owner = create_user
+    applicant = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    form = create_form
+    field = create_form_field(form: form, required: true, for_admin: false)
+    event.update!(form_id: form.id)
+
+    post "/api/v1/events/#{event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "why me" }] }, headers: auth_headers(applicant)
+    assert_response :created
+    participant = Participant.find(json_response["id"])
+    submission = FormSubmission.find_by(form_id: form.id, user_id: applicant.id)
+    assert_equal "pending", submission.status
+
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "approved", submission.reload.status,
+      "a decided applicant must not still read as pending in the submissions list"
+  end
+
   test "approve moves a pending participant to attending, event owner only" do
     owner = create_user
     attendee = create_user

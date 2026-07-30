@@ -1,7 +1,6 @@
 class Ticket < ApplicationRecord
   belongs_to :event
   belongs_to :group, optional: true
-  has_many :participants, dependent: :nullify
   has_many :ticket_items, dependent: :delete_all
   has_many :payment_methods, as: :item, dependent: :delete_all
 

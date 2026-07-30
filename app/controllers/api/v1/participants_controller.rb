@@ -85,19 +85,20 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
 
     new_status = params.dig(:participant, :status)
-    was_attending = participant.status == "attending"
-    will_attend = new_status == "attending"
-    if will_attend && !was_attending && (err = capacity_error)
+    was_seated = participant.seated?
+    will_be_seated = Participant::SEATED.include?(new_status)
+    if will_be_seated && !was_seated && (err = capacity_error)
       return render_error(err)
     end
 
-    if participant.update(status: new_status)
-      @event.increment!(:participant_count) if will_attend && !was_attending
-      @event.decrement!(:participant_count) if was_attending && !will_attend && @event.participant_count.to_i > 0
-      render json: ParticipantBlueprint.render(participant)
-    else
-      render_error(participant.errors.full_messages.join(", "))
-    end
+    participant.transition!(new_status)
+    @event.increment!(:participant_count) if will_be_seated && !was_seated
+    @event.decrement!(:participant_count) if was_seated && !will_be_seated && @event.participant_count.to_i > 0
+    render json: ParticipantBlueprint.render(participant)
+  rescue Participant::InvalidTransition => e
+    render_error(e.message)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -116,15 +117,18 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
     return head :no_content if participant.status == "cancelled" # idempotent
 
-    was_attending = participant.status == "attending"
+    was_seated = participant.seated?
     released = false
     ActiveRecord::Base.transaction do
       released = release_orders!(participant)
-      participant.update!(status: "cancelled")
+      # Cancelling the last live order already withdraws the participant
+      # (TicketItem#settle_participant!), so only transition if it didn't.
+      participant.reload
+      participant.transition!(:cancelled) unless participant.cancelled?
     end
     # release_resources! already gave the seat back (and the count with it) —
     # decrementing again here would double-count.
-    @event.decrement!(:participant_count) if was_attending && !released && @event.participant_count.to_i > 0
+    @event.decrement!(:participant_count) if was_seated && !released && @event.participant_count.to_i > 0
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -138,8 +142,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     participant = @event.participants.find(params[:id])
     return render_error("participant is not pending") unless participant.status == "pending"
 
-    participant.update!(status: "attending")
+    participant.transition!(:attending)
     @event.increment!(:participant_count)
+    sync_form_submission!(participant, "approved")
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
@@ -154,7 +159,8 @@ class Api::V1::ParticipantsController < Api::BaseController
     participant = @event.participants.find(params[:id])
     return render_error("participant is not pending") unless participant.status == "pending"
 
-    participant.update!(status: "declined")
+    participant.transition!(:declined)
+    sync_form_submission!(participant, "rejected")
     EventMailer.participant_rejected(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
@@ -178,6 +184,16 @@ class Api::V1::ParticipantsController < Api::BaseController
   end
 
   private
+
+  # The approval decision lives on the participant; the application form's
+  # submission carried its own status that nobody ever advanced, so a decided
+  # applicant still read as "pending" in the submissions list.
+  def sync_form_submission!(participant, status)
+    return unless @event.form_id
+
+    FormSubmission.where(form_id: @event.form_id, user_id: participant.user_id)
+                  .update_all(status: status, updated_at: Time.current)
+  end
 
   # Hands back what the withdrawing participant was holding. Returns true if
   # inventory was released, so the caller doesn't decrement participant_count
