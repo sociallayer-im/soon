@@ -39,3 +39,8 @@
 !/app/assets/builds/.keep
 
 /node_modules
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
