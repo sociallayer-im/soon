@@ -20,13 +20,21 @@ class TicketingSweeperJob < ApplicationJob
     if item.payment_provider == "stripe" && item.provider_ref.present?
       setting = StripeSetting.find_by(id: item.stripe_setting_id)
       session = setting && StripeGateway.retrieve_checkout_session(setting, item.provider_ref)
-      if session&.payment_status == "paid"
+      # Couldn't ASK Stripe (outage, invalid key) is not the same as "not
+      # paid" — expiring here could kill an order whose money already landed.
+      # Leave it for the next sweep and log; a permanently unreachable order
+      # surfaces through these warnings rather than through a silent expiry.
+      if session.nil?
+        Rails.logger.warn("[ticketing_sweeper] cannot retrieve session #{item.provider_ref} for ticket_item #{item.id} (setting #{item.stripe_setting_id}) — skipping")
+        return
+      end
+      if session.payment_status == "paid"
         item.confirm_payment!(txhash: session.payment_intent)
         return
       end
       # Still-open session (clock skew, extended session): give it one more
       # sweep interval rather than expiring a page someone may be paying on.
-      if session&.status == "open"
+      if session.status == "open"
         item.update!(reserved_until: 10.minutes.from_now)
         return
       end

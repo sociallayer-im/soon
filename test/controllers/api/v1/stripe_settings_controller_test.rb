@@ -107,6 +107,26 @@ class Api::V1::StripeSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "key rotation is blocked while orders are in flight (rename stays allowed)" do
+    setting = StripeSetting.create!(user: @user, name: "K", secret_key: "sk_live_a")
+    group = create_group(owner: @user)
+    event = create_event(group: group, owner: @user)
+    ticket = create_ticket(event: event)
+    TicketItem.create!(ticket: ticket, event: event, user: create_user, ticket_type: "event",
+      status: "pending", amount: 1000, stripe_setting_id: setting.id)
+
+    patch "/api/v1/stripe_settings/#{setting.id}",
+      params: { stripe_setting: { secret_key: "sk_live_other_account" } }, headers: auth_headers(@user)
+    assert_response :unprocessable_entity
+    assert_match "cannot be rotated", json_response["error"]
+    assert_equal "sk_live_a", setting.reload.secret_key
+
+    patch "/api/v1/stripe_settings/#{setting.id}",
+      params: { stripe_setting: { name: "Renamed" } }, headers: auth_headers(@user)
+    assert_response :success
+    assert_equal "Renamed", setting.reload.name
+  end
+
   test "destroy is blocked while the key has pending or recently paid orders" do
     setting = StripeSetting.create!(user: @user, name: "K", secret_key: "sk_live_a")
     group = create_group(owner: @user)

@@ -258,7 +258,10 @@ class Api::V1::TicketsController < Api::BaseController
     setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
     return render_error("the collecting stripe key is no longer available") unless setting
 
-    refunded_so_far = ticket_item.refunds.where(status: "succeeded").sum(:amount)
+    # Pending refunds count against the balance too — Stripe would ultimately
+    # reject an over-refund, but two in-flight partials must not both claim
+    # the same remainder (and full/partial labeling depends on this number).
+    refunded_so_far = ticket_item.refunds.where(status: %w[pending succeeded]).sum(:amount)
     remaining = ticket_item.amount.to_i - refunded_so_far
     amount = params[:amount].present? ? params[:amount].to_i : remaining
     return render_error("invalid refund amount") unless amount.positive? && amount <= remaining

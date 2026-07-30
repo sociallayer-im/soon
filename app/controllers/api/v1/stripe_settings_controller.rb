@@ -32,6 +32,12 @@ class Api::V1::StripeSettingsController < Api::BaseController
   def update
     @setting.assign_attributes(setting_params)
     key_changed = @setting.will_save_change_to_secret_key?
+    # Rotating the key (possibly to a DIFFERENT Stripe account) while orders
+    # are in flight would strand them: their sessions become unverifiable,
+    # their webhooks unsigned, their refunds unroutable. Same guard as destroy.
+    if key_changed && blocking_orders?(@setting)
+      return render_error("this key has pending or recently paid orders and cannot be rotated yet")
+    end
     StripeGateway.delete_webhook_endpoint(StripeSetting.find(@setting.id)) if key_changed
     validate_and_save(@setting, key_changed: key_changed)
   end

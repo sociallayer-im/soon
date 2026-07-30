@@ -71,6 +71,11 @@ class StripeGateway
     ::Stripe::Checkout::Session.create(
       {
         mode: "payment",
+        # Cards settle synchronously: session "complete" implies paid, which
+        # the webhook handler and sweeper rely on. Async rails (bank debits
+        # etc.) would introduce a complete-but-unpaid limbo state plus
+        # async_payment_succeeded events this integration does not handle.
+        payment_method_types: [ "card" ],
         line_items: [ {
           quantity: 1,
           price_data: {

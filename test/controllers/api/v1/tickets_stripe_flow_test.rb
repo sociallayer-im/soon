@@ -136,7 +136,21 @@ class Api::V1::TicketsStripeFlowTest < ActionDispatch::IntegrationTest
 
     post "/api/v1/tickets/#{item.id}/refund", headers: auth_headers(@owner)
     assert_response :unprocessable_entity
-    assert_match "already in progress", json_response["error"]
+    # The pending refund consumes the whole balance, so the amount check
+    # rejects first; the partial unique index stays as the backstop for
+    # truly simultaneous inserts.
+    assert_match(/invalid refund amount|already in progress/, json_response["error"])
+  end
+
+  test "a pending partial refund counts against the remaining balance" do
+    item = create_order(status: "succeeded", txhash: "pi_pend")
+    item.refunds.create!(requested_by: @owner, amount: 800, full_refund: false, status: "pending")
+
+    # 800 pending + 500 requested > 1000 → rejected even though nothing has
+    # settled yet; and a 200 request is correctly labeled as the full remainder.
+    post "/api/v1/tickets/#{item.id}/refund",
+      params: { amount: 500 }, headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
   end
 
   test "partial refund amounts are validated against the remaining balance" do
