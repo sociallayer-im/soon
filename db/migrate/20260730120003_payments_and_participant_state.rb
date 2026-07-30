@@ -90,9 +90,40 @@ class PaymentsAndParticipantState < ActiveRecord::Migration[8.1]
     add_index :participants, [ :event_id, :status ]
   end
 
+  # Restores the SCHEMA only. Deleted rows (the legacy `unbounded` orders) and
+  # dropped data (participants.ticket_id) are not recovered — nothing wants
+  # them back; this exists so the structure can be rolled back cleanly.
   def down
-    # Irreversible: the deleted `unbounded` grants are deliberately not
-    # carried forward.
-    raise ActiveRecord::IrreversibleMigration
+    remove_index :participants, [ :event_id, :status ]
+    change_column_comment :participants, :payment_status,
+      from: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!", to: nil
+    change_column_comment :participants, :status,
+      from: "attending | pending | declined | maybe | cancelled — see Participant",
+      to: "attending | declined | maybe"
+    change_table :participants, bulk: true do |t|
+      t.string :ticket_id
+      t.remove :cancelled_at
+      t.remove :checked_in_at
+    end
+    # Dropping the column in #up took its foreign key with it.
+    add_foreign_key :participants, :tickets
+    rename_column :participants, :registered_at, :register_time
+
+    remove_index :payment_methods, :stripe_setting_id
+    change_table :payment_methods, bulk: true do |t|
+      t.remove :stripe_setting_id
+      t.remove :currency
+    end
+
+    change_column_comment :ticket_items, :status,
+      from: "pending | succeeded | cancelled | timeout | refunded | partially_refunded | disputed — see TicketItem",
+      to: "pending | unbounded | succeeded | cancelled | timeout"
+    remove_index :ticket_items, name: "index_ticket_items_sweeper"
+    remove_index :ticket_items, :provider_ref
+    remove_index :ticket_items, :stripe_setting_id
+    change_table :ticket_items, bulk: true do |t|
+      t.remove :payment_provider, :provider_ref, :currency, :reserved_until,
+               :released_at, :paid_at, :stripe_setting_id
+    end
   end
 end
