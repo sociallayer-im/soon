@@ -1,0 +1,21 @@
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_b0f980c5aab3fa 19-22
+ginger.yml
+  s_e9ed806a3d225c::t_085d40f5cbf88d 92-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "54f8ef0e3fa133c77534012fa8388b8f4ed666fa",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
