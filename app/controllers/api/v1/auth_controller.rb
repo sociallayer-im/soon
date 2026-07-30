@@ -19,7 +19,7 @@ class Api::V1::AuthController < Api::BaseController
   # The default matters: SG's ginger.yml did not inject this variable for a
   # while, so production ran on whatever was written here.
   ALLOWED_SIWE_DOMAINS = ENV.fetch("ALLOWED_SIWE_DOMAINS",
-    "app.sola.day,auth.sola.day,www.juluo.xyz,auth.juluo.xyz")
+    "app.sola.day,auth.sola.day,id.sola.day,www.juluo.xyz,auth.juluo.xyz,id.juluo.xyz")
     .split(",").map(&:strip).map(&:downcase).reject(&:blank?).freeze
   # Bare hostname, optionally with a :port — matches how wagmi/viem's
   # `window.location.host` fills the SIWE domain field in local dev.
