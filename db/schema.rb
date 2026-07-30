@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_120003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -550,12 +550,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_200000) do
     t.string "currency", default: "usd", null: false
     t.string "mode", default: "live", null: false, comment: "live | test — auto-detected from key prefix"
     t.string "name", null: false, comment: "user-facing label shown in key pickers"
-    t.text "secret_key", null: false, comment: "encrypted (Active Record encryption)"
+    t.text "secret_key", null: false, comment: "plaintext by decision; only the masked tail ever leaves the server"
     t.string "status", default: "active", null: false, comment: "active | invalid"
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.string "webhook_endpoint_id", comment: "Stripe we_… id, for deletion on key removal"
-    t.text "webhook_secret", comment: "encrypted per-endpoint signing secret"
+    t.text "webhook_secret", comment: "per-endpoint signing secret"
     t.index ["user_id"], name: "index_stripe_settings_on_user_id"
   end
 
@@ -582,7 +582,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_200000) do
     t.string "selector_address"
     t.string "selector_type"
     t.string "sender_address"
-    t.string "status", comment: "pending | unbounded | succeeded | cancelled | timeout"
+    t.string "status", comment: "pending | succeeded | cancelled | timeout | refunded | partially_refunded | disputed — see TicketItem"
     t.string "stripe_setting_id"
     t.string "ticket_id", null: false
     t.string "ticket_type", default: "event", comment: "event | group"
