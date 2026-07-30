@@ -2,7 +2,49 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-07-29 (latest) — GoodJob as the Active Job backend; all mail moved onto it
+## 2026-07-30 — public reads that 401'd, cancelled events, SIWE domains
+
+Four fixes, all surfaced while moving sign-in into `seastar-app` (the full
+record of that work is in `seastar-app/design/AUTH_INTEGRATION.md`).
+
+**`recurring#show` and `forms#get_event_form` 401'd without a token**, and the
+event detail page fetches both server-side for signed-out visitors. The SDK's
+`requestOrNull` only swallows 404, so a 401 threw and took the whole page down
+with a 500 — reported as a broken event URL. Both are public reads now, with
+visibility enforced explicitly rather than by demanding a session:
+`recurring#show` filters occurrences through `Event.visible_to(current_user)`
+(via a new `visible_events` option on the blueprint, since the association would
+otherwise render every occurrence), and `get_event_form` authorizes the event
+itself — `set_event` uses a bare `Event.find`, so a draft or private event's
+form had been readable by anyone holding the event id.
+
+**Cancelled events left every listing.** `Event.visible_to` excluded them from
+the public branch but re-admitted them via `OR owner_id / OR group_id IN
+(managed)`, which put cancelled occurrences back on the group schedule grid —
+where, unlike CardEvent, there is no "Cancelled" badge to disambiguate them. The
+exclusion is NULL-safe on purpose: `events.status` has a default but no NOT NULL
+constraint, and a plain `where.not(status: [...])` is NULL for a NULL status in
+Postgres, which would have dropped every legacy row that has none. Direct links
+still render — `EventPolicy#show?` does not gate cancelled.
+
+**The single-event ICS export leaked cancelled and pending events.**
+`calendar_visible?` hand-copied `Event.visible_to`'s status list and had drifted
+out of sync with it. It now delegates to the scope, so the two cannot diverge
+again. The group feed was never affected — it filters on `status: "published"`.
+
+**`ALLOWED_SIWE_DOMAINS`** now accepts `app.sola.day` and `id.sola.day` (plus
+the juluo equivalents), since the SIWE message's `domain` is
+`window.location.host` and sign-in moved hosts. Note this variable was **not**
+injected by `ginger.yml`, so SG had been running on the hardcoded default in
+`AuthController` all along and the value in `.env.production` had no effect;
+both are now correct and the variable is injected.
+
+Not fixed, recorded here because it is load-bearing elsewhere:
+`ParticipantsController#create` never checks the group's `can_join_event`. The
+frontend hides the RSVP button accordingly, but that is a UI hint, not a
+permission — a direct POST still joins.
+
+## 2026-07-29 — GoodJob as the Active Job backend; all mail moved onto it
 
 Background work had no durable backend: `config.active_job.queue_adapter` was
 never set, so every `deliver_later` in the app ran on Rails' built-in `:async`
