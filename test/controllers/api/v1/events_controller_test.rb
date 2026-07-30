@@ -230,14 +230,47 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes json_response["data"].map { |e| e["id"] }, cancelled.id
   end
 
-  test "index still shows the organizer their own cancelled event (Cancelled badge, not vanished)" do
+  # A cancelled event is not happening, so it leaves every listing — including
+  # the organizer's and a group manager's, which is what put cancelled
+  # occurrences back onto the group schedule grid.
+  test "index hides a cancelled event from its own organizer and group managers" do
+    owner = create_user
+    group = create_group(owner: owner)
+    manager = create_user
+    create_membership(group: group, user: manager, role: "manager")
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+
+    [owner, manager].each do |viewer|
+      get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(viewer)
+      assert_response :success
+      assert_not_includes json_response["data"].map { |e| e["id"] }, cancelled.id,
+        "cancelled event leaked into the listing for #{viewer == owner ? 'owner' : 'manager'}"
+    end
+  end
+
+  # `status` has a DB default but no NOT NULL constraint, so legacy rows can
+  # carry NULL. The cancelled-status exclusion must not sweep those up.
+  test "index still lists an event whose status is NULL" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, visibility: "public")
+    event.update_column(:status, nil)
+
+    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
+    assert_response :success
+    assert_includes json_response["data"].map { |e| e["id"] }, event.id
+  end
+
+  # ...but it stays reachable by direct link, so an organizer who follows an old
+  # URL still sees it (with the Cancelled badge) rather than a 404.
+  test "show still renders a cancelled public event" do
     owner = create_user
     group = create_group(owner: owner)
     cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
 
-    get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
+    get "/api/v1/events/#{cancelled.id}"
     assert_response :success
-    assert_includes json_response["data"].map { |e| e["id"] }, cancelled.id
+    assert_equal "cancelled", json_response["status"]
   end
 
   test "show 404s for an unknown id" do

@@ -34,19 +34,29 @@ class Event < ApplicationRecord
   # a later change to the group's zone leaves existing events untouched.
   before_validation :inherit_group_timezone, on: :create
 
+  # Statuses that never appear in ANY listing, for anybody — not even the
+  # organizer or a group manager. A cancelled event is not happening, so
+  # drawing it on a schedule grid or in a browse list is wrong regardless of
+  # who is looking (decided 2026-07-30; this previously re-admitted cancelled
+  # events for the owner/managers via the branches below, which put cancelled
+  # occurrences back onto the group calendar — the schedule grid has no
+  # "Cancelled" badge to disambiguate them the way CardEvent does).
+  # It stays reachable by direct link: EventPolicy#show? does not gate
+  # cancelled, so /event/detail/:id still renders for everyone.
+  UNLISTED_STATUSES = %w[cancelled].freeze
+
   # Events a user is allowed to see in a listing: public & not draft/pending/
-  # archived/cancelled to everyone (pending = awaiting manager approval via
-  # #approve — see EventsController#pending_approval — must stay unlisted
-  # until then, same as a draft; cancelled matches sails' behavior — a
-  # cancelled event drops out of browse listings entirely), plus anything they
-  # own or manage (group admin/owner) — an organizer still sees their own
-  # cancelled event (with the "Cancelled" badge — see CardEvent) so they know
-  # it's cancelled rather than it silently vanishing for them too. Callers
+  # archived to everyone (pending = awaiting manager approval via #approve —
+  # see EventsController#pending_approval — must stay unlisted until then, same
+  # as a draft), plus anything they own or manage (group admin/owner). Callers
   # still scope by group membership on top of this.
   scope :visible_to, ->(user) {
     managed = Membership.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
-    where(
-      "(events.visibility = 'public' AND events.status NOT IN ('draft', 'pending', 'archived', 'cancelled')) " \
+    # NULL-safe on purpose: `status` has a default but no NOT NULL constraint,
+    # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
+    # which would silently drop every legacy row that has none.
+    where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
+      "(events.visibility = 'public' AND events.status NOT IN ('draft', 'pending', 'archived')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed)",
       uid: user&.id, managed: managed
     )
