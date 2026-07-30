@@ -14,6 +14,10 @@ class StripeSetting < ApplicationRecord
 
   validates :name, presence: true
   validates :secret_key, presence: true
+  # pk_ keys are publishable (browser-side) and cannot call the API at all —
+  # Stripe answers 401, which reads as "rejected" with no hint why. This is
+  # the single easiest mistake to make here, so name it explicitly.
+  validate :secret_key_is_not_publishable
   validates :mode, inclusion: { in: %w(live test) }
   validates :status, inclusion: { in: %w(active invalid) }
   validates :currency, presence: true
@@ -30,5 +34,14 @@ class StripeSetting < ApplicationRecord
   # sk_test_/rk_test_ prefixes mark Stripe test keys; everything else is live.
   def detect_mode
     self.mode = secret_key.to_s.match?(/\A[a-z]+_test_/) ? "test" : "live" if secret_key.present?
+  end
+
+  def secret_key_is_not_publishable
+    return if secret_key.blank?
+    return unless secret_key.to_s.start_with?("pk_")
+
+    errors.add(:secret_key,
+      "is a publishable key (pk_…), which cannot charge cards. Use the Secret key (sk_…) " \
+      "or a Restricted key (rk_…) from Stripe Dashboard → Developers → API keys")
   end
 end

@@ -15,7 +15,9 @@ class StripeGateway
   class InvalidKey < StandardError; end
 
   # Validates a candidate key by asking Stripe who it belongs to.
-  # Returns the acct_… id; raises InvalidKey when Stripe rejects it.
+  # Returns the acct_… id (nil when the key authenticated but may not read the
+  # account); raises InvalidKey, carrying Stripe's own message, when the key
+  # is rejected.
   #
   # NB: the id argument must be nil (not {}), which routes to the singleton
   # /v1/account — the key's own account. A non-nil id is checked as a string
@@ -24,8 +26,18 @@ class StripeGateway
   def self.validate_key(secret_key)
     account = ::Stripe::Account.retrieve(nil, { api_key: secret_key })
     account.id
-  rescue ::Stripe::AuthenticationError, ::Stripe::PermissionError
-    raise InvalidKey
+  rescue ::Stripe::PermissionError => e
+    # The key IS valid — Stripe authenticated it and then refused this
+    # endpoint. Typical for a Restricted key without account-read scope,
+    # which is exactly the key type we recommend, so accept it and carry on
+    # without an account id rather than locking the user out.
+    Rails.logger.info("[stripe] key accepted without account read: #{e.message}")
+    nil
+  rescue ::Stripe::AuthenticationError => e
+    raise InvalidKey, e.message
+  rescue ::Stripe::StripeError => e
+    # Connection/API trouble is not the key's fault — say so, don't blame it.
+    raise InvalidKey, "could not reach Stripe to verify the key: #{e.message}"
   end
 
   # Creates the webhook endpoint on the key's account, pointed at our

@@ -27,6 +27,13 @@ class StripeSettingTest < ActiveSupport::TestCase
     assert_equal "…9999", setting.masked_key
   end
 
+  test "a publishable key is rejected with a message that names the mistake" do
+    setting = StripeSetting.new(user: create_user, name: "Oops", secret_key: "pk_test_abc123")
+    assert_not setting.valid?
+    assert_match(/publishable key/, setting.errors.full_messages.join)
+    assert_match(/sk_|rk_/, setting.errors.full_messages.join, "must say what to use instead")
+  end
+
   test "a user can hold multiple keys" do
     user = create_user
     StripeSetting.create!(user: user, name: "A", secret_key: "sk_live_a")

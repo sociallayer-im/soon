@@ -67,12 +67,16 @@ class Api::V1::StripeSettingsController < Api::BaseController
   # delayed confirmation (§6.2).
   def validate_and_save(setting, key_changed:)
     was_new = setting.new_record?
+    # Cheap local checks (pk_ keys, blank name) before spending a Stripe
+    # round-trip — and so the user gets the specific message, not a 401.
+    return render_error(setting.errors.full_messages.join(", ")) unless setting.valid?
+
     if key_changed
       begin
         setting.account_id = StripeGateway.validate_key(setting.secret_key)
         setting.status = "active"
-      rescue StripeGateway::InvalidKey
-        return render_error("Stripe rejected this API key")
+      rescue StripeGateway::InvalidKey => e
+        return render_error("Stripe rejected this API key: #{e.message}")
       end
     end
 
