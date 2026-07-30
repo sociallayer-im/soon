@@ -1,0 +1,21 @@
+app/controllers/api/v1/calendars_controller.rb
+  s_e9ed806a3d225c::t_4532f94be30650 63-68,70
+test/controllers/api/v1/calendars_controller_test.rb
+  s_e9ed806a3d225c::t_b7edda1d97a2e0 31-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "fc981cab8aad4de2e9bcedcd8d5aa8e065720417",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
