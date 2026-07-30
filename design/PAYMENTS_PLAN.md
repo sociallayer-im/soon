@@ -134,9 +134,10 @@ keys need no extra webhook design.
 
 Handling rules for the key:
 
-- **Encrypt at rest** with Active Record encryption (`encrypts`). Requires
-  setting up `active_record_encryption` keys in credentials/env — currently
-  not configured.
+- **Stored plaintext — no encryption at rest** (decided 2026-07-30,
+  superseding the earlier encrypt-at-rest plan; no `AR_ENCRYPTION_*` keys
+  needed). Remaining protections: masked-only serialization, parameter-log
+  filtering, and the restricted-key recommendation.
 - **Never serialize the secret.** No blueprint ever includes `secret_key` /
   `webhook_secret`; the settings UI shows only a masked tail (`sk_live_…abc4`)
   and the validation status.

@@ -16,6 +16,7 @@ class Api::V1::TicketsController < Api::BaseController
   # POST /api/v1/events/:event_id/tickets
   def create
     authorize @event, :update?
+    return if stripe_setting_rejected?(@event)
     ticket = @event.tickets.new(ticket_params)
     if ticket.save
       render json: TicketBlueprint.render(ticket, view: :extended), status: :created
@@ -28,6 +29,7 @@ class Api::V1::TicketsController < Api::BaseController
   def update
     authorize @event, :update?
     return render_not_found unless @ticket
+    return if stripe_setting_rejected?(@event)
 
     if @ticket.update(ticket_params)
       render json: TicketBlueprint.render(@ticket, view: :extended)
@@ -540,6 +542,22 @@ class Api::V1::TicketsController < Api::BaseController
       paid_at: status == "succeeded" ? Time.current : nil,
       reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )
+  end
+
+  # Money always lands in the event owner's account (decision #5): whoever is
+  # editing — owner, co-host, group manager — a stripe payment method may only
+  # reference one of the EVENT OWNER's keys. Without this, any editor could
+  # silently point ticket revenue at their own Stripe account.
+  def stripe_setting_rejected?(event)
+    ids = Array(ticket_params[:payment_methods_attributes]).filter_map { |pm| pm[:stripe_setting_id].presence }
+    return false if ids.empty?
+
+    owned = StripeSetting.where(id: ids.uniq, user_id: event.owner_id).pluck(:id)
+    if (ids.uniq - owned).any?
+      render_error("stripe key must belong to the event owner")
+      return true
+    end
+    false
   end
 
   def ticket_params

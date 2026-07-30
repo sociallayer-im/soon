@@ -9,6 +9,19 @@ class Api::V1::StripeSettingsController < Api::BaseController
     render json: StripeSettingBlueprint.render(current_user.stripe_settings.order(:created_at))
   end
 
+  # GET /api/v1/stripe_settings/for_event?event_id=
+  #
+  # Money always lands in the event owner's account (decision #5), so a
+  # co-host/manager editing tickets picks from the OWNER's keys — selectable,
+  # never modifiable, and only the masked shape leaves the server. Gated on
+  # the same right that lets them edit the ticket at all.
+  def for_event
+    event = Event.find(params[:event_id])
+    authorize event, :update?, policy_class: EventPolicy
+    settings = StripeSetting.where(user_id: event.owner_id, status: "active").order(:created_at)
+    render json: StripeSettingBlueprint.render(settings)
+  end
+
   # POST /api/v1/stripe_settings  {stripe_setting: {name, secret_key, currency?}}
   def create
     setting = current_user.stripe_settings.new(setting_params)

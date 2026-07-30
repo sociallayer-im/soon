@@ -7,8 +7,10 @@ class StripeSetting < ApplicationRecord
   belongs_to :user
   has_many :payment_methods, dependent: nil
 
-  encrypts :secret_key
-  encrypts :webhook_secret
+  # Stored in plaintext by decision (2026-07-30) — no Active Record
+  # encryption. The protections that remain: keys never leave the server
+  # unmasked (blueprint renders masked_key only), and filter_parameter_logging
+  # keeps them out of logs.
 
   validates :name, presence: true
   validates :secret_key, presence: true

@@ -87,6 +87,26 @@ class Api::V1::StripeSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "for_event lists the EVENT OWNER's active keys to anyone who can edit the event" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    StripeSetting.create!(user: owner, name: "Owner key", secret_key: "sk_live_o")
+    StripeSetting.create!(user: owner, name: "Broken", secret_key: "sk_live_b", status: "invalid")
+    manager = create_user
+    create_membership(user: manager, group: group, role: "manager")
+
+    # A manager (can update the event) sees the owner's active keys — masked.
+    get "/api/v1/stripe_settings/for_event", params: { event_id: event.id }, headers: auth_headers(manager)
+    assert_response :success
+    assert_equal [ "Owner key" ], json_response.map { |s| s["name"] }
+    assert_not response.body.include?("sk_live_o")
+
+    # An outsider with no edit rights gets nothing.
+    get "/api/v1/stripe_settings/for_event", params: { event_id: event.id }, headers: auth_headers(create_user)
+    assert_response :forbidden
+  end
+
   test "destroy is blocked while the key has pending or recently paid orders" do
     setting = StripeSetting.create!(user: @user, name: "K", secret_key: "sk_live_a")
     group = create_group(owner: @user)

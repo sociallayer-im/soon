@@ -146,7 +146,14 @@ Rails.application.routes.draw do
       end
 
       # Present only when STRIPE_ENABLED (the controller 404s otherwise).
-      resources :stripe_settings, only: %i[index create update destroy]
+      resources :stripe_settings, only: %i[index create update destroy] do
+        collection do
+          # The EVENT OWNER's keys (masked), for the ticket-form picker when a
+          # co-host/manager edits someone else's event. Read-only — keys are
+          # managed exclusively by their owner through the routes above.
+          get :for_event
+        end
+      end
 
       resources :vouchers, only: %i[index show create] do
         collection do

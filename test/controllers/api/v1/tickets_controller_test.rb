@@ -116,6 +116,18 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :created
     assert_equal setting.id, Ticket.find(json_response["id"]).payment_methods.sole.stripe_setting_id
 
+    # A key that is NOT the event owner's is rejected — an editor must not be
+    # able to point ticket revenue at their own Stripe account.
+    interloper = create_user
+    create_membership(user: interloper, group: @group, role: "manager")
+    foreign = StripeSetting.create!(user: interloper, name: "Mine", secret_key: "sk_live_x")
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Hijack", ticket_type: "event",
+                          payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500, stripe_setting_id: foreign.id }] } },
+      headers: auth_headers(interloper)
+    assert_response :unprocessable_entity
+    assert_match "belong to the event owner", json_response["error"]
+
     # The same price is fine on a crypto method — the floor is card-only.
     post "/api/v1/events/#{@event.id}/tickets",
       params: { ticket: { title: "CheapCrypto", ticket_type: "event",
