@@ -106,6 +106,16 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_match "crypto payment", json_response["error"]
 
+    # stripe_setting_id must survive the permit list (silently-dropped params
+    # have caused real data loss here before).
+    setting = StripeSetting.create!(user: @owner, name: "K", secret_key: "sk_live_k")
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Card", ticket_type: "event",
+                          payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 2500, stripe_setting_id: setting.id }] } },
+      headers: auth_headers(@owner)
+    assert_response :created
+    assert_equal setting.id, Ticket.find(json_response["id"]).payment_methods.sole.stripe_setting_id
+
     # The same price is fine on a crypto method — the floor is card-only.
     post "/api/v1/events/#{@event.id}/tickets",
       params: { ticket: { title: "CheapCrypto", ticket_type: "event",

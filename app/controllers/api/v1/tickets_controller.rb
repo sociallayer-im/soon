@@ -546,7 +546,7 @@ class Api::V1::TicketsController < Api::BaseController
     params.require(:ticket).permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
       :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
       days_allowed: [], tracks_allowed: [],
-      payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :_destroy, chains: []])
+      payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :stripe_setting_id, :_destroy, chains: []])
   end
 
   def coupon_params
