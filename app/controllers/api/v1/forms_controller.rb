@@ -1,4 +1,10 @@
 class Api::V1::FormsController < Api::BaseController
+  # The registration form is part of the public event page — an anonymous
+  # visitor has to see what they'd be asked to fill in, and the event detail
+  # loader fetches it with no token. Same 401-becomes-a-500 hazard as
+  # recurring#show; #get_event_form authorizes the event itself instead.
+  skip_before_action :authenticate!, only: :get_event_form
+  before_action :authenticate_optional!, only: :get_event_form
   before_action :set_event
 
   # POST /api/v1/events/:event_id/form
@@ -53,6 +59,9 @@ class Api::V1::FormsController < Api::BaseController
 
   # GET /api/v1/events/:event_id/form
   def get_event_form
+    # set_event uses a bare Event.find, so without this a draft or private
+    # event's form would be readable by anyone who knew the event id.
+    authorize @event, :show?
     render json: @event.form ? FormBlueprint.render(@event.form, view: :extended) : { form: nil }
   end
 

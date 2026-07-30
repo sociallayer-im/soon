@@ -137,6 +137,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   # ---- get_event_form ----
 
   test "get_event_form works without manager auth and returns nil form gracefully" do
+    @event.update!(status: "published")
     outsider = create_user
     get "/api/v1/events/#{@event.id}/form", headers: auth_headers(outsider)
     assert_response :success
@@ -146,12 +147,40 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   test "get_event_form returns the attached form" do
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [{ label: "Q1" }] }, headers: auth_headers(@owner)
+    @event.update!(status: "published")
 
     outsider = create_user
     get "/api/v1/events/#{@event.id}/form", headers: auth_headers(outsider)
     assert_response :success
     assert_equal "RSVP", json_response["title"]
     assert_equal 1, json_response["fields"].size
+  end
+
+  # The event detail page is server-rendered for signed-out visitors and fetches
+  # the form with no token; when this 401'd, the whole page 500'd.
+  test "get_event_form is readable anonymously for a public event" do
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Q1" }] }, headers: auth_headers(@owner)
+    @event.update!(status: "published")
+
+    get "/api/v1/events/#{@event.id}/form"
+    assert_response :success
+    assert_equal "RSVP", json_response["title"]
+  end
+
+  test "get_event_form hides a draft event's form from non-managers" do
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Q1" }] }, headers: auth_headers(@owner)
+    assert_equal "draft", @event.reload.status
+
+    get "/api/v1/events/#{@event.id}/form"
+    assert_response :forbidden
+
+    get "/api/v1/events/#{@event.id}/form", headers: auth_headers(create_user)
+    assert_response :forbidden
+
+    get "/api/v1/events/#{@event.id}/form", headers: auth_headers(@owner)
+    assert_response :success
   end
 
   # ---- required-field gate at join time (ParticipantsController#create) ----

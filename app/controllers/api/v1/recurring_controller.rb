@@ -1,8 +1,22 @@
 class Api::V1::RecurringController < Api::BaseController
+  # A recurring series belongs to a public event page (the "Repeating Events"
+  # list on event/detail), which anonymous visitors can read — and the frontend
+  # fetches it with no token both server-side and from RecurringListBtn. Without
+  # this skip every anonymous view of a recurring event 500'd the whole page on
+  # a 401. Mirrors events#index/#show: public read, visibility enforced below
+  # rather than by requiring a session.
+  skip_before_action :authenticate!, only: :show
+  before_action :authenticate_optional!, only: :show
+
   # GET /api/v1/recurring/:id
   def show
     recurring = Recurring.find(params[:id])
-    render json: RecurringBlueprint.render(recurring, view: :with_events)
+    # Same rule as events#index — an anonymous viewer sees only the public,
+    # non-draft occurrences; the owner and group managers still see all of them.
+    # Passed in explicitly because the blueprint's association would otherwise
+    # render the unfiltered `recurring.events`.
+    events = recurring.events.visible_to(current_user).order(:start_time)
+    render json: RecurringBlueprint.render(recurring, view: :with_events, visible_events: events)
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end

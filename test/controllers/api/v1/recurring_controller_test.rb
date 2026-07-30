@@ -267,6 +267,34 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # The event detail page server-renders the "Repeating Events" list for
+  # signed-out visitors with no token; while this 401'd, every anonymous view of
+  # a recurring event 500'd the whole page.
+  test "show is readable anonymously, exposing only the visible occurrences" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "day", event_count: 2, status: "published",
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "Daily"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+    recurring_id = json_response["id"]
+
+    get "/api/v1/recurring/#{recurring_id}"
+    assert_response :success
+    assert_equal 2, json_response["events"].size
+
+    # A draft occurrence is the owner's business only — it must not leak to an
+    # anonymous reader, while the owner still sees the whole series.
+    Recurring.find(recurring_id).events.order(:start_time).first.update!(status: "draft")
+
+    get "/api/v1/recurring/#{recurring_id}"
+    assert_response :success
+    assert_equal 1, json_response["events"].size
+
+    get "/api/v1/recurring/#{recurring_id}", headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal 2, json_response["events"].size
+  end
+
   test "update requires owner or group admin" do
     post "/api/v1/recurring", params: {
       group_id: @group.id, interval: "day", event_count: 2,
