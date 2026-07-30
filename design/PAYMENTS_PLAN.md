@@ -1,8 +1,11 @@
 # Payments plan — Stripe integration for `soon`
 
-Status: **FINAL — approved 2026-07-30**. All decisions settled; implementation
-proceeds per the phases in §4.
-Nothing here is implemented yet. Scope: fiat (Stripe) ticketing in `soon`,
+Status: **IMPLEMENTED — 2026-07-30.** All decisions settled and all phases
+built; see §7 for what shipped, what changed along the way, and what is
+still open. Not yet deployed: SG needs `ginger deploy` (which runs the
+migration that deletes the legacy `unbounded` rows).
+
+Scope: fiat (Stripe) ticketing in `soon`,
 plus the `seastar-app` / `sola-sdk` surface it needs. The crypto (EVM PayHub)
 rail is in scope where it shares code with fiat — coupons, reservations, order
 state — and the state machine is designed to absorb a future refactor of the
@@ -66,13 +69,15 @@ Decisions confirmed so far:
     Which key a ticket charges to is **chosen at ticket-creation time** from
     the event owner's keys, stored as `payment_methods.stripe_setting_id`.
 
-All line references are to the tree as of 2026-07-30.
+All line references are to the tree **before** this work landed; §7 records
+what was actually built and where it diverged.
 
 ---
 
-## 1. Current state: Stripe is a non-functional stub
+## 1. Starting point (historical): Stripe was a non-functional stub
 
-`soon` cannot currently take a card payment.
+This was the state before the work in §7. Kept because it explains why the
+design is a fresh build rather than a repair.
 
 | Thing | State |
 |---|---|
@@ -82,8 +87,8 @@ All line references are to the tree as of 2026-07-30.
 | `STRIPE_WEBHOOK_SECRET` | Unset → `stripe_event_verified?` (`tickets_controller.rb:489`) returns `!Rails.env.production?` → in production all webhooks are ignored. |
 | Frontend | No `@stripe/stripe-js`. `getStripeClientSecret` / `getStripeConfig` (`packages/sola-sdk/src/event/ticket.ts:251,264`) have zero callers. `TicketForm.tsx:510` filters `stripe` out of organizer options. `DialogTicket.tsx` implements only the EVM PayHub path. |
 
-Good news: no live money, no migration burden — this is a fresh design, not a
-repair.
+No live money, no migration burden — hence a fresh design. All five rows
+above are now resolved (§7.1).
 
 ---
 
@@ -113,8 +118,9 @@ stripe_settings
   id            (tsid, like everything else)
   user_id       null: false, index (NOT unique — multiple keys per user)
   name          user-facing label ("My company", "Test") shown in pickers
-  secret_key    encrypted (Rails `encrypts :secret_key`)
-  webhook_secret encrypted  — per-endpoint signing secret, see §2.3
+  secret_key    plaintext by decision — only the masked tail ever leaves the server
+  webhook_secret per-endpoint signing secret, see §2.3
+  webhook_endpoint_id  Stripe we_… — so the endpoint can be removed with the key
   account_id    Stripe acct_… — captured at validation time, for display/reconciliation
   mode          live | test — auto-detected from the key prefix (sk_test_/rk_test_),
                 shown as a TEST MODE badge everywhere the key or its tickets appear
@@ -242,9 +248,11 @@ the endpoint from their dashboard delays confirmation, never corrupts it.
 
 ---
 
-## 3. Findings in the current code
+## 3. Findings in the original code — all fixed
 
-Ordered by how much money or data each can cost.
+Ordered by how much money or data each could cost. Retained as the record of
+what was wrong and why the fix is shaped the way it is; see §7 for the
+commits.
 
 ### 3.1 Ticket orders
 
@@ -406,7 +414,7 @@ Nothing exists today. Needed:
 
 ---
 
-## 4. Phased plan
+## 4. Phased plan (all phases built — see §7)
 
 ### Phase 1 — coupon fixes (confirmed, independent, can ship first)
 
@@ -487,7 +495,7 @@ rotated/deleted key.
 
 ---
 
-## 5. Quick wins already fixable before/alongside Phase 1
+## 5. Quick wins (done, folded into the phases above)
 
 1. `STRIPE_APP_SECRET` vs `STRIPE_SECRET_KEY` mismatch (moot after
    `stripe_settings`, but fix `.env.example` now).
@@ -534,3 +542,143 @@ kept here with their rationale; they are decisions now, not questions:
    uniform TTL (simpler) or per-rail (`stripe: 35m, evm: 15m`)? Proposal:
    uniform 35 min for v1 — scarcity-critical events are rare here, and one
    TTL means one sweeper rule.
+
+---
+
+## 7. What shipped (2026-07-30)
+
+All phases are built; `bin/rails test` is green at 739 runs. **Not deployed
+yet** — SG needs `ginger deploy`, and that deploy runs the migration which
+deletes the legacy `unbounded` rows.
+
+### 7.1 Backend commits, in order
+
+| Commit | Contents |
+|---|---|
+| `ae8a143` | Phase 1: coupon scoping + soft delete, `STRIPE_MIN_CENTS` waiver replaced by creation-time validation |
+| `f44af53` | Phase 2 schema: `stripe_settings`, `stripe_events`, `refunds`, order columns, legacy `unbounded` deleted |
+| `23c6a20` | Phase 3: order state machine + `Ticketing::Quote` |
+| `0526b75` | Phase 4: `stripe_settings` API behind `STRIPE_ENABLED`, `StripeGateway` |
+| `056f485` | Phases 5–7: checkout session, per-setting webhooks, sweeper, refunds |
+| `e9177ea`, `4da9d88` | `stripe_setting_id` permitted on both ticket-creation paths |
+| `324627d` | Key restricted to the event owner; at-rest encryption dropped |
+| `067b5be` | Daily reconciliation + dashboard-issued refunds |
+| `812980a` | `STRIPE_ENABLED` / `API_URL` in `ginger.yml` (SG only) |
+| `fc847c6` | Webhook events bound to their receiving account; session creation serialized |
+| `de095b2` | Rotation guard, refund balance, sweeper caution, card-only sessions |
+| `2c42d15`, `552787b`, `99a2d49` | Key-validation fixes found on first real use |
+| `293cddc`, `65be293`, `d9f7795` | Participant: registration vs check-in, soft delete, state machine |
+| `dacb126` | Group ticket event made designatable |
+| `beae855` | Second unpaid order for the same ticket refused |
+
+Frontend (`seastar-app`): `6eb291f` (keys, ticket form, checkout, refunds),
+`b255955` (owner's keys when editing), `53ceca9`, `68b03b4`, `5f86321`,
+`d9aad23`, `5d9f611`, `e90150c`.
+
+### 7.2 Where the implementation differs from the plan
+
+- **No encryption at rest.** Decision #2's `encrypts` was dropped mid-build
+  (superseded in §2.1): keys are plaintext, protected by masked-only
+  serialization and parameter-log filtering. No `AR_ENCRYPTION_*` env keys
+  are needed.
+- **A restricted key that cannot read `/v1/account` is accepted**, not
+  rejected. Stripe answers `PermissionError` there, which the first cut
+  treated as invalid — locking users out of exactly the `rk_` keys the UI
+  recommends. `account_id` is left nil for such keys.
+- **The order state machine kept the legacy wire names** (`pending`,
+  `succeeded`, `timeout`) rather than renaming to
+  `awaiting_payment`/`paid`/`expired`, because the deployed frontend matches
+  on those strings. `succeeded → cancelled` is permitted for **free** orders
+  only (nothing to refund); `transition!` enforces that, not just the
+  controller.
+- **Every webhook lookup is bound to the receiving account.** Not in the
+  original design: `metadata.ticket_item_id` is attacker-controlled at
+  session creation, so a validly-signed event from account A could otherwise
+  confirm, expire or "refund" an order whose money sits in account B.
+  Mismatches are recorded on the `stripe_event` and transition nothing.
+- **Checkout-session creation runs under the order's row lock.** Two
+  double-clicked requests could otherwise both mint payable sessions for one
+  order.
+- **The sweeper never expires an order it could not ask Stripe about.** An
+  outage or an invalid key is not evidence of non-payment; such orders are
+  skipped with a warning until Stripe answers.
+- **Sessions are card-only** (`payment_method_types: ["card"]`). Async rails
+  would introduce a complete-but-unpaid limbo plus `async_payment_*` events
+  this integration does not handle.
+- **`refunds.full_refund`**, not `full` — `full` is a reserved word in the
+  index predicate.
+- **The group ticket event is designated by `groups.group_ticket_event_id`
+  alone** (`dacb126`). It was previously readable but unsettable, so
+  membership-granting tickets could not be turned on at all; and
+  `Ticket#inherit_group_ticket_type` keyed off `kind == "group_ticket"`, a
+  value nothing ever wrote, so it had never fired. `kind` means the event's
+  category and carries no ticket meaning. Managers designate it from the
+  event form's ticket section; at most one per group.
+
+### 7.3 Bugs found during the build that the plan had not predicted
+
+Beyond §3's list:
+
+1. **Buying a ticket bypassed approval entirely.** `rsvp` hardcoded
+   `status: "attending"` and never consulted `require_approval`, `form_id`,
+   or the ticket's own `need_approval` — while the free join path honoured
+   all three. Paying now lands in `pending` and holds no seat until approved.
+   (`tickets.need_approval` had been permitted but never enforced anywhere.)
+2. **`register_time` meant two things.** RSVP stamped it as the registration
+   time; the door-scan `check_in` re-stamped it as the check-in time. Anything
+   reading it as "checked in" therefore saw every registrant as checked in.
+   Split into `registered_at` + `checked_in_at`.
+3. **Cancelling participation 500'd on every ticketed event.**
+   `participants#destroy` hard-deleted the row while
+   `ticket_items.participant_id` still referenced it. Withdrawal is now a
+   soft delete (`cancelled` + `cancelled_at`); a paid order deliberately
+   stays `succeeded` so the organizer can still refund it.
+4. **Cancelling one order withdrew the whole participant**, dropping an
+   attendance already paid for when a second checkout was abandoned.
+5. **`approve`/`reject` never advanced the application form's submission**, so
+   a decided applicant still read as `pending` in the submissions list.
+6. **`rsvp` reserved inventory on every call**, so a double-click — or a retry
+   during the post-payment confirmation window — held two units for one seat.
+   Guarded per-ticket, so a different ticket type stays purchasable.
+7. **`participants.ticket_id` was write-only** and could not be correct once a
+   participant holds orders for several ticket types. Dropped.
+8. **`payment_status` had four independent writers** and could contradict the
+   orders it described. It is now derived
+   (`Participant#refresh_payment_status!`).
+
+### 7.4 Still open
+
+- **Nothing has touched a real Stripe API** except key validation, which is
+  how `2c42d15` (a wrong `Account.retrieve` signature) and `552787b` were
+  found. Expect more field-level surprises on the first end-to-end test-mode
+  run: session parameters, real webhook payload shapes, `expand:
+  latest_charge`.
+- **Webhook signature verification has only been exercised against
+  library-computed signatures**, never a real Stripe delivery (timestamp
+  tolerance, body encoding).
+- **The frontend has been typechecked, linted and built, but not clicked
+  through** end to end.
+- **Single-threaded GoodJob**: webhook, sweeper, reconciliation and mail jobs
+  share one thread and a 22-connection budget. Queue latency under real load
+  is unmeasured.
+- **Buyer-facing "continue payment"**: the UI now blocks a second order while
+  one is pending, but offers no button to resume the existing Checkout
+  Session (the API already returns it). Worth adding.
+- **Deployment prerequisites**: `STRIPE_ENABLED` and `API_URL` are in
+  `ginger.yml`; `NEXT_PUBLIC_STRIPE_ENABLED` is in `seastar-app`'s
+  (gitignored) `.env.production`. The first deploy also deletes the 227
+  legacy `unbounded` ticket_items.
+
+### 7.5 Suggested first-run checklist (test mode)
+
+1. Organizer saves an `sk_test_`/`rk_test_` key in personal settings →
+   expect TEST MODE, and `delayed_confirmation` on any host where Stripe
+   cannot register the webhook (localhost).
+2. Create an event with a card ticket ≥ $4, key preselected.
+3. Buy with `4242 4242 4242 4242` → redirected to Stripe, back to the event
+   page, banner polls until confirmed.
+4. Refund from the order list → `charge.refunded` finalizes; seat, coupon and
+   group membership released.
+5. Refund one from the Stripe dashboard instead → the daily reconciliation
+   job picks it up.
+6. Abandon a checkout → the sweeper expires it and returns the hold.
