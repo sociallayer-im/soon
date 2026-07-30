@@ -25,8 +25,10 @@ class Api::BaseController < ActionController::API
   # Deployment gate for the whole Stripe feature (design/PAYMENTS_PLAN.md
   # decision #13): SG sets STRIPE_ENABLED=true, CN leaves it unset. Gated
   # controllers 404 as if the routes didn't exist.
+  def stripe_enabled? = ENV["STRIPE_ENABLED"] == "true"
+
   def require_stripe_enabled!
-    render_not_found unless ENV["STRIPE_ENABLED"] == "true"
+    render_not_found unless stripe_enabled?
   end
 
   def authenticate!

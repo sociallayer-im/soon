@@ -818,40 +818,17 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  # ---------------------------------------------------------------- stripe_callback / stripe_config
-
-  test "stripe_callback marks a matching ticket_item succeeded on charge.succeeded and requires no auth" do
-    ticket = create_ticket(event: @event)
-    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
-    buyer = create_user
-    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
-      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
-    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    ticket_item.update!(txhash: "pi_test123")
-
-    post "/api/v1/tickets/stripe_callback", params: {
-      type: "charge.succeeded",
-      data: { object: { payment_intent: "pi_test123", status: "succeeded" } }
-    }
-    assert_response :success
-    assert_equal "succeeded", ticket_item.reload.status
-  end
-
-  test "stripe_config is public" do
-    get "/api/v1/tickets/stripe_config"
-    assert_response :success
-  end
-
   # ---------------------------------------------------------------- regressions (code-review fixes)
 
   test "verify_payment will not mark a stripe item paid unless Stripe confirms it (no free tickets)" do
     ticket = create_ticket(event: @event)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    setting = StripeSetting.create!(user: @owner, name: "K", secret_key: "sk_live_k")
     buyer = create_user
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
       params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
     ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    ticket_item.update!(txhash: "pi_unpaid")
+    ticket_item.update!(txhash: "pi_unpaid", stripe_setting_id: setting.id)
 
     Stripe::PaymentIntent.stub :retrieve, OpenStruct.new(status: "requires_payment_method", amount: 1000) do
       post "/api/v1/tickets/verify_payment",
@@ -864,11 +841,12 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
   test "verify_payment marks a stripe item paid once Stripe reports the intent succeeded" do
     ticket = create_ticket(event: @event)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    setting = StripeSetting.create!(user: @owner, name: "K", secret_key: "sk_live_k")
     buyer = create_user
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
       params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
     ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    ticket_item.update!(txhash: "pi_paid")
+    ticket_item.update!(txhash: "pi_paid", stripe_setting_id: setting.id)
 
     Stripe::PaymentIntent.stub :retrieve, OpenStruct.new(status: "succeeded", amount: 1000) do
       post "/api/v1/tickets/verify_payment",
@@ -876,6 +854,41 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_response :success
     assert_equal "succeeded", ticket_item.reload.status
+  end
+
+  test "verify_payment refuses a stripe item with no key snapshot (legacy rows cannot self-confirm)" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+    ticket_item.update!(txhash: "pi_orphan") # no stripe_setting_id
+
+    post "/api/v1/tickets/verify_payment",
+      params: { ticket_item_id: ticket_item.id }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_equal "pending", ticket_item.reload.status
+  end
+
+  test "set_payment_status refuses stripe orders even with a valid NEXT_TOKEN" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    ENV["NEXT_TOKEN"] = "testtoken"
+    post "/api/v1/tickets/set_payment_status", params: {
+      next_token: "testtoken", chain: ticket_item.chain,
+      product_id: ticket_item.event_id, item_id: ticket_item.id, amount: 1000
+    }
+    assert_response :forbidden
+    assert_equal "pending", ticket_item.reload.status,
+      "a NEXT_TOKEN holder must not be able to mint paid stripe tickets"
+  ensure
+    ENV.delete("NEXT_TOKEN")
   end
 
   test "verify_payment rejects a txhash already consumed by another succeeded item (no replay)" do
@@ -903,41 +916,10 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "pending", second_item.reload.status
   end
 
-  test "stripe_callback auto-joins the group when a group ticket is paid via webhook" do
-    group_event = create_event(group: @group, owner: @owner, kind: "group_ticket")
-    ticket = create_ticket(event: group_event, ticket_type: "group", group_id: @group.id)
-    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
-    buyer = create_user
-    post "/api/v1/events/#{group_event.id}/tickets/#{ticket.id}/rsvp",
-      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
-    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    ticket_item.update!(txhash: "pi_group")
-    assert_not @group.memberships.exists?(user: buyer)
-
-    post "/api/v1/tickets/stripe_callback", params: {
-      type: "charge.succeeded", data: { object: { payment_intent: "pi_group", status: "succeeded" } }
-    }
-    assert_response :success
-    assert_equal "succeeded", ticket_item.reload.status
-    assert @group.memberships.exists?(user: buyer), "buyer must be added to the group like every other payment path"
-  end
-
-  test "stripe_callback does not resurrect a cancelled item" do
-    ticket = create_ticket(event: @event, quantity: 5)
-    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
-    buyer = create_user
-    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
-      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
-    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    ticket_item.update!(txhash: "pi_late")
-    ticket_item.cancel # e.g. user cancelled / timed out, quantity released
-
-    post "/api/v1/tickets/stripe_callback", params: {
-      type: "charge.succeeded", data: { object: { payment_intent: "pi_late", status: "succeeded" } }
-    }
-    assert_response :success
-    assert_equal "cancelled", ticket_item.reload.status, "a late webhook must not flip cancelled back to succeeded"
-  end
+  # (The old platform-wide stripe_callback endpoint is gone — webhook flows,
+  # including group auto-join and late-delivery protection, are covered in
+  # test/controllers/api/v1/stripe_webhooks_controller_test.rb and
+  # test/jobs/stripe_webhook_job_test.rb.)
 
   test "rsvp blocks a badge-gated ticket for a user without the badge, allows a holder" do
     badge_class = create_badge_class(creator: @owner)

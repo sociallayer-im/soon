@@ -1,5 +1,5 @@
 class Api::V1::TicketsController < Api::BaseController
-  skip_before_action :authenticate!, only: %i[stripe_callback set_payment_status stripe_config list_group_ticket_types check_coupon coupon_price]
+  skip_before_action :authenticate!, only: %i[set_payment_status list_group_ticket_types check_coupon coupon_price]
   before_action :set_event, only: %i[create update destroy rsvp]
   before_action :set_ticket, only: %i[update destroy rsvp]
 
@@ -168,7 +168,13 @@ class Api::V1::TicketsController < Api::BaseController
     return render json: { result: "ok", message: "skip verify succeeded ticket_item" } if ticket_item.status == "succeeded"
     return render_error("amount invalid") if params[:amount].to_i < ticket_item.amount.to_i
 
-    if ticket_item.amount.to_i > 0 && ticket_item.chain != "stripe"
+    # Stripe orders confirm exclusively through the signature-verified webhook
+    # or the sweeper's server-side retrieve — never through this shared-secret
+    # endpoint, which skipped real verification for stripe and let any
+    # NEXT_TOKEN holder mint paid tickets (PAYMENTS_PLAN §3.5).
+    return render_error("stripe orders are confirmed via webhook only", status: :forbidden) if ticket_item.chain == "stripe"
+
+    if ticket_item.amount.to_i > 0
       return unless payment_proof_ok?(ticket_item, chain: params[:chain].presence || ticket_item.chain, txhash: params[:txhash])
     end
 
@@ -176,42 +182,83 @@ class Api::V1::TicketsController < Api::BaseController
     render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
-  # POST /api/v1/tickets/stripe_callback  (Stripe webhook)
-  def stripe_callback
-    return render json: { result: "ignored" } unless stripe_event_verified?
+  # POST /api/v1/tickets/checkout_session  {ticket_item_id}
+  #
+  # Mints (or re-serves) the Stripe-hosted Checkout page for a pending stripe
+  # order. One open session per order: closing the tab and clicking "pay"
+  # again returns the SAME session, never an orphaned duplicate (§2.2).
+  def checkout_session
+    return render_not_found unless stripe_enabled?
 
-    intent_id = params.dig(:data, :object, :payment_intent)
-    ticket_item = intent_id.present? && TicketItem.find_by(txhash: intent_id)
-    # Only pending items transition, so a late webhook can't resurrect a
-    # cancelled/timed-out item (which would oversell against released quantity).
-    if ticket_item && ticket_item.status == "pending"
-      case params[:type]
-      when "charge.succeeded"
-        # Funnel through confirm_payment! so the group auto-join / participant
-        # flip / notify side effects match every other payment path.
-        ticket_item.confirm_payment! if params.dig(:data, :object, :status) == "succeeded"
-      when "charge.failed", "charge.expired", "payment_intent.canceled"
-        ticket_item.cancel # releases the reserved quantity and coupon usage
+    ticket_item = TicketItem.find_by(id: params[:ticket_item_id])
+    return render_error("ticket_item not found") unless ticket_item
+    return render_error("not authorized", status: :forbidden) unless ticket_item.user_id == current_user.id
+    return render_error("ticket_item is not for stripe") unless ticket_item.payment_provider == "stripe"
+    return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
+
+    setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
+    unless setting&.status == "active"
+      return render_error("stripe is not configured for this ticket")
+    end
+
+    if ticket_item.provider_ref.present?
+      existing = StripeGateway.retrieve_checkout_session(setting, ticket_item.provider_ref)
+      if existing&.status == "open"
+        return render json: { result: "ok", checkout_url: existing.url, session_id: existing.id }
       end
     end
-    render json: { result: "ok" }
+
+    session = StripeGateway.create_checkout_session(setting, ticket_item)
+    # Keep the reservation alive at least as long as the session Stripe will
+    # happily accept payment on, plus sweeper slack.
+    ticket_item.update!(provider_ref: session.id, reserved_until: Time.zone.at(session.expires_at) + 2.minutes)
+    render json: { result: "ok", checkout_url: session.url, session_id: session.id }
+  rescue Stripe::StripeError => e
+    render_error("stripe error: #{e.message}")
   end
 
-  # POST /api/v1/tickets/stripe_client_secret
-  def stripe_client_secret
-    ticket_item = TicketItem.find(params[:ticket_item_id])
-    return render_error("ticket_item is not for stripe") unless ticket_item.chain == "stripe"
+  # POST /api/v1/tickets/:ticket_item_id/refund  {amount?, reason?}
+  #
+  # Organizer-initiated only (decision #12). Writes a pending Refund and asks
+  # Stripe; the charge.refunded webhook (or sweeper) finalizes it and applies
+  # the side effects — never synchronously, refunds can fail async.
+  def refund
+    return render_not_found unless stripe_enabled?
 
-    payment_intent = Stripe::PaymentIntent.create(amount: ticket_item.amount, automatic_payment_methods: { enabled: true }, currency: "usd")
-    ticket_item.update(txhash: payment_intent.id)
-    render json: { result: "ok", payment_intent_id: payment_intent.id, client_secret: payment_intent.client_secret }
-  rescue ActiveRecord::RecordNotFound
-    render_not_found
-  end
+    ticket_item = TicketItem.find_by(id: params[:ticket_item_id])
+    return render_error("ticket_item not found") unless ticket_item
+    authorize ticket_item, :refund?
+    return render_error("only stripe orders can be refunded here") unless ticket_item.payment_provider == "stripe"
+    unless %w[succeeded partially_refunded].include?(ticket_item.status)
+      return render_error("ticket_item is not refundable (status: #{ticket_item.status})")
+    end
+    return render_error("order has no captured payment reference") if ticket_item.txhash.blank?
 
-  # GET /api/v1/tickets/stripe_config?group_id=
-  def stripe_config
-    render json: { stripe_public_key: ENV["STRIPE_PUBLIC_KEY"] }
+    setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
+    return render_error("the collecting stripe key is no longer available") unless setting
+
+    refunded_so_far = ticket_item.refunds.where(status: "succeeded").sum(:amount)
+    remaining = ticket_item.amount.to_i - refunded_so_far
+    amount = params[:amount].present? ? params[:amount].to_i : remaining
+    return render_error("invalid refund amount") unless amount.positive? && amount <= remaining
+
+    refund = ticket_item.refunds.create!(
+      requested_by: current_user, amount: amount, currency: ticket_item.currency || "usd",
+      full_refund: amount == remaining, reason: params[:reason].presence
+    )
+    begin
+      stripe_refund = StripeGateway.create_refund(
+        setting, payment_intent: ticket_item.txhash, amount: amount,
+        idempotency_key: "refund-#{refund.id}"
+      )
+      refund.update!(provider_ref: stripe_refund.id)
+      render json: { result: "ok", refund_id: refund.id, status: refund.status }
+    rescue Stripe::StripeError => e
+      refund.update!(status: "failed", error: e.message)
+      render_error("stripe refund failed: #{e.message}")
+    end
+  rescue ActiveRecord::RecordNotUnique
+    render_error("a refund for this order is already in progress")
   end
 
   # POST /api/v1/tickets/add_group_ticket_item
@@ -442,12 +489,17 @@ class Api::V1::TicketsController < Api::BaseController
     true
   end
 
-  # Confirms a Stripe PaymentIntent server-side (the item stores the intent id in
-  # txhash). Any Stripe/API error is treated as "not confirmed".
+  # Confirms a Stripe PaymentIntent server-side (the item stores the intent id
+  # in txhash), using the key snapshotted on the order — items with no
+  # snapshot (pre-stripe_settings legacy) can never confirm this way. Any
+  # Stripe/API error is treated as "not confirmed".
   def stripe_payment_confirmed?(ticket_item)
     return false if ticket_item.txhash.blank?
 
-    intent = Stripe::PaymentIntent.retrieve(ticket_item.txhash)
+    setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
+    return false unless setting
+
+    intent = Stripe::PaymentIntent.retrieve(ticket_item.txhash, { api_key: setting.secret_key })
     intent.status == "succeeded" && intent.amount.to_i >= ticket_item.amount.to_i
   rescue Stripe::StripeError
     false
@@ -488,19 +540,6 @@ class Api::V1::TicketsController < Api::BaseController
       paid_at: status == "succeeded" ? Time.current : nil,
       reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )
-  end
-
-  # Verifies the Stripe-Signature header when a signing secret is configured.
-  # Without a secret we fail *closed* in production (an unverified webhook must
-  # not flip a real order to paid) but stay open in dev/test for local testing.
-  def stripe_event_verified?
-    secret = ENV["STRIPE_WEBHOOK_SECRET"]
-    return !Rails.env.production? if secret.blank?
-
-    Stripe::Webhook.construct_event(request.raw_post, request.headers["Stripe-Signature"], secret)
-    true
-  rescue Stripe::SignatureVerificationError, JSON::ParserError
-    false
   end
 
   def ticket_params

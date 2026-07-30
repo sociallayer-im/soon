@@ -165,9 +165,10 @@ Rails.application.routes.draw do
       post "tickets/verify_payment",         to: "tickets#verify_payment"
       post "tickets/cancel_unpaid_item",      to: "tickets#cancel_unpaid_item"
       post "tickets/set_payment_status",      to: "tickets#set_payment_status"
-      post "tickets/stripe_callback",         to: "tickets#stripe_callback"
-      post "tickets/stripe_client_secret",    to: "tickets#stripe_client_secret"
-      get  "tickets/stripe_config",           to: "tickets#stripe_config"
+      post "tickets/checkout_session",        to: "tickets#checkout_session"
+      post "tickets/:ticket_item_id/refund",  to: "tickets#refund"
+      # Signed per-setting webhook receiver (provisioned by StripeGateway).
+      post "webhooks/stripe/:stripe_setting_id", to: "stripe_webhooks#create"
       post "tickets/add_group_ticket_item",   to: "tickets#add_group_ticket_item"
       get  "tickets/list_group_ticket_types", to: "tickets#list_group_ticket_types"
       post "tickets/set_coupon",              to: "tickets#set_coupon"

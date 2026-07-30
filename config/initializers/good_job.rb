@@ -28,7 +28,18 @@ Rails.application.configure do
   # in-flight jobs get killed mid-execution instead of finishing.
   config.good_job.shutdown_timeout = 20
 
-  config.good_job.enable_cron = false
+  # Cron exists solely for the ticketing sweeper — the reconciliation loop
+  # payments trust (webhooks only make confirmation faster). Runs inside the
+  # same single GoodJob thread as everything else; the sweep is a handful of
+  # indexed queries when no orders are stale.
+  config.good_job.enable_cron = true
+  config.good_job.cron = {
+    ticketing_sweeper: {
+      cron: "*/5 * * * *",
+      class: "TicketingSweeperJob",
+      description: "Expire stale ticket reservations, confirming against Stripe first"
+    }
+  }
 
   # Keep finished jobs around long enough to answer "did that invite actually
   # go out?", then let GoodJob prune them as later jobs complete.
