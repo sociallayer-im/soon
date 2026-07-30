@@ -1,0 +1,21 @@
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_e43c1624f4dd71 19-23,25
+test/services/stripe_gateway_test.rb
+  s_e9ed806a3d225c::t_2a3dc12a485133 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2c42d156f586c0a6647468f3445a9f916f13ebd8",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
