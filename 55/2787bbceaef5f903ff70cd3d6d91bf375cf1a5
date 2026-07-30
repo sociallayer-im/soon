@@ -1,0 +1,28 @@
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_7435a27cfad86a 18-20,29-40
+test/models/stripe_setting_test.rb
+  s_e9ed806a3d225c::t_a58187e3889e1a 30-36
+test/services/stripe_gateway_test.rb
+  s_e9ed806a3d225c::t_a58187e3889e1a 21-22,24-42
+app/controllers/api/v1/stripe_settings_controller.rb
+  s_e9ed806a3d225c::t_2021e983ee0ebe 70-73,78-79
+app/models/stripe_setting.rb
+  s_e9ed806a3d225c::t_2196e623852852 38-46
+  s_e9ed806a3d225c::t_f16a4e387322f3 17-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "552787bbceaef5f903ff70cd3d6d91bf375cf1a5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
