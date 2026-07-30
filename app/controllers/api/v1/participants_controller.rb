@@ -31,7 +31,10 @@ class Api::V1::ParticipantsController < Api::BaseController
       return render_error(err)
     end
 
-    participant = @event.participants.new(user: current_user, status: status)
+    # registered_at on this path too — the ticket flow always stamped it and
+    # the free/direct join never did, so "when did they sign up" was blank for
+    # exactly the events that have no tickets.
+    participant = @event.participants.new(user: current_user, status: status, registered_at: Time.current)
 
     ActiveRecord::Base.transaction do
       participant.save!
@@ -128,14 +131,16 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # POST /api/v1/events/:event_id/participants/check_in
   #
-  # Manager scans an attendee at the door: stamps register_time on their
+  # Manager scans an attendee at the door: stamps checked_in_at on their
   # participant record. Idempotent — re-checking-in just re-stamps.
+  # Deliberately NOT registered_at, which is the RSVP timestamp: sharing one
+  # column made every registrant look checked in.
   def check_in
     authorize @event, :update?
     participant = @event.participants.find_by(user_id: params[:user_id])
     return render_error("user is not a participant of this event") unless participant
 
-    participant.update!(register_time: Time.current)
+    participant.update!(checked_in_at: Time.current)
     render json: ParticipantBlueprint.render(participant)
   end
 

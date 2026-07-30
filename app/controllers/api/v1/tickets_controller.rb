@@ -86,9 +86,9 @@ class Api::V1::TicketsController < Api::BaseController
 
     participant = Participant.find_by(event: @event, user: current_user)
     if participant.nil?
-      participant = @event.participants.new(user: current_user, status: "attending", payment_status: "pending", register_time: Time.current, message: params[:message])
+      participant = @event.participants.new(user: current_user, status: "attending", payment_status: "pending", registered_at: Time.current, message: params[:message])
     elsif participant.status == "cancelled"
-      participant.assign_attributes(status: "attending", payment_status: "pending", register_time: Time.current, message: params[:message])
+      participant.assign_attributes(status: "attending", payment_status: "pending", registered_at: Time.current, message: params[:message])
     end
 
     ticket_item =

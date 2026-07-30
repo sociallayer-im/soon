@@ -132,8 +132,23 @@ class EventBrowseTest < ActionDispatch::IntegrationTest
     post "/api/v1/events/#{event.id}/participants/check_in",
       params: { user_id: attendee.id }, headers: auth_headers(owner)
     assert_response :success
-    assert_not_nil json_response["register_time"]
-    assert_not_nil Participant.find_by(event: event, user: attendee).register_time
+    assert_not_nil json_response["checked_in_at"]
+    assert_not_nil Participant.find_by(event: event, user: attendee).checked_in_at
+  end
+
+  test "an RSVP is not a check-in — registered_at must not imply attendance at the door" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
+    ticket = create_ticket(event: event)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+
+    participant = Participant.find_by(event: event, user: buyer)
+    assert_not_nil participant.registered_at, "RSVP still records when they registered"
+    assert_nil participant.checked_in_at, "registering must not mark them checked in"
   end
 
   test "venue conflict returns the clashing event and honors exclude_event_id" do
