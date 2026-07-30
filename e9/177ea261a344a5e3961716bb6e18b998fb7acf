@@ -1,0 +1,21 @@
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_baaea21c8ec654 549
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_de5b4e9d6b2f88 109-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e9177ea261a344a5e3961716bb6e18b998fb7acf",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
