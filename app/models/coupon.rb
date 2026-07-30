@@ -9,9 +9,15 @@ class Coupon < ApplicationRecord
   # Single source of truth for redeemability. max_allowed_usages is nullable
   # (nil == unlimited); guarding it here prevents `nil <= count` NoMethodErrors.
   def available?
+    return false if removed
     return false if expires_at && expires_at < Time.current
     return false if max_allowed_usages && order_usage_count >= max_allowed_usages
     true
+  end
+
+  # Applies to every ticket of the event when the list is empty.
+  def applicable_to?(ticket)
+    applicable_ticket_ids.blank? || applicable_ticket_ids.include?(ticket.id)
   end
 
   # Discount math, preserved exactly from sails/:

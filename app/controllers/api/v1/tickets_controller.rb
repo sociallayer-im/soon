@@ -3,7 +3,7 @@ class Api::V1::TicketsController < Api::BaseController
   before_action :set_event, only: %i[create update destroy rsvp]
   before_action :set_ticket, only: %i[update destroy rsvp]
 
-  STRIPE_MIN_CENTS = 400
+  STRIPE_MIN_CENTS = PaymentMethod::STRIPE_MIN_CENTS
 
   # Raised when a coupon is exhausted between quoting and checkout; rolls back rsvp.
   class CouponUnavailable < StandardError; end
@@ -248,10 +248,19 @@ class Api::V1::TicketsController < Api::BaseController
     event = Event.find(params[:event_id])
     authorize event, :update?
 
-    event.coupons_attributes = coupon_params if event.respond_to?(:coupons_attributes=)
-    if event.respond_to?(:coupons_attributes=) && !event.save
-      return render_error(event.errors.full_messages.join(", "))
+    # _destroy is translated to a soft delete (removed: true): ticket_items
+    # keep a valid coupon_id for their audit trail, and Coupon#available?
+    # stops the code redeeming. A hard destroy would sever that history.
+    attrs = coupon_params.map do |c|
+      if c[:_destroy].present? && c[:id].present?
+        { id: c[:id], removed: true }
+      else
+        c.except(:_destroy)
+      end
     end
+    event.coupons_attributes = attrs
+    return render_error(event.errors.full_messages.join(", ")) unless event.save
+
     render json: { result: "ok" }
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -260,6 +269,7 @@ class Api::V1::TicketsController < Api::BaseController
   # GET /api/v1/tickets/check_coupon?event_id=&code=
   def check_coupon
     coupon = Coupon.find_by(event_id: params[:event_id], code: params[:code])
+    coupon = nil if coupon&.removed # a soft-deleted code looks like no code at all
     render json: { coupon: coupon ? CouponBlueprint.render_as_hash(coupon, view: :with_code) : nil }
   end
 
@@ -273,12 +283,26 @@ class Api::V1::TicketsController < Api::BaseController
   end
 
   # GET /api/v1/tickets/coupon_price?code=&payment_method_id=&amount=
+  #
+  # The quote must agree with what rsvp will actually accept, or the buyer
+  # sees one price and checkout rejects it — so the applicability and
+  # card-floor checks here mirror build_paid_ticket_item.
   def coupon_price
     coupon = Coupon.find_by(selector_type: "code", code: params[:code])
-    return render_error("coupon not found") unless coupon
+    return render_error("coupon not found") if coupon.nil? || coupon.removed
 
     paymethod = PaymentMethod.find_by(id: params[:payment_method_id])
+    if paymethod&.item_type == "Ticket" && paymethod.item_id.present? &&
+       !(coupon.applicable_ticket_ids.blank? || coupon.applicable_ticket_ids.include?(paymethod.item_id))
+      return render_error("coupon not applicable to this ticket")
+    end
+
     amount, = coupon.get_discounted_price(params[:amount], paymethod)
+    # Only for unambiguously-stripe methods: a multi-chain quote has no chain
+    # context here, and its crypto amounts are scaled far above the floor anyway.
+    if paymethod&.chain == "stripe" && amount.positive? && amount < STRIPE_MIN_CENTS
+      return render_error("coupon not applicable to this payment method")
+    end
     render json: { coupon_id: coupon.id, amount: amount }
   end
 
@@ -303,7 +327,7 @@ class Api::V1::TicketsController < Api::BaseController
   def coupons
     event = Event.find(params[:event_id])
     authorize event, :update?
-    render json: CouponBlueprint.render(event.coupons)
+    render json: CouponBlueprint.render(event.coupons.where(removed: [false, nil]))
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -460,6 +484,10 @@ class Api::V1::TicketsController < Api::BaseController
         render_error("coupon not found")
         return nil
       end
+      unless coupon.applicable_to?(@ticket)
+        render_error("coupon not applicable to this ticket")
+        return nil
+      end
       unless coupon.available?
         render_error("coupon is not available")
         return nil
@@ -470,7 +498,15 @@ class Api::V1::TicketsController < Api::BaseController
       coupon_id = coupon.id if discount_value
     end
 
-    amount = 0 if selected_chain == "stripe" && amount < STRIPE_MIN_CENTS
+    # Card payments have a price floor (see PaymentMethod::STRIPE_MIN_CENTS).
+    # Ticket creation already enforces it on the base price, so landing here
+    # means a coupon discounted into (0, min) — reject rather than the old
+    # behaviour of silently waiving the ticket to free. Exactly 0 stays valid
+    # (a deliberate 100% coupon).
+    if selected_chain == "stripe" && amount.positive? && amount < STRIPE_MIN_CENTS
+      render_error(coupon ? "coupon not applicable to this payment method" : "amount is below the minimum for card payments")
+      return nil
+    end
     status = amount.zero? ? "succeeded" : "pending"
 
     TicketItem.new(

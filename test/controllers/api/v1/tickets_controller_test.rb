@@ -82,17 +82,122 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1000, json_response["ticket_item"]["amount"]
   end
 
-  test "rsvp waives stripe amounts under $4 (400 cents) to free" do
-    ticket = create_ticket(event: @event)
-    pm = create_payment_method(item: ticket, chain: "stripe", price: 350)
+  test "rsvp rejects a legacy sub-minimum stripe amount instead of waiving it to free" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    # Pre-validation legacy row: creation now rejects sub-minimum stripe prices,
+    # but rows created before the floor existed can still be in the DB.
+    pm = PaymentMethod.new(item: ticket, chain: "stripe", kind: "fiat", price: 350)
+    pm.save!(validate: false)
     buyer = create_user
 
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
       params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
-    assert_response :success
+    assert_response :unprocessable_entity
+    assert_match "below the minimum", json_response["error"]
+    assert_equal 5, ticket.reload.quantity, "failed rsvp must release the reserved unit"
+    assert_equal 0, TicketItem.where(ticket_id: ticket.id).count
+  end
 
+  test "a stripe payment method under the $4 floor is rejected at ticket creation" do
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Cheap", ticket_type: "event",
+                          payment_methods_attributes: [{ chain: "stripe", kind: "fiat", price: 350 }] } },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "crypto payment", json_response["error"]
+
+    # The same price is fine on a crypto method — the floor is card-only.
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "CheapCrypto", ticket_type: "event",
+                          payment_methods_attributes: [{ chain: "base", kind: "crypto", price: 350 }] } },
+      headers: auth_headers(@owner)
+    assert_response :created
+  end
+
+  test "a coupon discounting a stripe price into (0, min) is rejected, not waived to free" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    coupon = create_coupon(event: @event, code: "TOO_DEEP", discount_type: "amount", discount: 700)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "TOO_DEEP" }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "not applicable to this payment method", json_response["error"]
+    assert_equal 0, coupon.reload.order_usage_count
+    assert_equal 5, ticket.reload.quantity
+  end
+
+  test "a coupon discounting a stripe price to exactly 0 is a valid free path" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    create_coupon(event: @event, code: "FULL_COMP", discount_type: "amount", discount: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "FULL_COMP" }, headers: auth_headers(buyer)
+    assert_response :success
     assert_equal "succeeded", json_response["ticket_item"]["status"]
     assert_equal 0, json_response["ticket_item"]["amount"]
+  end
+
+  test "a removed (soft-deleted) coupon no longer redeems anywhere" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    create_coupon(event: @event, code: "GONE", discount_type: "amount", discount: 100, removed: true)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, coupon: "GONE" }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "not available", json_response["error"]
+
+    get "/api/v1/tickets/check_coupon", params: { event_id: @event.id, code: "GONE" }
+    assert_nil json_response["coupon"]
+
+    get "/api/v1/tickets/coupon_price", params: { code: "GONE", amount: 1000 }
+    assert_response :unprocessable_entity
+  end
+
+  test "a coupon scoped by applicable_ticket_ids only works on its tickets" do
+    tier_a = create_ticket(event: @event)
+    tier_b = create_ticket(event: @event)
+    pm_a = create_payment_method(item: tier_a, chain: "stripe", price: 1000)
+    pm_b = create_payment_method(item: tier_b, chain: "stripe", price: 1000)
+    coupon = create_coupon(event: @event, code: "TIER_A_ONLY", discount_type: "amount",
+      discount: 100, applicable_ticket_ids: [tier_a.id])
+
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{tier_b.id}/rsvp",
+      params: { payment_method_id: pm_b.id, coupon: "TIER_A_ONLY" }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "not applicable to this ticket", json_response["error"]
+    assert_equal 0, coupon.reload.order_usage_count
+
+    # coupon_price gives the same verdict (the quote must match checkout)
+    get "/api/v1/tickets/coupon_price", params: { code: "TIER_A_ONLY", amount: 1000, payment_method_id: pm_b.id }
+    assert_response :unprocessable_entity
+
+    post "/api/v1/events/#{@event.id}/tickets/#{tier_a.id}/rsvp",
+      params: { payment_method_id: pm_a.id, coupon: "TIER_A_ONLY" }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal 900, json_response["ticket_item"]["amount"]
+    assert_equal 1, coupon.reload.order_usage_count
+  end
+
+  test "set_coupon _destroy soft-deletes: row kept with removed=true, hidden from the coupons list" do
+    coupon = create_coupon(event: @event, code: "BYE", discount_type: "amount", discount: 100)
+
+    post "/api/v1/tickets/set_coupon",
+      params: { event_id: @event.id, coupons: [{ id: coupon.id, _destroy: true }] },
+      headers: auth_headers(@owner)
+    assert_response :success
+
+    assert coupon.reload.removed, "the row must survive as a soft delete"
+
+    get "/api/v1/tickets/coupons", params: { event_id: @event.id }, headers: auth_headers(@owner)
+    assert_response :success
+    assert_not_includes json_response.map { |c| c["id"] }, coupon.id
   end
 
   test "rsvp coupon ratio discount: discount is basis points of 10000, final = amount * discount / 10000" do
@@ -144,7 +249,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
   test "rsvp coupon amount discount clamps to the item price, never goes negative" do
     ticket = create_ticket(event: @event)
-    pm = create_payment_method(item: ticket, chain: "stripe", price: 100)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 500)
     create_coupon(event: @event, code: "HUGE", discount_type: "amount", discount: 10_000)
     buyer = create_user
 
@@ -152,8 +257,9 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
       params: { payment_method_id: pm.id, coupon: "HUGE" }, headers: auth_headers(buyer)
     assert_response :success
 
+    # Clamped to exactly 0 — the valid free path, not the (0, min) rejection.
     assert_equal 0, json_response["ticket_item"]["amount"]
-    assert_equal 100, json_response["ticket_item"]["discount_value"]
+    assert_equal 500, json_response["ticket_item"]["discount_value"]
   end
 
   # Note: this differs from Coupon#get_discounted_price's own behavior (silent no-discount
