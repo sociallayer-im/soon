@@ -1,5 +1,6 @@
 class User < ApplicationRecord
   has_many :memberships, dependent: :delete_all
+  has_many :stripe_settings, dependent: :destroy
   has_many :groups, through: :memberships
   has_many :events, foreign_key: "owner_id", dependent: :destroy
   has_many :participants, dependent: :destroy

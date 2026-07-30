@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_151139) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_120005) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -477,16 +477,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_151139) do
     t.jsonb "chain_token_addresses", default: {}
     t.string "chains", default: [], array: true
     t.datetime "created_at", null: false
+    t.string "currency"
     t.string "item_id"
     t.string "item_type"
     t.string "kind", comment: "crypto | fiat | credit"
     t.bigint "price"
     t.string "protocol"
     t.string "receiver_address"
+    t.string "stripe_setting_id", comment: "which of the event owner's keys this method charges to"
     t.string "token_address"
     t.string "token_name"
     t.datetime "updated_at", null: false
     t.index ["item_type", "item_id"], name: "index_payment_methods_on_item_type_and_item_id"
+    t.index ["stripe_setting_id"], name: "index_payment_methods_on_stripe_setting_id"
   end
 
   create_table "places", id: :string, force: :cascade do |t|
@@ -511,20 +514,69 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_151139) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "refunds", id: :string, force: :cascade do |t|
+    t.integer "amount", null: false, comment: "minor units; equal to the item amount for a full refund"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.text "error"
+    t.boolean "full_refund", default: true, null: false, comment: "full refunds release the seat; partial move money only"
+    t.string "provider_ref", comment: "Stripe re_… id"
+    t.string "reason"
+    t.string "requested_by_user_id", null: false
+    t.string "status", default: "pending", null: false, comment: "pending | succeeded | failed"
+    t.string "ticket_item_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
+    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+  end
+
+  create_table "stripe_events", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "error"
+    t.string "event_type", null: false
+    t.jsonb "payload", default: {}, null: false
+    t.datetime "processed_at"
+    t.string "stripe_setting_id", null: false, comment: "which key's endpoint received it"
+    t.datetime "updated_at", null: false
+    t.index ["event_type", "created_at"], name: "index_stripe_events_on_event_type_and_created_at"
+    t.index ["stripe_setting_id"], name: "index_stripe_events_on_stripe_setting_id"
+  end
+
+  create_table "stripe_settings", id: :string, force: :cascade do |t|
+    t.string "account_id", comment: "Stripe acct_…, captured at validation time"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.string "mode", default: "live", null: false, comment: "live | test — auto-detected from key prefix"
+    t.string "name", null: false, comment: "user-facing label shown in key pickers"
+    t.text "secret_key", null: false, comment: "encrypted (Active Record encryption)"
+    t.string "status", default: "active", null: false, comment: "active | invalid"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "webhook_endpoint_id", comment: "Stripe we_… id, for deletion on key removal"
+    t.text "webhook_secret", comment: "encrypted per-endpoint signing secret"
+    t.index ["user_id"], name: "index_stripe_settings_on_user_id"
+  end
+
   create_table "ticket_items", id: :string, force: :cascade do |t|
     t.integer "amount"
     t.string "auth_type", comment: "free | payment | badge | invite"
     t.string "chain"
     t.string "coupon_id"
     t.datetime "created_at", null: false
+    t.string "currency"
     t.string "discount_data"
     t.integer "discount_value"
     t.string "event_id"
     t.string "group_id"
     t.decimal "original_price", precision: 40
+    t.datetime "paid_at"
     t.string "participant_id"
     t.string "payment_method_id"
+    t.string "payment_provider", comment: "stripe | evm | free"
     t.string "protocol"
+    t.string "provider_ref", comment: "Checkout Session / PaymentIntent id for stripe; txhash stays the crypto column"
+    t.datetime "released_at", comment: "inventory released exactly once, guarded here — never inferred from status"
+    t.datetime "reserved_until", comment: "sweeper expires unpaid orders past this"
     t.string "selector_address"
     t.string "selector_type"
     t.string "sender_address"
@@ -540,6 +592,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_151139) do
     t.index ["event_id"], name: "index_ticket_items_on_event_id"
     t.index ["participant_id"], name: "index_ticket_items_on_participant_id"
     t.index ["payment_method_id"], name: "index_ticket_items_on_payment_method_id"
+    t.index ["provider_ref"], name: "index_ticket_items_on_provider_ref", unique: true, where: "(provider_ref IS NOT NULL)"
+    t.index ["status", "reserved_until"], name: "index_ticket_items_sweeper"
     t.index ["ticket_id"], name: "index_ticket_items_on_ticket_id"
     t.index ["txhash"], name: "index_ticket_items_on_txhash_unique", unique: true, where: "(txhash IS NOT NULL)"
     t.index ["user_id", "status"], name: "index_ticket_items_on_user_id_and_status"

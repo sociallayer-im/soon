@@ -52,8 +52,10 @@ class Coupon < ApplicationRecord
 
   private
 
+  # No expires_at default — a blank expiry means the coupon never expires
+  # (before 2026-07-30 it was silently forced to 30 days, making non-expiring
+  # coupons impossible to create).
   def assign_defaults
     self.code = SecureRandom.hex(6) if code.blank?
-    self.expires_at = 30.days.from_now if expires_at.blank?
   end
 end

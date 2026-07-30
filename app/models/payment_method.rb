@@ -8,6 +8,9 @@ class PaymentMethod < ApplicationRecord
   STRIPE_MIN_CENTS = 400
 
   belongs_to :item, polymorphic: true, optional: true
+  # Which of the event owner's Stripe keys this method charges to (nil for
+  # crypto methods and for stripe methods created before stripe_settings).
+  belongs_to :stripe_setting, optional: true
 
   validates :item_type, inclusion: { in: %w(Ticket User) }
   validates :chain, inclusion: { in: SUPPORTED_CHAINS }, allow_blank: true

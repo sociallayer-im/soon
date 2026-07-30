@@ -74,12 +74,14 @@ class CouponTest < ActiveSupport::TestCase
     assert_nil discount_value
   end
 
-  test "before_save auto-generates a code and expiry when blank" do
+  test "before_save auto-generates a code when blank; a blank expiry means never expires" do
     coupon = Coupon.new(event: @event, selector_type: "code", discount_type: "ratio", discount: 100, max_allowed_usages: 10)
     coupon.save!
     assert coupon.code.present?
-    assert coupon.expires_at.present?
-    assert_in_delta 30.days.from_now.to_i, coupon.expires_at.to_i, 5
+    # No forced 30-day default (removed 2026-07-30) — nil expiry stays nil and
+    # the coupon remains redeemable.
+    assert_nil coupon.expires_at
+    assert coupon.available?
   end
 
   test "before_save preserves an explicitly given code and expiry" do
