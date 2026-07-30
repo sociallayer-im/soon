@@ -118,8 +118,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
   # ---- group ticket purchase (deliver_later) ----
 
   test "buying a group ticket notifies the group owner and confirms the buyer" do
-    event = create_event(group: @group, owner: @owner)
-    event.update_column(:kind, "group_ticket")
+    event = create_group_ticket_event(group: @group, owner: @owner)
     ticket = create_ticket(event: event) # free -> succeeds immediately, ticket_type group
     buyer = create_user
 

@@ -131,7 +131,7 @@ class StripeWebhookJobTest < ActiveSupport::TestCase
   end
 
   test "group ticket confirmation via webhook auto-joins the buyer" do
-    group_event = create_event(group: @group, owner: @owner, kind: "group_ticket")
+    group_event = create_group_ticket_event(group: @group, owner: @owner)
     group_ticket = create_ticket(event: group_event, ticket_type: "group", group_id: @group.id)
     item = TicketItem.create!(ticket: group_ticket, event: group_event, user: @buyer,
       ticket_type: "group", group_id: @group.id, status: "pending", amount: 1000,

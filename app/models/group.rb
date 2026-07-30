@@ -10,6 +10,10 @@ class Group < ApplicationRecord
   has_many :venues, dependent: :destroy
   has_many :domains, as: :item, dependent: :destroy
   has_many :group_invites, dependent: :destroy
+  # The single event whose tickets grant membership in this group; its tickets
+  # become ticket_type "group" (Ticket#inherit_group_ticket_type) and
+  # add_group_ticket_item / GroupInvite hang their grants off it.
+  belongs_to :group_ticket_event, class_name: "Event", optional: true
   has_many :badge_classes, dependent: :destroy
   has_many :tickets, dependent: :nullify
 

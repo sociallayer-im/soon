@@ -45,6 +45,7 @@ class Api::V1::EventsController < Api::BaseController
 
     ActiveRecord::Base.transaction do
       event.save!
+      apply_group_ticket_designation!(event)
       create_nested_roles!(event, params[:event_roles])
       create_nested_tickets!(event, params[:tickets], event.group_id)
     end
@@ -68,6 +69,7 @@ class Api::V1::EventsController < Api::BaseController
       return render_error(err)
     end
     if @event.save
+      apply_group_ticket_designation!(@event)
       notify_attendees_of_update if calendar_relevant_change?
       render json: EventBlueprint.render(@event)
     else
@@ -258,6 +260,21 @@ class Api::V1::EventsController < Api::BaseController
       end
       event.event_roles.create!(permitted)
     end
+  end
+
+  # `is_group_ticket_event` designates this event as the one whose tickets grant
+  # group membership. It changes GROUP state, so unlike the rest of the event
+  # payload it is manager-only (GroupPolicy#manage?) and simply ignored for
+  # anyone else — mirroring how `pinned` is gated. Absent param = leave as is.
+  def apply_group_ticket_designation!(event)
+    designate = params[:is_group_ticket_event]
+    return if designate.nil?
+    return unless GroupPolicy.new(current_user, event.group).manage?
+
+    result = Ticketing::DesignateGroupTicketEvent.call(
+      event: event, group: event.group, designate: ActiveModel::Type::Boolean.new.cast(designate)
+    )
+    raise InvalidChild, result.error unless result.ok?
   end
 
   # Money always lands in the event owner's account, so a card payment method

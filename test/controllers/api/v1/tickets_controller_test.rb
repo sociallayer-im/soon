@@ -378,7 +378,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "rsvp on a succeeded group ticket auto-joins the buyer to the group" do
-    @event.update_column(:kind, "group_ticket")
+    @group.update!(group_ticket_event_id: @event.id)
     ticket = create_ticket(event: @event) # free -> succeeds immediately, inherits ticket_type group
     buyer = create_user
 

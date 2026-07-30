@@ -88,6 +88,14 @@ module FactoryHelpers
     FormField.create!({ form: form, label: "Field #{unique_suffix}", field_type: "text" }.merge(attrs))
   end
 
+  # The group's membership-ticket event: designated by the group's pointer,
+  # which is the only signal (Event#group_ticket_event?).
+  def create_group_ticket_event(group:, owner:, **attrs)
+    event = create_event(group: group, owner: owner, **attrs)
+    group.update!(group_ticket_event_id: event.id)
+    event
+  end
+
   def create_ticket(event:, **attrs)
     Ticket.create!({ title: "Ticket #{unique_suffix}", content: "content-#{unique_suffix}", event: event }.merge(attrs))
   end

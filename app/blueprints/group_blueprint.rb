@@ -14,6 +14,9 @@ class GroupBlueprint < Blueprinter::Base
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
            :can_publish_event, :can_join_event, :can_view_event,
+           # The one event whose tickets grant group membership. At most one
+           # per group; nil until a manager designates one.
+           :group_ticket_event_id,
            :memberships_count, :events_count, :parent_id
   end
 

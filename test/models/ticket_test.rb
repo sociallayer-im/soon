@@ -52,8 +52,8 @@ class TicketTest < ActiveSupport::TestCase
     assert_includes ticket.errors[:ticket_type], "is not included in the list"
   end
 
-  test "inherit_group_ticket_type sets ticket_type and group_id from a kind=='group_ticket' event" do
-    group_ticket_event = create_event(group: @group, owner: @owner, kind: "group_ticket")
+  test "inherit_group_ticket_type sets ticket_type and group_id on the group's designated ticket event" do
+    group_ticket_event = create_group_ticket_event(group: @group, owner: @owner)
     ticket = create_ticket(event: group_ticket_event)
     assert_equal "group", ticket.ticket_type
     assert_equal @group.id, ticket.group_id

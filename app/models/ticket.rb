@@ -32,8 +32,12 @@ class Ticket < ApplicationRecord
 
   private
 
+  # Tickets on the group's designated ticket event grant membership, so they
+  # are group tickets whatever the caller asked for. Keyed off
+  # groups.group_ticket_event_id — the previous check (event.kind ==
+  # "group_ticket") never fired, because nothing ever set that kind.
   def inherit_group_ticket_type
-    return unless event&.kind == "group_ticket"
+    return unless event&.group_ticket_event?
     self.ticket_type = "group"
     self.group_id = event.group_id
   end

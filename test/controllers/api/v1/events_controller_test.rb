@@ -335,6 +335,53 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "GA", event.tickets.first.title
   end
 
+  test "is_group_ticket_event designates the group's ticket event, manager-only and at most one" do
+    owner = create_user
+    group = create_group(owner: owner)
+    place = create_place
+    base = { start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+             group_id: group.id, place_id: place.id }
+
+    # A plain member's request is ignored, not honoured — it changes GROUP state.
+    member = create_user
+    create_membership(user: member, group: group, role: "member")
+    post "/api/v1/events", params: { event: base.merge(title: "Member try"), is_group_ticket_event: true },
+      headers: auth_headers(member)
+    assert_response :created
+    assert_nil group.reload.group_ticket_event_id
+
+    post "/api/v1/events", params: { event: base.merge(title: "Membership"), is_group_ticket_event: true },
+      headers: auth_headers(owner)
+    assert_response :created
+    designated = Event.find(json_response["id"])
+    assert_equal designated.id, group.reload.group_ticket_event_id
+    assert_nil designated.reload.kind, "kind means the event's category, not this"
+
+    # Its tickets become group tickets (Ticket#inherit_group_ticket_type),
+    # derived from the group's pointer alone.
+    post "/api/v1/events/#{designated.id}/tickets",
+      params: { ticket: { title: "Membership", ticket_type: "event" } }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal "group", designated.tickets.sole.ticket_type
+
+    # A second one is refused while the first stands.
+    post "/api/v1/events", params: { event: base.merge(title: "Second"), is_group_ticket_event: true },
+      headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_match "already has a group ticket event", json_response["error"]
+    assert_equal designated.id, group.reload.group_ticket_event_id
+
+    # Clearing it frees the slot; re-designating the same event is idempotent.
+    patch "/api/v1/events/#{designated.id}",
+      params: { event: { title: "Membership" }, is_group_ticket_event: false }, headers: auth_headers(owner)
+    assert_response :success
+    assert_nil group.reload.group_ticket_event_id
+
+    post "/api/v1/events", params: { event: base.merge(title: "Now allowed"), is_group_ticket_event: true },
+      headers: auth_headers(owner)
+    assert_response :created
+  end
+
   test "an inline card payment method keeps its stripe key and must be the owner's" do
     owner = create_user
     group = create_group(owner: owner)

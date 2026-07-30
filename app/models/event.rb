@@ -22,6 +22,11 @@ class Event < ApplicationRecord
   validates :start_time, presence: true
   validates :end_time, presence: true
   validates :status, inclusion: { in: STATUSES }, allow_nil: true
+
+  # Whether this is the group's membership-ticket event. Derived solely from
+  # groups.group_ticket_event_id — the single source of truth. `kind` means the
+  # event's CATEGORY (talk, workshop, …) and never carried this.
+  def group_ticket_event? = persisted? && group&.group_ticket_event_id == id
   validates :visibility, inclusion: { in: VISIBILITIES }, allow_nil: true
   validate :end_time_after_start_time
 
