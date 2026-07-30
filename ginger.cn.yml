@@ -1,0 +1,67 @@
+service: soon
+image: registry.juluo.xyz/soon
+
+runner: nomad
+egress: traefik
+traefik_provider: nomad   # juluo Traefik uses the Nomad provider
+force_pull: true          # always re-pull on deploy (robust to same-tag rebuilds)
+
+servers:
+  web:
+    hosts: [juluo.xyz]
+    primary: true
+
+registry:
+  server: registry.juluo.xyz
+  username: username
+  password: YATCH_TOKEN          # resolved from .env.cn.production
+
+proxy:
+  hosts: [api.juluo.xyz]
+  app_port: 8080
+  ssl: true
+  health_check_path: /up
+  deploy_timeout: 90
+
+ssh:
+  user: root
+
+builder:
+  arch: amd64
+  # Build overseas where upstream (Debian/gems/npm) is fast and unfiltered — no
+  # China-mirror or proxy crutches needed.
+  remote: ssh://ubuntu@wamo.city
+  # Push to the Singapore mirror (clean wamo→SG link, no GFW). It shares OSS +
+  # Postgres with registry.juluo.xyz, so juluo pulls the same image fast.
+  push_registry: mirror-registry.sola.day
+
+# App joins the "ginger" docker network (default); Postgres is on the same
+# network with alias "postgres" — same in-cluster database sails already
+# uses (see .env.cn.production), not a separate soon-only database like SG's
+# sola_soon_db.
+env:
+  RAILS_ENV: production
+  # WEB_CONCURRENCY is deliberately NOT set — see soon/ginger.yml (SG) for
+  # why: Puma cluster mode + GoodJob's in-process async executor hangs the
+  # first DB-touching request forever.
+  RAILS_MAX_THREADS: "3"
+  GOOD_JOB_MAX_THREADS: "1"
+  THRUSTER_HTTP_PORT: "8080"
+  THRUSTER_TARGET_PORT: "3000"
+
+secrets:
+  load: [.env.cn.production]
+  inject:
+    - DATABASE_URL
+    - SECRET_KEY_BASE
+    - JWT_SECRET
+    - NEXT_TOKEN
+    - RESEND_API_KEY
+    - CLOUDFLARE_ACCOUNT_ID
+    - CLOUDFLARE_IMAGES_TOKEN
+    - MAIL_FROM
+    - WEB_URL
+    - APP_HOST
+    - ALLOWED_SIWE_DOMAINS
+
+retain_containers: 5
