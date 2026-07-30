@@ -1,0 +1,21 @@
+db/migrate/20260730120003_payments_and_participant_state.rb
+  s_e9ed806a3d225c::t_7bebd7280d288f 1-98
+db/schema.rb
+  s_e9ed806a3d225c::t_58b795feaf6894 13,553,558,585
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "30e3e5b46f6342d833356ecf87cb08b777f01f36",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
