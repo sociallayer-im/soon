@@ -16,8 +16,13 @@ class StripeGateway
 
   # Validates a candidate key by asking Stripe who it belongs to.
   # Returns the acct_… id; raises InvalidKey when Stripe rejects it.
+  #
+  # NB: the id argument must be nil (not {}), which routes to the singleton
+  # /v1/account — the key's own account. A non-nil id is checked as a string
+  # by stripe-ruby and {} raises TypeError; passing the key AS the id only
+  # works for sk_ prefixes and would break restricted (rk_) keys.
   def self.validate_key(secret_key)
-    account = ::Stripe::Account.retrieve({}, { api_key: secret_key })
+    account = ::Stripe::Account.retrieve(nil, { api_key: secret_key })
     account.id
   rescue ::Stripe::AuthenticationError, ::Stripe::PermissionError
     raise InvalidKey
