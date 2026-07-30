@@ -1,0 +1,48 @@
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_691822dabf58f2 55-107
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_7249bb48bac996 171-177,185-207,210-217,220-226,228-235,237-261
+  s_e9ed806a3d225c::t_7b84b3786de66d 492-495,499-502
+  s_e9ed806a3d225c::t_7372ffbae15539 2
+app/jobs/stripe_webhook_job.rb
+  s_e9ed806a3d225c::t_7ebd4180e61f21 1-117
+test/jobs/stripe_webhook_job_test.rb
+  s_e9ed806a3d225c::t_2632206d2559f7 1-164
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_e0f4fca9df7de9 826,831,844,849,859-892
+  s_e9ed806a3d225c::t_6af8b8e07073a6 919-922
+  s_e9ed806a3d225c::t_d6ab7a34680926 893
+app/controllers/api/base_controller.rb
+  s_e9ed806a3d225c::t_6ca7a91ec1c2ec 28-29,31
+test/controllers/api/v1/tickets_stripe_flow_test.rb
+  s_e9ed806a3d225c::t_905b15af1a3e61 1-106,108-169
+  s_e9ed806a3d225c::t_58e4ebaac29fc8 107
+app/policies/ticket_item_policy.rb
+  s_e9ed806a3d225c::t_6be633bd00bdb6 1-17
+app/controllers/api/v1/stripe_webhooks_controller.rb
+  s_e9ed806a3d225c::t_eb79300246f924 1-32
+config/routes.rb
+  s_e9ed806a3d225c::t_c4dcd395d409e9 168-171
+app/jobs/ticketing_sweeper_job.rb
+  s_e9ed806a3d225c::t_913dbb0c526cc4 1-42
+test/controllers/api/v1/stripe_webhooks_controller_test.rb
+  s_e9ed806a3d225c::t_f68220278984d8 1-63
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_095878aebfa154 31-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "056f485c1642ea1949cb97f0fa2cbad272130eb0",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
