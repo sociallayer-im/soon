@@ -482,6 +482,9 @@ class Api::V1::TicketsController < Api::BaseController
       coupon_id: quote.discount_value ? quote.coupon&.id : nil,
       payment_provider: quote.chain == "stripe" ? "stripe" : "evm",
       currency: quote.chain == "stripe" ? "usd" : nil,
+      # Snapshot the collecting account: refunds/verification use the key
+      # that took the money, never "current event owner" (§2.1).
+      stripe_setting_id: quote.chain == "stripe" ? paymethod.stripe_setting_id : nil,
       paid_at: status == "succeeded" ? Time.current : nil,
       reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )

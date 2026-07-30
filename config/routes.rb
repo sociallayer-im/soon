@@ -145,6 +145,9 @@ Rails.application.routes.draw do
         end
       end
 
+      # Present only when STRIPE_ENABLED (the controller 404s otherwise).
+      resources :stripe_settings, only: %i[index create update destroy]
+
       resources :vouchers, only: %i[index show create] do
         collection do
           post :send_badge

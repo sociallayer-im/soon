@@ -22,6 +22,13 @@ class Api::BaseController < ActionController::API
 
   private
 
+  # Deployment gate for the whole Stripe feature (design/PAYMENTS_PLAN.md
+  # decision #13): SG sets STRIPE_ENABLED=true, CN leaves it unset. Gated
+  # controllers 404 as if the routes didn't exist.
+  def require_stripe_enabled!
+    render_not_found unless ENV["STRIPE_ENABLED"] == "true"
+  end
+
   def authenticate!
     payload = JwtService.decode(bearer_token)
     @current_user = user_from_payload(payload) or raise ActiveRecord::RecordNotFound

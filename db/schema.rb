@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_120005) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_30_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -581,6 +581,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_120005) do
     t.string "selector_type"
     t.string "sender_address"
     t.string "status", comment: "pending | unbounded | succeeded | cancelled | timeout"
+    t.string "stripe_setting_id"
     t.string "ticket_id", null: false
     t.string "ticket_type", default: "event", comment: "event | group"
     t.string "tracks_allowed", array: true
@@ -594,6 +595,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_120005) do
     t.index ["payment_method_id"], name: "index_ticket_items_on_payment_method_id"
     t.index ["provider_ref"], name: "index_ticket_items_on_provider_ref", unique: true, where: "(provider_ref IS NOT NULL)"
     t.index ["status", "reserved_until"], name: "index_ticket_items_sweeper"
+    t.index ["stripe_setting_id"], name: "index_ticket_items_on_stripe_setting_id", where: "(stripe_setting_id IS NOT NULL)"
     t.index ["ticket_id"], name: "index_ticket_items_on_ticket_id"
     t.index ["txhash"], name: "index_ticket_items_on_txhash_unique", unique: true, where: "(txhash IS NOT NULL)"
     t.index ["user_id", "status"], name: "index_ticket_items_on_user_id_and_status"
