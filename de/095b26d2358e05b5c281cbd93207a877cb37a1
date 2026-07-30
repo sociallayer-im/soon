@@ -1,0 +1,33 @@
+test/controllers/api/v1/stripe_settings_controller_test.rb
+  s_e9ed806a3d225c::t_fc3c7e8f5d8d0c 110-129
+app/controllers/api/v1/stripe_settings_controller.rb
+  s_e9ed806a3d225c::t_b89773443ab37f 35-40
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_3f5d254e69e77e 74-78
+test/jobs/ticketing_sweeper_job_test.rb
+  s_e9ed806a3d225c::t_66bd8d37fd7d62 1-80
+test/controllers/api/v1/tickets_stripe_flow_test.rb
+  s_e9ed806a3d225c::t_6a6104d3d3fa7c 139-142
+  s_e9ed806a3d225c::t_37a6fd8e1830e3 145-153
+  s_e9ed806a3d225c::t_601ff76956dfc6 143-144
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_69b1d51322b2ae 261-264
+app/jobs/ticketing_sweeper_job.rb
+  s_e9ed806a3d225c::t_aaeb387bffdc7c 23-31,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "de095b26d2358e05b5c281cbd93207a877cb37a1",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
