@@ -1,0 +1,23 @@
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_dee8d6d8690563 233-236,239-240,243-250,264-273
+  s_e9ed806a3d225c::t_b80dccc9485d82 251-258,261-263
+app/models/event.rb
+  s_e9ed806a3d225c::t_6b187b3943f328 55-58
+  s_e9ed806a3d225c::t_bedf3aeba6538f 37-47,49-51,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "17036de1f3a8a54842a692011dcdb35488e93843",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
