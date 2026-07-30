@@ -1,0 +1,40 @@
+app/blueprints/stripe_setting_blueprint.rb
+  s_e9ed806a3d225c::t_daddd1a9ec8f35 1-13
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_e3f40c470d6b60 485-487
+.env.example
+  s_e9ed806a3d225c::t_fb3a93d0645e5c 38
+app/controllers/api/base_controller.rb
+  s_e9ed806a3d225c::t_54c290e7c6281e 25-31
+config/routes.rb
+  s_e9ed806a3d225c::t_c2269bf435d557 148-150
+test/controllers/api/v1/stripe_settings_controller_test.rb
+  s_e9ed806a3d225c::t_871b56ca256ede 1-110
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_0439bd4598ce98 50-51,53
+  s_e9ed806a3d225c::t_50ef63e3ecf8d8 1-49,52,54-55
+app/controllers/api/v1/stripe_settings_controller.rb
+  s_e9ed806a3d225c::t_cb7b4ebd760e3d 1-49,51-65,67-80
+  s_e9ed806a3d225c::t_5afa7035fc425a 50
+  s_e9ed806a3d225c::t_8e74c88ec97e7d 66
+db/migrate/20260730150000_add_stripe_setting_to_ticket_items.rb
+  s_e9ed806a3d225c::t_dad5724c15760f 1-10
+db/schema.rb
+  s_e9ed806a3d225c::t_c4db4c10ffb371 13,584,598
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0526b75e993e1ceb7856223327d4fd5041f6e204",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
