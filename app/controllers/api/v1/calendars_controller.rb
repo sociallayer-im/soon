@@ -60,10 +60,14 @@ class Api::V1::CalendarsController < Api::BaseController
       filename: "group-#{group.id}.ics")
   end
 
-  # A public, non-draft/archived event is world-visible (mirrors Event.visible_to
-  # for anonymous callers). Private/draft events aren't exposed through the feed.
+  # Is this event world-visible? Delegated to Event.visible_to(nil) — the
+  # anonymous case of the one scope that defines listing visibility — rather
+  # than re-stating its status list here. The hand-copied version of that list
+  # had already drifted out of sync, missing both `pending` (awaiting manager
+  # approval) and `cancelled`, so a cancelled event still exported a normal ICS
+  # entry that a subscriber's calendar happily kept showing.
   def calendar_visible?(event)
-    event.visibility == "public" && !%w[draft archived].include?(event.status)
+    Event.visible_to(nil).exists?(id: event.id)
   end
 
   def send_calendar(ics, filename:)

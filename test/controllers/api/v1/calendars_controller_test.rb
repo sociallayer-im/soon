@@ -28,6 +28,21 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # These two were the drift: calendar_visible? hand-copied Event.visible_to's
+  # status list and left both out, so a cancelled or not-yet-approved event
+  # still exported a normal ICS entry.
+  test "event feed hides a cancelled event" do
+    cancelled = create_event(group: @group, owner: @owner, status: "cancelled", visibility: "public")
+    get "/api/v1/events/#{cancelled.id}/calendar.ics"
+    assert_response :not_found
+  end
+
+  test "event feed hides an event awaiting manager approval" do
+    pending = create_event(group: @group, owner: @owner, status: "pending", visibility: "public")
+    get "/api/v1/events/#{pending.id}/calendar.ics"
+    assert_response :not_found
+  end
+
   test "event feed 404s for an unknown id" do
     get "/api/v1/events/nope/calendar.ics"
     assert_response :not_found
