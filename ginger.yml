@@ -75,6 +75,12 @@ env:
   GOOD_JOB_MAX_THREADS: "1"
   THRUSTER_HTTP_PORT: "8080"
   THRUSTER_TARGET_PORT: "3000"
+  # Stripe card payments are SG-only (design/PAYMENTS_PLAN.md decision #13):
+  # this flag exists here and deliberately NOT in ginger.cn.yml. API_URL is
+  # the backend's own public origin, used to build per-key webhook URLs
+  # (WEB_URL is the frontend and would 404 them).
+  STRIPE_ENABLED: "true"
+  API_URL: "https://api.sola.day"
 
 secrets:
   load: [.env.production]
