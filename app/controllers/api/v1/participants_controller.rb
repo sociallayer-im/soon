@@ -2,8 +2,12 @@ class Api::V1::ParticipantsController < Api::BaseController
   before_action :set_event
 
   # GET /api/v1/events/:event_id/participants
+  #
+  # Withdrawn participants are soft-deleted (status "cancelled") and must not
+  # appear in the attendee list — before the soft delete they were removed
+  # outright, so nothing downstream expects to see them.
   def index
-    render_collection @event.participants.includes(:user), blueprint: ParticipantBlueprint
+    render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
   end
 
   # POST /api/v1/events/:event_id/participants
@@ -24,17 +28,31 @@ class Api::V1::ParticipantsController < Api::BaseController
     status = params.dig(:participant, :status) || "attending"
     status = "pending" if (@event.require_approval || @event.form_id.present?) && !is_manager
 
+    existing = @event.participants.find_by(user_id: current_user.id)
+    # Re-joining after withdrawing REUSES the soft-deleted row — (user_id,
+    # event_id) is unique, so a second insert would fail. Anything else that
+    # already exists is still a duplicate join and rejected as before.
+    if existing && !existing.cancelled?
+      return render_error("User can only participate once per event")
+    end
+
+    # registered_at is re-stamped on reuse: they signed up again, and the old
+    # value would misreport when. It is set on this path at all because the
+    # ticket flow always stamped it and the free/direct join never did,
+    # leaving the signup time blank for exactly the events that have no
+    # tickets.
+    participant = existing || @event.participants.new(user: current_user)
+
     # Only a status that counts toward capacity needs the check — a "pending"
     # join (awaiting approval) doesn't occupy a seat yet, matching sails/'s
-    # "only count confirmed attendees; pending waits until approval".
+    # "only count confirmed attendees; pending waits until approval". A
+    # cancelled row occupies nothing, so re-joining takes a seat like a first
+    # join does.
     if status == "attending" && (err = capacity_error)
       return render_error(err)
     end
 
-    # registered_at on this path too — the ticket flow always stamped it and
-    # the free/direct join never did, so "when did they sign up" was blank for
-    # exactly the events that have no tickets.
-    participant = @event.participants.new(user: current_user, status: status, registered_at: Time.current)
+    participant.assign_attributes(status: status, registered_at: Time.current)
 
     ActiveRecord::Base.transaction do
       participant.save!
@@ -85,14 +103,28 @@ class Api::V1::ParticipantsController < Api::BaseController
   end
 
   # DELETE /api/v1/events/:event_id/participants/:id
+  #
+  # A SOFT delete: the row is marked cancelled, never removed. Hard-deleting
+  # it destroyed history, and ticket_items.participant_id is a foreign key —
+  # so it also raised InvalidForeignKey on every ticketed event (free RSVPs
+  # create an order too). Keeping the row preserves the audit trail and lets
+  # a later refund still reach the participant.
   def destroy
     participant = @event.participants.find(params[:id])
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
+    return head :no_content if participant.status == "cancelled" # idempotent
+
     was_attending = participant.status == "attending"
-    participant.destroy
-    @event.decrement!(:participant_count) if was_attending && @event.participant_count.to_i > 0
+    released = false
+    ActiveRecord::Base.transaction do
+      released = release_orders!(participant)
+      participant.update!(status: "cancelled")
+    end
+    # release_resources! already gave the seat back (and the count with it) —
+    # decrementing again here would double-count.
+    @event.decrement!(:participant_count) if was_attending && !released && @event.participant_count.to_i > 0
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -137,7 +169,8 @@ class Api::V1::ParticipantsController < Api::BaseController
   # column made every registrant look checked in.
   def check_in
     authorize @event, :update?
-    participant = @event.participants.find_by(user_id: params[:user_id])
+    # .active — someone who withdrew is not at the door.
+    participant = @event.participants.active.find_by(user_id: params[:user_id])
     return render_error("user is not a participant of this event") unless participant
 
     participant.update!(checked_in_at: Time.current)
@@ -145,6 +178,32 @@ class Api::V1::ParticipantsController < Api::BaseController
   end
 
   private
+
+  # Hands back what the withdrawing participant was holding. Returns true if
+  # inventory was released, so the caller doesn't decrement participant_count
+  # twice (release_resources! already covers it).
+  #
+  # A PAID order deliberately stays `succeeded` and keeps its money: an
+  # attendee withdrawing is not a refund, and the event owner must still be
+  # able to refund it afterwards from the order list — which is why the
+  # participant link is left intact too.
+  def release_orders!(participant)
+    released = false
+    TicketItem.where(event_id: @event.id, participant_id: participant.id).each do |item|
+      case item.status
+      when "pending"
+        item.cancel # marks cancelled and releases the hold
+        released = true
+      when "succeeded"
+        # Free/comped: nothing to refund, so retire the order outright. Paid:
+        # leave it succeeded and refundable.
+        item.transition!(:cancelled) if item.amount.to_i.zero?
+        item.release_resources!
+        released = true
+      end
+    end
+    released
+  end
 
   def set_event
     @event = Event.find(params[:event_id])

@@ -31,7 +31,11 @@ class EventBlueprint < Blueprinter::Base
   view :extended do
     field :content
     association :event_roles, blueprint: EventRoleBlueprint
-    association :participants, blueprint: ParticipantBlueprint
+    # Withdrawn (soft-deleted) participants are not attendees — reject in Ruby
+    # so a preloaded association isn't re-queried.
+    association :participants, blueprint: ParticipantBlueprint do |event|
+      event.participants.reject(&:cancelled?)
+    end
     association :tickets, blueprint: TicketBlueprint, view: :extended
   end
 end

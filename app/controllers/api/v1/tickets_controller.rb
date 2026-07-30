@@ -84,7 +84,11 @@ class Api::V1::TicketsController < Api::BaseController
     end
     return render_error("run out of ticket") unless @ticket.reserve!
 
+    # A withdrawn (soft-deleted) participant is reused rather than re-inserted
+    # — (user_id, event_id) is unique — and registered_at is re-stamped since
+    # they signed up again.
     participant = Participant.find_by(event: @event, user: current_user)
+    already_counted = participant&.status == "attending"
     if participant.nil?
       participant = @event.participants.new(user: current_user, status: "attending", payment_status: "pending", registered_at: Time.current, message: params[:message])
     elsif participant.status == "cancelled"
@@ -109,7 +113,9 @@ class Api::V1::TicketsController < Api::BaseController
     # only thing we must hand back on failure.
     ActiveRecord::Base.transaction do
       participant.save!
-      @event.increment!(:participant_count)
+      # Only when they weren't already occupying a seat — buying a second
+      # ticket for an event you're already attending must not count twice.
+      @event.increment!(:participant_count) unless already_counted
       ticket_item.save!
       participant.update!(ticket_id: ticket_item.ticket_id)
       consume_coupon!(ticket_item)

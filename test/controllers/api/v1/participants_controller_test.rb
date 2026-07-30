@@ -138,6 +138,154 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_response :no_content
   end
 
+  test "destroy soft-deletes: the row survives as cancelled and leaves the attendee list" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    participant = create_participant(event: event, user: attendee, status: "attending")
+    event.increment!(:participant_count)
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
+    assert_response :no_content
+
+    assert Participant.exists?(participant.id), "history must survive — no hard delete"
+    assert_equal "cancelled", participant.reload.status
+    assert_equal 0, event.reload.participant_count
+
+    get "/api/v1/events/#{event.id}/participants", headers: auth_headers(owner)
+    assert_empty json_response["data"], "a withdrawn participant is not in the attendee list"
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_empty json_response["participants"], "nor in the event detail payload"
+
+    # Idempotent — a second withdrawal must not decrement the count again.
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
+    assert_response :no_content
+    assert_equal 0, event.reload.participant_count
+  end
+
+  test "withdrawing from a ticketed event releases the pending order and its hold" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    ticket = create_ticket(event: event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    participant = Participant.find(json_response["participant"]["id"])
+    assert_equal 4, ticket.reload.quantity
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :no_content
+
+    assert_equal "cancelled", item.reload.status
+    assert_equal 5, ticket.reload.quantity, "the hold must be handed back"
+    assert_equal 0, event.reload.participant_count
+  end
+
+  test "withdrawing keeps a PAID order refundable by the organizer" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    ticket = create_ticket(event: event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    participant = Participant.find(json_response["participant"]["id"])
+    item.confirm_payment!(txhash: "pi_paid")
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :no_content
+
+    # The money is still with the organizer, so the order stays succeeded and
+    # refundable — withdrawing is not a refund.
+    assert_equal "succeeded", item.reload.status
+    assert_equal participant.id, item.participant_id, "the refund path still needs the participant"
+    assert_equal 5, ticket.reload.quantity, "the seat is freed even though the order stands"
+  end
+
+  test "withdrawing from a free ticketed event retires the order" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    ticket = create_ticket(event: event, quantity: 5)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    participant = Participant.find(json_response["participant"]["id"])
+    assert_equal "succeeded", item.status
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :no_content
+    assert_equal "cancelled", item.reload.status, "nothing to refund on a free order"
+    assert_equal 5, ticket.reload.quantity
+  end
+
+  test "re-joining after withdrawing reuses the row, re-stamps registered_at, and retakes a seat" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    # max_participant: 1 proves a withdrawn participant occupies no capacity.
+    event = create_event(group: group, owner: owner, max_participant: 1)
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    assert_response :created
+    participant = Participant.find(json_response["id"])
+    first_registered_at = participant.registered_at
+    assert_equal 1, event.reload.participant_count
+
+    # Event is full for anyone else.
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(create_user)
+    assert_response :unprocessable_entity
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
+    assert_response :no_content
+    assert_equal 0, event.reload.participant_count, "a withdrawn participant occupies no seat"
+
+    # The freed seat is genuinely available to someone else...
+    other = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(other)
+    assert_response :created
+    other_participant = Participant.find(json_response["id"])
+    delete "/api/v1/events/#{event.id}/participants/#{other_participant.id}", headers: auth_headers(other)
+
+    # ...and re-joining reuses the SAME row rather than inserting a second.
+    travel 1.minute do
+      assert_no_difference -> { Participant.where(event_id: event.id, user_id: attendee.id).count } do
+        post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+      end
+      assert_response :created
+      assert_equal participant.id, json_response["id"]
+    end
+    participant.reload
+    assert_equal "attending", participant.status
+    assert participant.registered_at > first_registered_at, "signing up again re-stamps registered_at"
+    assert_equal 1, event.reload.participant_count
+  end
+
+  test "a withdrawn participant cannot be checked in" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    participant = create_participant(event: event, user: attendee, status: "attending")
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
+
+    post "/api/v1/events/#{event.id}/participants/check_in",
+      params: { user_id: attendee.id }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_nil participant.reload.checked_in_at
+  end
+
   test "approve moves a pending participant to attending, event owner only" do
     owner = create_user
     attendee = create_user

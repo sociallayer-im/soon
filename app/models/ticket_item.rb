@@ -22,7 +22,11 @@ class TicketItem < ApplicationRecord
   #   disputed ──(dispute won)──► succeeded, (lost/conceded)──► refunded
   TRANSITIONS = {
     "pending"             => %w[succeeded cancelled timeout],
-    "succeeded"           => %w[refunded partially_refunded disputed],
+    # succeeded → cancelled is allowed only for a FREE order (nothing to
+    # refund), so a comped/free RSVP can be withdrawn. A paid order must go
+    # through the refund flow; #transition! enforces that below, not just the
+    # controller.
+    "succeeded"           => %w[refunded partially_refunded disputed cancelled],
     "partially_refunded"  => %w[refunded partially_refunded disputed],
     "disputed"            => %w[succeeded refunded],
     "cancelled"           => [],
@@ -38,6 +42,9 @@ class TicketItem < ApplicationRecord
     to = to.to_s
     unless TRANSITIONS.fetch(status, []).include?(to)
       raise InvalidTransition, "ticket_item #{id}: #{status} → #{to}"
+    end
+    if status == "succeeded" && to == "cancelled" && amount.to_i.positive?
+      raise InvalidTransition, "ticket_item #{id} was paid — refund it instead of cancelling"
     end
     update!(attrs.merge(status: to))
   end
