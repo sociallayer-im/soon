@@ -34,6 +34,9 @@ builder:
   # Push to the Singapore mirror (clean wamo→SG link, no GFW). It shares OSS +
   # Postgres with registry.juluo.xyz, so juluo pulls the same image fast.
   push_registry: mirror-registry.sola.day
+  # See ginger.yml — mode=min would export only the final stage, leaving
+  # `bundle install` (rbsecp256k1 built from source) uncached in the registry.
+  cache: max
 
 # App joins the "ginger" docker network (default); Postgres is on the same
 # network with alias "postgres" — same in-cluster database sails already

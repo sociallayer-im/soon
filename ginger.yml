@@ -52,6 +52,15 @@ ssh:
 builder:
   arch: amd64
   remote: ssh://ubuntu@wamo.city
+  # ginger defaults to mode=min, which exports only the FINAL stage to
+  # <image>:buildcache. This Dockerfile has three, and everything expensive is
+  # in the throwaway `build` stage: `bundle install` — which compiles
+  # rbsecp256k1's vendored libsecp256k1 from source via autotools — plus
+  # `bun install` and two bootsnap precompiles. None of it reached the registry
+  # cache, so it lived only in the wamo builder's local buildkit store, one
+  # container recreate or `buildx prune` from a full cold rebuild. max exports
+  # every stage.
+  cache: max
 
 env:
   RAILS_ENV: production
