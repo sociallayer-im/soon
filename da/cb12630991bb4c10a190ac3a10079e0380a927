@@ -1,0 +1,45 @@
+app/services/ticketing/designate_group_ticket_event.rb
+  s_e9ed806a3d225c::t_bd1339f9817fe6 3-7
+  s_e9ed806a3d225c::t_958ede7a35c388 1-2,8-32
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_cc3265c41747c9 48,72,265-277
+  s_e9ed806a3d225c::t_ee339b6b6fa32d 278-279
+app/models/event.rb
+  s_e9ed806a3d225c::t_bd1339f9817fe6 26-29
+  s_e9ed806a3d225c::t_958ede7a35c388 25
+app/models/group.rb
+  s_e9ed806a3d225c::t_83f075d72bb25a 13-16
+app/blueprints/group_blueprint.rb
+  s_e9ed806a3d225c::t_8efd9817e5ed0c 17-19
+test/models/ticket_test.rb
+  s_e9ed806a3d225c::t_0bfd3d6de32b1f 55-56
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_0bfd3d6de32b1f 91-98
+app/models/ticket.rb
+  s_e9ed806a3d225c::t_bd1339f9817fe6 35-38,40
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_0bfd3d6de32b1f 381
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_696f9864d6c8bf 338-357,359,362-384
+  s_e9ed806a3d225c::t_c1163385cb705f 358,360-361
+test/jobs/stripe_webhook_job_test.rb
+  s_e9ed806a3d225c::t_0bfd3d6de32b1f 134
+test/integration/email_notifications_test.rb
+  s_e9ed806a3d225c::t_2940b606e719cc 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "dacb12630991bb4c10a190ac3a10079e0380a927",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
