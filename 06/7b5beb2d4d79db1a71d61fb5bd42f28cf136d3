@@ -1,0 +1,32 @@
+app/jobs/stripe_reconciliation_job.rb
+  s_e9ed806a3d225c::t_81628af830f9a0 1-78
+test/jobs/stripe_webhook_job_test.rb
+  s_e9ed806a3d225c::t_dc384ae7bc172e 147-172
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_8443c4c3d0c472 41-45
+test/jobs/stripe_reconciliation_job_test.rb
+  s_e9ed806a3d225c::t_7027ac0ff2c86d 62,68-69,71,79
+  s_e9ed806a3d225c::t_42dcbf054a9585 1-61,63-67,70,72-78,80-88
+app/jobs/stripe_webhook_job.rb
+  s_e9ed806a3d225c::t_978c5dcb7302f1 88-91,93-97,99-109,113-116
+app/services/stripe_gateway.rb
+  s_e9ed806a3d225c::t_453c5a4c862180 100-109
+app/models/ticket_item.rb
+  s_e9ed806a3d225c::t_769c24165f4ae4 132-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "067b5beb2d4d79db1a71d61fb5bd42f28cf136d3",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
