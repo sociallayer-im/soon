@@ -89,6 +89,9 @@ secrets:
     - SECRET_KEY_BASE
     - JWT_SECRET
     - NEXT_TOKEN
+    # Was NOT injected before, so SG silently ran on the controller's hardcoded
+    # default and the value in .env.production had no effect.
+    - ALLOWED_SIWE_DOMAINS
     - RESEND_API_KEY
     - CLOUDFLARE_ACCOUNT_ID
     - CLOUDFLARE_IMAGES_TOKEN
