@@ -82,6 +82,15 @@ class Api::V1::TicketsController < Api::BaseController
     if @ticket.check_badge_class_id.present? && !holds_required_badge?(@ticket)
       return render_error("this ticket requires a badge you do not hold", status: :forbidden)
     end
+    # A live order for THIS ticket already exists — a double-click, or a retry
+    # during the post-payment confirmation window. Reserving again would hold a
+    # second unit of inventory for one seat; the existing order is what needs
+    # finishing (checkout_session hands back its open Stripe session).
+    # Deliberately per-ticket: buying a DIFFERENT ticket type of the same event
+    # stays allowed.
+    if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: "pending")
+      return render_error("you already have an unpaid order for this ticket")
+    end
     return render_error("run out of ticket") unless @ticket.reserve!
 
     # Buying a ticket does not skip the door: an event that requires approval,

@@ -145,6 +145,33 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
+  test "rsvp refuses a second unpaid order for the same ticket but allows another type" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    other_ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    other_pm = create_payment_method(item: other_ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal 4, ticket.reload.quantity
+
+    # Double-click / retry during the confirmation window must not hold a
+    # second unit of inventory for the same seat.
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "already have an unpaid order", json_response["error"]
+    assert_equal 4, ticket.reload.quantity, "no extra hold"
+    assert_equal 1, TicketItem.where(ticket_id: ticket.id, user_id: buyer.id).count
+
+    # A different ticket type of the same event is still purchasable.
+    post "/api/v1/events/#{@event.id}/tickets/#{other_ticket.id}/rsvp",
+      params: { payment_method_id: other_pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+  end
+
   test "a coupon discounting a stripe price into (0, min) is rejected, not waived to free" do
     ticket = create_ticket(event: @event, quantity: 5)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
