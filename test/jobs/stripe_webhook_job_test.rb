@@ -144,6 +144,32 @@ class StripeWebhookJobTest < ActiveSupport::TestCase
     assert @group.memberships.exists?(user_id: @buyer.id, role: "member")
   end
 
+  test "a dashboard-issued refund (no local row) creates the refund record and applies side effects" do
+    item = create_order(status: "succeeded", txhash: "pi_dash")
+    assert_equal 0, item.refunds.count
+
+    ev = record_event("charge.refunded",
+      { "payment_intent" => "pi_dash", "amount_refunded" => 1000,
+        "refunds" => { "data" => [ { "id" => "re_dash", "amount" => 1000 } ] } })
+    StripeWebhookJob.perform_now(ev.id)
+
+    refund = item.refunds.sole
+    assert_equal "succeeded", refund.status
+    assert refund.full_refund
+    assert_equal "re_dash", refund.provider_ref
+    assert_equal @setting.user_id, refund.requested_by_user_id, "attributed to the Stripe account holder"
+    assert_equal "refunded", item.reload.status
+    assert_equal 6, @ticket.reload.quantity
+
+    # replayed delivery → no double release, no duplicate row
+    ev2 = record_event("charge.refunded",
+      { "payment_intent" => "pi_dash", "amount_refunded" => 1000,
+        "refunds" => { "data" => [ { "id" => "re_dash", "amount" => 1000 } ] } })
+    StripeWebhookJob.perform_now(ev2.id)
+    assert_equal 1, item.refunds.count
+    assert_equal 6, @ticket.reload.quantity
+  end
+
   test "dispute lifecycle: created marks disputed; closed resolves won back to succeeded, lost to refunded" do
     won = create_order(status: "succeeded", txhash: "pi_won")
     ev = record_event("charge.dispute.created", { "payment_intent" => "pi_won" })

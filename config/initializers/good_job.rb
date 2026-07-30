@@ -38,6 +38,11 @@ Rails.application.configure do
       cron: "*/5 * * * *",
       class: "TicketingSweeperJob",
       description: "Expire stale ticket reservations, confirming against Stripe first"
+    },
+    stripe_reconciliation: {
+      cron: "17 4 * * *", # daily, off-peak
+      class: "StripeReconciliationJob",
+      description: "Find orders refunded/disputed at Stripe but still paid locally"
     }
   }
 

@@ -129,6 +129,32 @@ class TicketItem < ApplicationRecord
     end
   end
 
+  # Finalizes a refund that Stripe has confirmed (webhook, sweeper, or
+  # reconciliation) and applies the decision-#10 side effects: a full refund
+  # releases the seat/coupon/count, cancels the participant, and revokes a
+  # group-ticket auto-join membership; a partial refund moves money only.
+  public def apply_refund_success!(refund)
+    transaction do
+      refund.update!(status: "succeeded")
+      if refund.full_refund
+        transition!(:refunded)
+        release_resources!
+        participant&.update!(status: "cancelled", payment_status: "cancelled")
+        revoke_purchase_membership!
+      else
+        transition!(:partially_refunded)
+      end
+    end
+  end
+
+  # Only the plain membership the purchase auto-join created — never an
+  # owner/manager role the user holds for other reasons.
+  public def revoke_purchase_membership!
+    return unless ticket_type == "group" && group
+
+    group.memberships.find_by(user_id: user_id, role: "member")&.destroy
+  end
+
   # Inventory is handed back exactly once per order, guarded by released_at —
   # never inferred from status. A second close/expire/refund path arriving
   # later becomes a no-op instead of double-crediting quantity or the coupon.

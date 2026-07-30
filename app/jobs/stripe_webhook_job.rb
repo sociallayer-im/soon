@@ -85,33 +85,34 @@ class StripeWebhookJob < ApplicationJob
     record.update!(error: "amount/currency mismatch for ticket_item #{item.id}")
   end
 
-  # Marks matching pending refunds succeeded and applies the side effects
-  # (decision #10): a full refund releases the seat/coupon/count, cancels the
-  # participant, and revokes a group-ticket auto-join; partial moves money only.
+  # Finalizes local pending refunds matched by provider_ref — and refunds
+  # with NO local row at all, i.e. issued directly from the Stripe Dashboard,
+  # for which a row is created on the fly (attributed to the key's owner).
+  # Side effects live in TicketItem#apply_refund_success!.
   def finalize_refunds(item, charge)
-    stripe_refund_ids = Array(charge.dig("refunds", "data")).map { |r| r["id"] }
-    pending = item.refunds.where(status: "pending")
-    pending = pending.where(provider_ref: stripe_refund_ids) if stripe_refund_ids.any?
-    return if pending.none?
-
-    pending.each do |refund|
-      refund.update!(status: "succeeded")
-      if refund.full_refund
-        item.transition!(:refunded)
-        item.release_resources!
-        item.participant&.update!(status: "cancelled", payment_status: "cancelled")
-        revoke_group_ticket_membership(item)
-      else
-        item.transition!(:partially_refunded)
+    total = item.amount.to_i
+    Array(charge.dig("refunds", "data")).each do |stripe_refund|
+      refund = item.refunds.find_by(provider_ref: stripe_refund["id"])
+      refund ||= item.refunds.where(status: "pending", provider_ref: nil).first&.tap do |r|
+        r.update!(provider_ref: stripe_refund["id"]) # our API call lost the response
       end
+      refund ||= item.refunds.create!(
+        provider_ref: stripe_refund["id"],
+        amount: stripe_refund["amount"] || total,
+        currency: item.currency || "usd",
+        full_refund: charge["amount_refunded"].to_i >= total,
+        reason: "issued from Stripe dashboard",
+        requested_by_user_id: dashboard_refunder_id(item)
+      )
+      next if refund.status == "succeeded"
+
+      item.apply_refund_success!(refund)
     end
   end
 
-  # Only the plain membership the purchase auto-join created — never an
-  # owner/manager role the user holds for other reasons.
-  def revoke_group_ticket_membership(item)
-    return unless item.ticket_type == "group" && item.group
-
-    item.group.memberships.find_by(user_id: item.user_id, role: "member")&.destroy
+  # A dashboard refund was made by whoever holds the Stripe account — the
+  # key's owner; fall back to the event owner for legacy rows.
+  def dashboard_refunder_id(item)
+    StripeSetting.find_by(id: item.stripe_setting_id)&.user_id || item.event&.owner_id || item.user_id
   end
 end

@@ -97,6 +97,16 @@ class StripeGateway
     nil
   end
 
+  # For reconciliation: the intent plus its charge (refund/dispute state).
+  def self.retrieve_payment_intent(setting, intent_id)
+    ::Stripe::PaymentIntent.retrieve(
+      { id: intent_id, expand: [ "latest_charge" ] },
+      { api_key: setting.secret_key }
+    )
+  rescue ::Stripe::StripeError
+    nil
+  end
+
   # ---- refunds ----
 
   def self.create_refund(setting, payment_intent:, amount:, idempotency_key:)
