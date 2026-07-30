@@ -85,10 +85,20 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_match "venue does not belong", json_response["error"]
   end
 
-  test "create requires group membership" do
+  test "create succeeds for a non-member when the group's can_publish_event is everyone (the default)" do
     outsider = create_user
     post "/api/v1/recurring", params: {
       group_id: @group.id, interval: "week", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "X"
+    }, headers: auth_headers(outsider)
+    assert_response :created
+  end
+
+  test "create is forbidden for a non-member when can_publish_event is manager" do
+    restricted_group = create_group(owner: @owner, can_publish_event: "manager")
+    outsider = create_user
+    post "/api/v1/recurring", params: {
+      group_id: restricted_group.id, interval: "week", event_count: 2,
       start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "X"
     }, headers: auth_headers(outsider)
     assert_response :forbidden

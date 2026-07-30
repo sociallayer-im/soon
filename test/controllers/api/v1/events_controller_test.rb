@@ -246,10 +246,50 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "create requires group membership (EventPolicy#create? = group_member?)" do
+  test "create succeeds for a non-member when the group's can_publish_event is everyone (the default)" do
     owner = create_user
     outsider = create_user
-    group = create_group(owner: owner)
+    group = create_group(owner: owner) # can_publish_event defaults to "everyone"
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id }
+    }, headers: auth_headers(outsider)
+    assert_response :created
+  end
+
+  test "create is forbidden for a non-member when can_publish_event is manager" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner, can_publish_event: "manager")
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id }
+    }, headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  test "create is forbidden for a mere member when can_publish_event is manager" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner, can_publish_event: "manager")
+    create_membership(user: member, group: group, role: "member")
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id }
+    }, headers: auth_headers(member)
+    assert_response :forbidden
+  end
+
+  test "create is forbidden for a non-member when can_publish_event is member" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner, can_publish_event: "member")
     place = create_place
 
     post "/api/v1/events", params: {

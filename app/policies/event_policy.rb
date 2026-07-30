@@ -9,7 +9,17 @@ class EventPolicy < ApplicationPolicy
     owner?(record) || group_member?(record.group) # private
   end
 
-  def create?  = group_member?(record.group)
+  # Mirrors the frontend's canPublishEvent logic (seastar-app src/utils/index.ts) —
+  # the group's can_publish_event setting, not bare membership, decides who may
+  # create an event. Previously this only checked group_member?, so a group set
+  # to "everyone" silently 403'd any non-member who the UI told could publish.
+  def create?
+    case record.group.can_publish_event
+    when "everyone" then true
+    when "member" then group_member?(record.group)
+    else group_admin?(record.group) # "manager" or unset
+    end
+  end
   # A co-host (EventRole role: "manager") can edit the event and gates the
   # same approve/reject/check_in actions this method backs — sails/ granted
   # this to any assigned EventRole regardless of role; narrowed here to
