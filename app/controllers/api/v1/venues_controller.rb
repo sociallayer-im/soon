@@ -1,4 +1,14 @@
 class Api::V1::VenuesController < Api::BaseController
+  # Venues are public information — they appear on public event pages, and
+  # EventBlueprint deliberately embeds only VenueRefBlueprint (id + name), so
+  # every caller that needs capacity/about/amenities/availability fetches the
+  # venue by id. The SDK's getVenueDetailById sends no token, so without this
+  # skip #show 401s for everyone, including managers on the venue edit page
+  # (the page's loader gets null back and crashes with a 500).
+  #
+  # #index stays authenticated: nothing fetches it anonymously — a group's
+  # venue list arrives embedded in GroupBlueprint :detail.
+  skip_before_action :authenticate!, only: %i[show]
   before_action :set_venue, only: %i[show update destroy set_availability conflict]
 
   def index

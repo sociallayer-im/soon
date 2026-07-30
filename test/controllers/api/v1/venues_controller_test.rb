@@ -43,6 +43,35 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 50, json_response["capacity"]
   end
 
+  test "show is public — the SDK fetches venue detail without a token" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, capacity: 50)
+
+    # getVenueDetailById sends no token; when this 401'd, the venue edit page's
+    # loader got null back and the page 500'd — for managers included.
+    get "/api/v1/venues/#{venue.id}"
+    assert_response :success
+    assert_equal venue.id, json_response["id"]
+    assert json_response.key?("availabilities"), "the :with_availability view still renders"
+  end
+
+  test "writes stay manager-only even though reads are public" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+
+    patch "/api/v1/venues/#{venue.id}", params: { venue: { capacity: 1 } }
+    assert_response :unauthorized
+
+    patch "/api/v1/venues/#{venue.id}", params: { venue: { capacity: 1 } }, headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    delete "/api/v1/venues/#{venue.id}"
+    assert_response :unauthorized
+  end
+
   test "show returns require_approval/group_id/image_urls/track_ids/archived — the edit form hydrates from these" do
     owner = create_user
     group = create_group(owner: owner)
