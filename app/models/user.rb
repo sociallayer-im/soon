@@ -18,11 +18,14 @@ class User < ApplicationRecord
   normalizes :eth,   with: ->(a) { a.strip.downcase }
 
   # A user signs in via at least one identity: email (code login / Google),
-  # eth (SIWE wallet), or sol (Solana wallet). Wallet-first accounts have no
-  # email until they bind one, and no name until they register one.
+  # eth (SIWE wallet), sol (Solana wallet), or WeChat (CN 服务号 网页授权).
+  # Wallet- and WeChat-first accounts have no email until they bind one, and no
+  # name until they register one.
   validates :email, uniqueness: true, allow_nil: true
   validates :eth,   uniqueness: true, allow_nil: true
   validates :sol,   uniqueness: true, allow_nil: true
+  validates :wechat_openid,  uniqueness: true, allow_nil: true
+  validates :wechat_unionid, uniqueness: true, allow_nil: true
   validate  :has_login_identity
 
   # `name` is the user's unique identifier/username (the handle concept). It must
@@ -39,7 +42,9 @@ class User < ApplicationRecord
   end
 
   private def has_login_identity
-    errors.add(:base, "must have an email, eth, or sol identity") if email.blank? && eth.blank? && sol.blank?
+    return if [ email, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?)
+
+    errors.add(:base, "must have an email, eth, sol, or wechat identity")
   end
 
   # Looks a user up by primary key OR unique username — API paths accept either

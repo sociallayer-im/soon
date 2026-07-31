@@ -160,6 +160,68 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "trusted_signin with a wechat identity creates/finds the account" do
+    with_next_token("s3cret") do
+      assert_difference "User.count", 1 do
+        post "/api/v1/auth/trusted_signin",
+          params: { next_token: "s3cret", wechat_openid: "o_abc", wechat_unionid: "u_abc" }
+      end
+      assert_response :success
+      user = User.find_by(wechat_unionid: "u_abc")
+      assert user
+      assert_equal "o_abc", user.wechat_openid
+      assert_nil user.email
+
+      # A second appid gives the same person a different openid; the unionid is
+      # what has to keep them on one account.
+      assert_no_difference "User.count" do
+        post "/api/v1/auth/trusted_signin",
+          params: { next_token: "s3cret", wechat_openid: "o_from_miniprogram", wechat_unionid: "u_abc" }
+      end
+      assert_equal "o_abc", user.reload.wechat_openid
+    end
+  end
+
+  test "trusted_signin back-fills the unionid onto an openid-only account" do
+    # What an account created before the 开放平台 binding looks like.
+    user = User.create!(wechat_openid: "o_legacy")
+
+    with_next_token("s3cret") do
+      assert_no_difference "User.count" do
+        post "/api/v1/auth/trusted_signin",
+          params: { next_token: "s3cret", wechat_openid: "o_legacy", wechat_unionid: "u_legacy" }
+      end
+      assert_response :success
+    end
+
+    assert_equal "u_legacy", user.reload.wechat_unionid
+  end
+
+  test "trusted_signin with only a wechat_openid works" do
+    with_next_token("s3cret") do
+      assert_difference "User.count", 1 do
+        post "/api/v1/auth/trusted_signin", params: { next_token: "s3cret", wechat_openid: "o_only" }
+      end
+      assert_response :success
+      assert_nil User.find_by(wechat_openid: "o_only").wechat_unionid
+    end
+  end
+
+  test "trusted_signin never repoints an existing wechat identifier" do
+    # Two people, one already holding the openid. A payload pairing that openid
+    # with someone else's unionid must not move it.
+    User.create!(wechat_openid: "o_one", wechat_unionid: "u_one")
+    User.create!(wechat_unionid: "u_two")
+
+    with_next_token("s3cret") do
+      post "/api/v1/auth/trusted_signin",
+        params: { next_token: "s3cret", wechat_openid: "o_one", wechat_unionid: "u_two" }
+      assert_response :success
+    end
+
+    assert_equal "u_one", User.find_by(wechat_openid: "o_one").wechat_unionid
+  end
+
   test "trusted_signin without an identity is rejected" do
     with_next_token("s3cret") do
       post "/api/v1/auth/trusted_signin", params: { next_token: "s3cret" }

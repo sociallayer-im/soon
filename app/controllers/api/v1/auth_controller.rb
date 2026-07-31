@@ -91,9 +91,9 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   # POST /api/v1/auth/trusted_signin
-  # For the auth frontend's server-side flows (Google OAuth, Solana signature),
-  # where the proof is verified by the auth service itself. Gated by the
-  # NEXT_TOKEN shared secret, which only that server knows.
+  # For the auth frontend's server-side flows (Google OAuth, Solana signature,
+  # WeChat 网页授权), where the proof is verified by the frontend server itself.
+  # Gated by the NEXT_TOKEN shared secret, which only that server knows.
   def trusted_signin
     secret = ENV["NEXT_TOKEN"]
     unless secret.present? && ActiveSupport::SecurityUtils.secure_compare(params[:next_token].to_s, secret)
@@ -106,8 +106,10 @@ class Api::V1::AuthController < Api::BaseController
       render_token user
     elsif params[:sol_address].present?
       render_token User.find_or_create_by!(sol: params[:sol_address].to_s)
+    elsif params[:wechat_openid].present? || params[:wechat_unionid].present?
+      render_token wechat_user
     else
-      render_error("email or sol_address is required")
+      render_error("email, sol_address or wechat_openid is required")
     end
   end
 
@@ -128,6 +130,38 @@ class Api::V1::AuthController < Api::BaseController
   end
 
   private
+
+  # Resolves the WeChat identity the frontend just verified to an account.
+  #
+  # unionid wins when we have it: it is the same person across every app under
+  # our 微信开放平台 account, while openid is per-appid. An account created from an
+  # openid alone — before the 开放平台 binding existed, or from a scope that
+  # doesn't return unionid — is claimed and back-filled on the first sign-in
+  # that does carry one, so the same person never ends up with two rows.
+  def wechat_user
+    openid = params[:wechat_openid].presence&.to_s
+    unionid = params[:wechat_unionid].presence&.to_s
+
+    user = User.find_by(wechat_unionid: unionid) if unionid
+    user ||= User.find_by(wechat_openid: openid) if openid
+    return User.create!(wechat_openid: openid, wechat_unionid: unionid) unless user
+
+    # Only ever fills a blank, and only with an identifier nobody else holds —
+    # never repoints one at a different WeChat account, which would silently
+    # hand one person's session to another. A conflict here means WeChat
+    # returned a pairing that contradicts what we stored, which shouldn't
+    # happen; the safe response is to sign in the matched account and leave
+    # both identifiers where they are rather than fail the login.
+    updates = {}
+    updates[:wechat_openid] = openid if claimable?(:wechat_openid, openid, user)
+    updates[:wechat_unionid] = unionid if claimable?(:wechat_unionid, unionid, user)
+    user.update(updates) if updates.any?
+    user
+  end
+
+  def claimable?(column, value, user)
+    value.present? && user[column].blank? && !User.exists?(column => value)
+  end
 
   def normalized_email
     params[:email].to_s.strip.downcase

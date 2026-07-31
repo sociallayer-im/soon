@@ -1,7 +1,16 @@
 # 微信集成调研报告 — 服务号网页登录 + 微信支付
 
 调研日期：2026-07-31
-状态：**调研 / 方案，未实现**
+状态：**§1 微信登录已实现（2026-07-31，未部署）**，方案 A；**§2 微信支付仍是方案**，
+被 §2.2 的商户模式决策阻塞。
+
+已实现部分与本文的差异：仅一处——用户信息不再单独调 `/sns/userinfo`，因为
+`unionid` 已经在 code 换 token 的响应里返回，省掉一次请求。落地文件：
+`soon` 的 `db/migrate/*_add_wechat_identity_to_users.rb`、`User#has_login_identity`、
+`AuthController#trusted_signin` + `#wechat_user`；`seastar-app` 的
+`src/app/api/wechat/{wechat.ts,signin,callback}`、`signin/WechatSignIn.tsx`、
+`config.ts` 的 `WECHAT_LOGIN`。服务号「Sola活动平台」appid `wxdf1ef2c65db36224`，
+网页授权域名 `www.juluo.xyz` 已于 2026-07-31 验证通过。
 适用范围：CN 部署（`www.juluo.xyz` / `api.juluo.xyz`），即 `seastar-app` + `soon`
 的 juluo 区域。SG（sola.day）不受影响。
 

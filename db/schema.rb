@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_30_120003) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_31_083140) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -671,12 +671,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_30_120003) do
     t.string "sol"
     t.string "telegram_id"
     t.datetime "updated_at", null: false
+    t.string "wechat_openid"
+    t.string "wechat_unionid"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["eth"], name: "index_users_on_eth", unique: true
     t.index ["name"], name: "index_users_on_name", unique: true
     t.index ["phone"], name: "index_users_on_phone", unique: true
     t.index ["ref_id"], name: "index_users_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["sol"], name: "index_users_on_sol", unique: true
+    t.index ["wechat_openid"], name: "index_users_on_wechat_openid", unique: true, where: "(wechat_openid IS NOT NULL)"
+    t.index ["wechat_unionid"], name: "index_users_on_wechat_unionid", unique: true, where: "(wechat_unionid IS NOT NULL)"
   end
 
   create_table "venues", id: :string, force: :cascade do |t|
