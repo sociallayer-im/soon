@@ -1,0 +1,33 @@
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_09d5ac1a214803 94-96,109-110,112
+  s_e9ed806a3d225c::t_7ce41b0623de5e 149-154,156-158,160-163
+  s_e9ed806a3d225c::t_d08facf6ba3f42 134-148,155,159,164-165
+app/models/user.rb
+  s_e9ed806a3d225c::t_f26ca7525836fc 21-23,27-28
+  s_e9ed806a3d225c::t_2e86293c9c7c6b 45-47
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_5d96a35f7c3a38 163-224
+db/migrate/20260731083140_add_wechat_identity_to_users.rb
+  s_e9ed806a3d225c::t_b9bb3ed92be317 1,14,20-21
+  s_e9ed806a3d225c::t_3f5aad7e940ec4 2-13,15-19
+design/WECHAT_INTEGRATION.md
+  s_e9ed806a3d225c::t_966de5f8e7bf01 4-13
+db/schema.rb
+  s_e9ed806a3d225c::t_38020b296be7ec 13,674-675,682-683
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "aa902c0679957e3b0cc38afde7f1c4ee5767a2d3",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
