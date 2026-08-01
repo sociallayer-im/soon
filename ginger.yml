@@ -1,5 +1,5 @@
 service: soon
-image: ghcr.io/sociallayer-im/soon
+image: home-registry.sola.day/sola/soon
 
 # Default stack, stated explicitly: Nomad schedules the container, Traefik picks
 # it up from the container labels and routes to it. Only nomad+traefik and
@@ -9,13 +9,14 @@ egress: traefik
 
 servers:
   web:
-    hosts: [sg.sola.day]
+    hosts: [homepod.sola.day]
     primary: true
 
+# 自建 registry（yatch）。2026-08-02 起不再经 ghcr。
 registry:
-  server: ghcr.io
-  username: jiangplus
-  password: GHCR_TOKEN
+  server: home-registry.sola.day
+  username: sola
+  password: YATCH_TOKEN
 
 proxy:
   # During the cutover this is the staging domain only. Step 16 of
@@ -27,31 +28,17 @@ proxy:
   ssl: true
   health_check_path: /up
 
-# sg.sola.day has 3.9GB physical and already runs TWELVE services (sails, both
-# Next.js apps, plus loop/semi/wave/flow/hometown/xray/yatch-mirror). Measured
-# 2026-07-30: 2.8GB used, ~1.1GB available, 1GB of cold swap with si/so at zero.
-#
-# Nomad is deliberately told the node has 8GB (over-provision) and schedules on
-# the `memory` RESERVATION, so 300 slots in easily. `memory_max` is the real
-# guard: it is the hard ceiling this container can reach, and on a box with
-# ~1.1GB of headroom shared by 12 services it must stay well under that or one
-# leak drags everything into swap. 640 is ~2x the measured footprint of sails
-# (~350MB), which is the closest comparable workload.
-#
-# Memory oversubscription is enabled on this cluster (verified 2026-07-30), so
-# memory_max is honoured rather than silently ignored.
 resources:
   cpu: 256
-  memory: 300
-  memory_max: 640
+  memory: 640
 
 ssh:
-  user: root
+  user: ubuntu
   command_timeout: 600
 
 builder:
   arch: amd64
-  remote: ssh://ubuntu@wamo.city
+  remote: ssh://ubuntu@homepod
   # ginger defaults to mode=min, which exports only the FINAL stage to
   # <image>:buildcache. This Dockerfile has three, and everything expensive is
   # in the throwaway `build` stage: `bundle install` — which compiles
