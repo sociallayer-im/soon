@@ -43,6 +43,11 @@ Rails.application.configure do
       cron: "17 4 * * *", # daily, off-peak
       class: "StripeReconciliationJob",
       description: "Find orders refunded/disputed at Stripe but still paid locally"
+    },
+    federation_sweeper: {
+      cron: "* * * * *",
+      class: "Federation::SweeperJob",
+      description: "Drain due fed_deliveries under the rate cap; no-op while FEDERATION_ENABLED is off"
     }
   }
 

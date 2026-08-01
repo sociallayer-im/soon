@@ -46,6 +46,10 @@ Rails.application.routes.draw do
     get "/groups/:group_handle/following", to: "collections#following", constraints: {group_handle: group_handle}
 
     get "/events/:id", to: "objects#event"
+
+    post "/inbox", to: "inboxes#create"
+    post "/users/:user_handle/inbox", to: "inboxes#create", constraints: {user_handle: user_handle}
+    post "/groups/:group_handle/inbox", to: "inboxes#create", constraints: {group_handle: group_handle}
   end
 
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
@@ -57,6 +61,11 @@ Rails.application.routes.draw do
 
   namespace :api do
     namespace :v1 do
+      # Federation ops (platform admin only)
+      get "federation/stats", to: "federation#stats"
+      post "federation/policies", to: "federation#create_policy"
+      delete "federation/policies/:domain", to: "federation#destroy_policy", constraints: {domain: /[^\/]+/}
+
       # Auth (no JWT required, except bind_email)
       post "auth/request_code",   to: "auth#request_code"
       post "auth/verify_code",    to: "auth#verify_code"

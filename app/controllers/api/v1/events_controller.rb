@@ -54,6 +54,7 @@ class Api::V1::EventsController < Api::BaseController
       apply_group_ticket_designation!(event)
       create_nested_roles!(event, params[:event_roles])
       create_nested_tickets!(event, params[:tickets], event.group_id)
+      federate_event!(event, :create) if event.status == "published"
     end
     notify_group_admins_of_submission(event)
     render json: EventBlueprint.render(event), status: :created
@@ -78,6 +79,11 @@ class Api::V1::EventsController < Api::BaseController
     if @event.save
       apply_group_ticket_designation!(@event)
       notify_attendees_of_update if calendar_relevant_change?
+      if @event.status == "published"
+        federate_event!(@event, @event.status_previously_changed?(to: "published") ? :create : :update)
+      elsif @event.status == "cancelled" && @event.status_previously_changed?
+        federate_event!(@event, :update)
+      end
       render json: EventBlueprint.render(@event)
     else
       render_error(@event.errors.full_messages.join(", "))
@@ -90,6 +96,7 @@ class Api::V1::EventsController < Api::BaseController
     authorize @event
     @event.update(status: "cancelled")
     notify_attendees_of_cancellation
+    federate_event!(@event, :update)
     head :no_content
   end
 
@@ -107,10 +114,21 @@ class Api::V1::EventsController < Api::BaseController
     authorize @event
     return render_error("event is not pending approval") unless @event.status == "pending"
     @event.update!(status: "published")
+    federate_event!(@event, :create)
     render json: EventBlueprint.render(@event)
   end
 
   private
+
+  # Federation must never break the API write path — publish failures are
+  # logged, the request succeeds. Cheap no-op while FEDERATION_ENABLED is off.
+  def federate_event!(event, verb)
+    return unless Federation.enabled?
+    return unless event.visibility == "public"
+    Federation::OutboxService.publish_event(event, verb)
+  rescue StandardError => e
+    Rails.logger.error("[fed] publish_event #{verb} #{event.id} failed: #{e.message}")
+  end
 
   def set_event
     @event = Event.find_by_id_or_legacy!(params[:id])
