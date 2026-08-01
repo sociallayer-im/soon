@@ -20,6 +20,34 @@ Rails.application.routes.draw do
   # itself calls are under /api/v1/oauth.
   get "oauth/authorize", to: "well_known#authorize_redirect"
 
+  # --- ActivityPub federation (design/FEDERATION_PLAN.md) -------------------
+  # Root-level by protocol necessity; every action 404s unless
+  # FEDERATION_ENABLED=true. The canonical host (app.sola.day) proxies these
+  # paths here. Handle constraints mirror the model formats so /users/:handle
+  # never swallows an unrelated path.
+  scope module: :federation, format: false do
+    user_handle = /[a-z0-9_]{3,30}/
+    group_handle = /[a-z0-9_-]{3,30}/
+
+    get "/.well-known/webfinger", to: "well_known#webfinger"
+    get "/.well-known/host-meta", to: "well_known#host_meta"
+    get "/.well-known/nodeinfo", to: "well_known#nodeinfo_discovery"
+    get "/nodeinfo/2.0", to: "well_known#nodeinfo"
+    get "/actor", to: "actors#instance"
+
+    get "/users/:handle", to: "actors#user", constraints: {handle: user_handle}
+    get "/users/:user_handle/outbox", to: "collections#outbox", constraints: {user_handle: user_handle}
+    get "/users/:user_handle/followers", to: "collections#followers", constraints: {user_handle: user_handle}
+    get "/users/:user_handle/following", to: "collections#following", constraints: {user_handle: user_handle}
+
+    get "/groups/:handle", to: "actors#group", constraints: {handle: group_handle}
+    get "/groups/:group_handle/outbox", to: "collections#outbox", constraints: {group_handle: group_handle}
+    get "/groups/:group_handle/followers", to: "collections#followers", constraints: {group_handle: group_handle}
+    get "/groups/:group_handle/following", to: "collections#following", constraints: {group_handle: group_handle}
+
+    get "/events/:id", to: "objects#event"
+  end
+
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
