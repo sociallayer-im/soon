@@ -173,7 +173,11 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     participant.transition!(:attending)
     sync_form_submission!(participant, "approved")
-    EventMailer.participant_approved(participant_id: participant.id).deliver_later
+    if participant.remote?
+      federate_participation(participant, :approve)
+    else
+      EventMailer.participant_approved(participant_id: participant.id).deliver_later
+    end
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -189,7 +193,11 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     participant.transition!(:declined)
     sync_form_submission!(participant, "rejected")
-    EventMailer.participant_rejected(participant_id: participant.id).deliver_later
+    if participant.remote?
+      federate_participation(participant, :decline)
+    else
+      EventMailer.participant_rejected(participant_id: participant.id).deliver_later
+    end
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -212,6 +220,15 @@ class Api::V1::ParticipantsController < Api::BaseController
   end
 
   private
+
+  # Federation never breaks the local approval flow: the manager's action
+  # already succeeded when this runs.
+  def federate_participation(participant, verb)
+    return unless Federation.enabled?
+    Federation::ParticipationService.public_send(verb, participant)
+  rescue StandardError => e
+    Rails.logger.error("[fed] participation #{verb} #{participant.id} failed: #{e.message}")
+  end
 
   # The approval decision lives on the participant; the application form's
   # submission carried its own status that nobody ever advanced, so a decided

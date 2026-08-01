@@ -31,7 +31,10 @@
 # it describes — e.g. cancelling one pending order marked the whole
 # participant unpaid even when another order was already paid.
 class Participant < ApplicationRecord
-  belongs_to :user
+  # Optional because a federated attendee is a fed_actor, not a local user
+  # (design/FEDERATION_PLAN.md §2.7). Exactly one of the two is always set.
+  belongs_to :user, optional: true
+  belongs_to :fed_actor, optional: true
   belongs_to :event
   belongs_to :voucher, optional: true
   belongs_to :badge, optional: true
@@ -56,7 +59,13 @@ class Participant < ApplicationRecord
   class InvalidTransition < StandardError; end
 
   validates :status, presence: true, inclusion: { in: STATUSES }
-  validates :user_id, uniqueness: { scope: :event_id, message: "can only participate once per event" }
+  validates :user_id, uniqueness: { scope: :event_id, message: "can only participate once per event" },
+                      allow_nil: true
+  validates :fed_actor_id, uniqueness: { scope: :event_id, message: "can only participate once per event" },
+                           allow_nil: true
+  validate :exactly_one_identity
+
+  def remote? = fed_actor_id.present?
 
   scope :active, -> { where.not(status: "cancelled") }
   scope :seated, -> { where(status: SEATED) }
@@ -126,4 +135,14 @@ class Participant < ApplicationRecord
   end
 
   def ticket_items = TicketItem.where(participant_id: id)
+
+  private
+
+  def exactly_one_identity
+    if user_id.blank? && fed_actor_id.blank?
+      errors.add(:base, "participant needs a user or a fed_actor")
+    elsif user_id.present? && fed_actor_id.present?
+      errors.add(:base, "participant cannot be both local and remote")
+    end
+  end
 end

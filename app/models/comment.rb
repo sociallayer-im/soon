@@ -1,5 +1,7 @@
 class Comment < ApplicationRecord
-  belongs_to :user
+  # Optional: a federated comment is authored by a fed_actor, not a local user.
+  belongs_to :user, optional: true
+  belongs_to :fed_actor, optional: true
   belongs_to :badge, optional: true
   belongs_to :item, polymorphic: true, optional: true
   belongs_to :reply_parent, class_name: "Comment", optional: true

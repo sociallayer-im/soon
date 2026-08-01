@@ -18,6 +18,67 @@ module Federation
       enqueue(payload, sender: local_actor, inboxes: [fed_actor.delivery_inbox_url])
     end
 
+    # Accept(Join): object is the inlined Join, id path mirrors Mobilizon's
+    # "<endpoint>/accept/join/<participant_id>" so peers see a familiar shape.
+    def self.accept_join(event, fed_actor, join_activity, participant)
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => Urls.activity_url("accept/join/#{participant.id}"),
+        "type" => "Accept",
+        "actor" => Urls.actor_url(event.group),
+        "attributedTo" => Urls.actor_url(event.group),
+        "object" => join_activity,
+        "to" => [fed_actor.uri]
+      }
+      enqueue(payload, sender: event.group, inboxes: [fed_actor.delivery_inbox_url])
+    end
+
+    def self.reject_join(event, fed_actor, join_activity, reason: nil)
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => Urls.activity_url("reject/join/#{SecureRandom.hex(8)}"),
+        "type" => "Reject",
+        "actor" => Urls.actor_url(event.group),
+        "attributedTo" => Urls.actor_url(event.group),
+        "object" => join_activity,
+        "to" => [fed_actor.uri]
+      }
+      payload["summary"] = reason if reason
+      enqueue(payload, sender: event.group, inboxes: [fed_actor.delivery_inbox_url])
+    end
+
+    # Note in reply to an event — how comments federate to and from Mastodon
+    # (Mobilizon converter/comment.ex:98-127).
+    def self.publish_comment(comment, event)
+      return unless Federation.enabled?
+      inboxes = event_audience_inboxes(event)
+      return if inboxes.empty?
+      author = comment.user
+      actor_url = author&.name.present? ? Urls.actor_url(author) : Urls.actor_url(event.group)
+      note = {
+        "type" => "Note",
+        "id" => Urls.activity_url("comments/#{comment.id}"),
+        "attributedTo" => actor_url,
+        "actor" => actor_url,
+        "inReplyTo" => comment.reply_parent_id ? Urls.activity_url("comments/#{comment.reply_parent_id}") : Urls.event_url(event),
+        "content" => comment.content.to_s,
+        "mediaType" => "text/html",
+        "published" => comment.created_at.utc.iso8601,
+        "to" => [JsonLd::PUBLIC],
+        "cc" => [Urls.followers_url(event.group)]
+      }
+      activity = {
+        "@context" => JsonLd.context,
+        "id" => "#{note['id']}/activity",
+        "type" => "Create",
+        "actor" => actor_url,
+        "to" => note["to"],
+        "cc" => note["cc"],
+        "object" => note
+      }
+      enqueue(activity, sender: event.group, inboxes: inboxes)
+    end
+
     # verb: :create | :update | :delete. Serializes once, fans out to the
     # group's followers (plus the owner's, deduped by inbox).
     def self.publish_event(event, verb)
