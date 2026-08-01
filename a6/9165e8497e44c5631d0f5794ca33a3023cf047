@@ -1,0 +1,58 @@
+test/lib/federation/http_client_test.rb
+  s_e9ed806a3d225c::t_a3e452eed6ae6c 1-48
+test/models/federation_keyable_test.rb
+  s_e9ed806a3d225c::t_002947773f175f 1-51
+db/migrate/20260802000001_add_federation_keys_to_users_and_groups.rb
+  s_e9ed806a3d225c::t_2b157d8bd82770 1-12
+lib/federation/http_client.rb
+  s_e9ed806a3d225c::t_e7322bbd3bf582 1-105
+app/models/fed_inbound_activity.rb
+  s_e9ed806a3d225c::t_f99226abf0f135 1-6,10-21
+  s_e9ed806a3d225c::t_f0ad6f5b02e4e7 7-9
+app/models/concerns/federation_keyable.rb
+  s_e9ed806a3d225c::t_13aff7c195cd8c 1-31
+config/initializers/active_record_encryption.rb
+  s_e9ed806a3d225c::t_88514c5d6628a3 1-20
+lib/federation/http_signature.rb
+  s_e9ed806a3d225c::t_585b4c9096a7bf 1-171
+app/models/fed_delivery.rb
+  s_e9ed806a3d225c::t_7d7e09b77c6658 1-45
+app/models/group.rb
+  s_e9ed806a3d225c::t_37c4bbcf17c703 2-3
+app/models/fed_follow.rb
+  s_e9ed806a3d225c::t_202a6465ce614c 1-18
+lib/federation/urls.rb
+  s_e9ed806a3d225c::t_7585eb7c42fb1c 1-76
+app/models/user.rb
+  s_e9ed806a3d225c::t_62f27d46bd2805 2-3
+app/models/fed_actor.rb
+  s_e9ed806a3d225c::t_98943cac099b2a 1-22
+test/lib/federation/http_signature_test.rb
+  s_e9ed806a3d225c::t_5a1d24a1053a6e 1-237
+test/lib/federation/urls_test.rb
+  s_e9ed806a3d225c::t_06ffd234314c20 1-41
+test/models/fed_delivery_test.rb
+  s_e9ed806a3d225c::t_92c84de747e9e1 1-57
+test/models/fed_inbound_activity_test.rb
+  s_e9ed806a3d225c::t_21368d21960f75 1-10
+db/migrate/20260802000002_create_federation_tables.rb
+  s_e9ed806a3d225c::t_3a513982ac1627 1-70
+db/schema.rb
+  s_e9ed806a3d225c::t_f35ac4352ff488 13,213-274,463-464,727-728,823
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a69165e8497e44c5631d0f5794ca33a3023cf047",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
