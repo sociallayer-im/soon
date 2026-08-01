@@ -1,0 +1,27 @@
+design/FEDERATION_INTEROP_VERIFICATION.md
+  s_e9ed806a3d225c::t_d283caa2c46a26 186-188
+design/FEDERATION_PLAN.md
+  s_e9ed806a3d225c::t_acb730ea81b63c 641-642
+  s_e9ed806a3d225c::t_6166d0092061d9 508-510
+  s_e9ed806a3d225c::t_c1e2666a690a67 421-480
+  s_e9ed806a3d225c::t_2f9190396456fd 309-329
+design/FEDERATION_TEST_PLAN.md
+  s_e9ed806a3d225c::t_779df78279cb2b 315-316
+  s_e9ed806a3d225c::t_d617476d82ebc8 231-310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "e682ca50b6e2db5b7bf8a5efdea5bfc211aaaacf",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
