@@ -1,4 +1,6 @@
 class User < ApplicationRecord
+  include FederationKeyable
+
   has_many :memberships, dependent: :delete_all
   has_many :stripe_settings, dependent: :destroy
   has_many :groups, through: :memberships
