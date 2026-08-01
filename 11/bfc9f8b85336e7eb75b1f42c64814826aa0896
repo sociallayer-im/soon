@@ -1,0 +1,14 @@
+ginger.yml
+  h_b053bf74bef223 2,12,15,17-19,33,36,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "11bfc9f8b85336e7eb75b1f42c64814826aa0896",
+  "prompts": {},
+  "humans": {
+    "h_b053bf74bef223": {
+      "author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
