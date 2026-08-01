@@ -183,6 +183,9 @@ sola-b 用户关注 sola-a 群组、报名活动；两个 sola 节点各自的"�
 **S6 故障与恢复**
 `docker stop masto.lab` → sola 发布活动 → 队列积压 → 重启 Mastodon → 断言退避窗口内补投成功；对方返回 410（删除账号）→ 断言 follower 清理。
 
+**S7 治理：黑白名单与限流的对方行为验证**（矩阵级测试见 FEDERATION_TEST_PLAN §5/§6，此处验证只能在真实实例上验的部分）
+拉黑 masto.lab → 其用户的关注/报名/评论全链路被拒（403 且 sola 无密钥抓取出站），mobi.lab 全程不受影响 → 解除拉黑恢复；切换 `FEDERATION_MODE=allowlist` 只含 mobi.lab → masto.lab 全流程被拒、mobi.lab 正常；用脚本对 sola inbox 洪泛触发 429 → **验证真实 Mastodon/Mobilizon 收到 429 + Retry-After 后确实按语义退避重投而非丢弃**（发送端行为只有真实实例能证明）；全场景跑完后 stats 端点各域计数与双侧取证记录一致。
+
 ### 5.3 判定与记录
 
 每个场景一张结果表（步骤 / 预期 / 实际 / 截图或 curl 输出 / PASS-FAIL），
@@ -210,7 +213,7 @@ sola-b 用户关注 sola-a 群组、报名活动；两个 sola 节点各自的"�
 |---|---|
 | P0 | §3.1 签名负例矩阵（实现签名库的同一个 PR 内），夹具目录骨架 |
 | P1 | §2 L0 脚本全套（对 staging 跑通），CI 接入 |
-| P2 | §3.2 S2S harness + §3.3 夹具契约测试；实验室搭建（masto.lab + mobi.lab）；S1/S2/S6 |
+| P2 | §3.2 S2S harness + §3.3 夹具契约测试；实验室搭建（masto.lab + mobi.lab）；S1/S2/S6/S7 |
 | P3 | §4 领域语义回环 + S3/S4 |
 | P4 | sola-b.lab + S5；§6 staging 公网验证 → 生产灰度 |
 

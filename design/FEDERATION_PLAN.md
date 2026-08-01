@@ -306,6 +306,27 @@ create_table :fed_deliveries, id: :string do |t|
   t.string :last_error
 end
 
+# 域策略：黑白名单（§2.10）
+create_table :fed_domain_policies, id: :string do |t|
+  t.string :domain, null: false, index: {unique: true}
+  t.string :policy, null: false      # blocked | allowed
+  t.string :reason
+  t.string :created_by               # 操作者 user_id
+  t.datetime :created_at
+end
+
+# 域级滚动统计：可观测性 + 熔断依据（§2.9）
+create_table :fed_domain_stats, id: :string do |t|
+  t.string :domain, null: false, index: {unique: true}
+  t.integer :delivered_count, default: 0
+  t.integer :failed_count, default: 0
+  t.integer :inbound_count, default: 0
+  t.integer :inbound_rejected_count, default: 0   # 验签失败/被限流/被拒格式
+  t.datetime :last_success_at, :last_failure_at
+  t.date :unavailable_since          # 连续失败起始日（域级熔断，Mastodon 7 天语义）
+  t.string :last_error
+end
+
 # 远端事件镜像（Phase 4 才需要：本地用户浏览/报名远端活动）
 create_table :fed_events, id: :string do |t|
   t.string :uri, null: false, index: {unique: true}
@@ -397,6 +418,66 @@ app/jobs/federation/
    活动评论区显示联邦评论（带来源实例标记）。
 5. 用户设置页：无 handle 用户的"开启联邦身份需先设置用户名"引导。
 
+### 2.9 可观测性：消息投递与联邦网络监控
+
+约束下的务实选型：无 Redis、无现成 Prometheus 栈，所以观测三件套 =
+**结构化日志 + 域级统计表 + 管理端点**，全部零新增基础设施：
+
+1. **结构化日志**：所有联邦事件统一 tag（`[fed] direction=out type=Create
+   domain=mobi.example status=delivered attempts=2 ms=340`），出站每次尝试、
+   入站每次接收/拒绝各一行——`ginger logs | grep '\[fed\]'` 即可现场排查，
+   也是事后对账的原始凭证。
+2. **`fed_domain_stats` 滚动计数**（表结构见 §2.5）：投递成功/失败、入站
+   接收/拒绝按域累计，`unavailable_since` 记连续失败起始——连续 **7 天**
+   失败即域级熔断（对齐 Mastodon `DeliveryFailureTracker`），停止向该域投递，
+   **收到该域任一合法入站签名请求即复位**。
+3. **管理端点** `GET /api/v1/federation/stats`（平台 admin 权限）：
+   - 队列健康：pending/delivering/failed_permanent 计数、最老 pending 年龄、
+     近 1h 投递成功率;
+   - 域视图：按失败率/拒绝率排序的 top-N 域（发现故障邻居和攻击源都靠它）;
+   - 名单视图：当前 blocked/allowed 域及命中计数。
+4. **告警阈值**（先进日志告警，接现有排查路径）：队列深度 > 500、最老
+   pending > 1h、`:mailers` 队列延迟 > 5min（联邦挤占邮件的红线）、单域
+   入站拒绝率突增。
+
+### 2.10 反滥用：限流与黑白名单
+
+**威胁模型**：恶意/失控实例洪泛 inbox；单个远端用户刷 Join/评论 spam；
+伪造域批量制造 actor（子域爆破）；坏签名轰炸诱导出站密钥抓取放大。
+
+**限流（多层，先到先挡）**：
+
+| 层 | 限制 | 超限行为 |
+|---|---|---|
+| 域级 inbox | 每域每分钟活动数上限（默认 120/min，env 可调） | 429 + Retry-After（对方按语义退避，Mastodon/Mobilizon 都尊重） |
+| 远端 actor 级 | 单 actor 的 Join ≤ 10/min、评论 Note ≤ 6/min、Follow ≤ 10/min | 429；持续超限自动升级为 actor 屏蔽并进日志 |
+| actor 发现 | 单请求链新建远端 actor 上限、同一注册域子域数上限（对齐 Mastodon `SUBDOMAINS_RATELIMIT=10` / `DISCOVERIES_PER_REQUEST` 先例） | 拒绝新建，已有不受影响 |
+| 密钥抓取 | 验签失败域的负缓存 + 熔断（同一坏 keyId 短期只抓一次） | 401 不抓取——**入站洪泛绝不能被放大成出站流量** |
+
+实现：计数器放 Rails cache（进程内存足够——限流是防洪不是精确计费，
+单进程部署下无分布式一致性问题）。
+
+**黑白名单（`fed_domain_policies`）**：
+
+- **两种运行模式**（env `FEDERATION_MODE`）：
+  - `open`（默认）：开放联邦 + **黑名单**——`policy=blocked` 的域全链路拒绝；
+  - `allowlist`：封闭联邦——**仅** `policy=allowed` 的域可通，其余一律拒。
+    （多个 sola 节点私有组网、或 CN 节点合规场景用这个模式。）
+- **执法点（全链路一致，测试逐点验证）**：
+  1. inbox POST：blocked 域 → 403，**在密钥抓取之前判定**（keyId 域名先查表，
+     不为攻击者做任何工作）;
+  2. 出站：受众展开时过滤 blocked 域的 inbox（不入队，而非入队后失败）;
+  3. actor 抓取/webfinger 解析：blocked 域直接拒绝;
+  4. 已有数据：拉黑时既有 follower/participant 标记停用（保留数据可恢复，
+     学 Mastodon suspend 语义而非硬删）。
+- **actor 级屏蔽**：`fed_actors.blocked_at` 列，粒度补充（拉黑一个 spam 用户
+  不必拉黑整个实例）。
+- 管理入口：`/api/v1/admin/federation/policies` CRUD（平台 admin），
+  变更即时生效（查表判定，无需重启）；每次命中计入 `fed_domain_stats`。
+
+一期裁剪：不做 Mastodon 的 `silence`（收下但不公开展示）中间档——只有
+block/allow 两态，语义简单、测试面小；需要再加。
+
 ---
 
 ## 3. 实施计划
@@ -424,6 +505,9 @@ app/jobs/federation/
 - `fed_deliveries` + delivery_job/sweeper；Event 的 Create/Update/Delete 出站
   （挂在 events_controller 的 publish/approve/update/cancel 钩子上）。
 - outbox/followers 返回真实数据（OrderedCollection 分页）。
+- 观测与防护基线同批上线（§2.9/2.10）：`[fed]` 结构化日志、`fed_domain_stats`、
+  stats 管理端点、inbox 域级限流、黑名单执法点 1/2/3——**inbox 对公网开放的
+  同一个部署里必须带着限流和黑名单**，不留裸奔窗口。
 - **里程碑：Mobilizon 用户关注 sola 群组后，群组发布的活动在 Mobilizon 侧
   以结构化活动（时间/地点/joinMode 完整）出现并随更新/取消同步；同一活动在
   Mastodon 时间线以标题+summary+链接降级显示。**
@@ -554,7 +638,8 @@ lab/
 | RFC 9421 签名 | 只收不发（先 cavage） | Mastodon 默认发 cavage，9421 是 fallback |
 | LD Signatures（转发场景） | 不做 | 只影响中继转发，直投不需要 |
 | 无 handle 用户 | 不可联邦，UI 引导设置 | users.name 可空是既有事实 |
-| 域级熔断 | P2 用 permanent 止血，P5 完整实现 | 资源预算优先 |
+| 域级熔断 | P2 随 `fed_domain_stats` 实现（7 天语义） | 观测表顺带承载，成本已摊薄 |
+| `silence`（收下不展示）中间档 | 不做，只有 block/allow 两态 | 语义简单、测试面小；需要再加 |
 | CN 节点联邦 | 单独评估 | 跨境公网可达性/合规问题独立于本方案 |
 
 最大的技术风险集中在两处：**HTTP 签名的逐字节正确性**（对策：负例矩阵单测 +
