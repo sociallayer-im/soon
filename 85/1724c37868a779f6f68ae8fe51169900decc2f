@@ -1,0 +1,24 @@
+test/integration/federation_discovery_test.rb
+  s_e9ed806a3d225c::t_023ae124baf477 84-108
+app/controllers/federation/well_known_controller.rb
+  s_e9ed806a3d225c::t_01449a9928527d 96
+  s_e9ed806a3d225c::t_0ea310dace09c1 16
+  s_e9ed806a3d225c::t_36557918dbbbaa 3-5
+  s_e9ed806a3d225c::t_94b64842591fff 70-85,89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "851724c37868a779f6f68ae8fe51169900decc2f",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
