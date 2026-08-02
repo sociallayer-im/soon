@@ -810,3 +810,84 @@ Traefik 为每个绑定域加路由与证书。约束：一个域只能绑一个
 分层使用：schema/协议/文档层统一用 Instance（未来若建表即 `fed_instances`，
 `FedDomainStat` + `FedDomainPolicy` 是其雏形）；产品/品牌层如需叙事名，另用
 "母港 Home Port"，不进 schema。
+
+### 9.6 群组跨 Instance 迁移（Move 语义，规划未实现）
+
+迁移不是改地址，而是"**新身份 + 官方遗嘱**"（Mastodon 账号迁移的同一模型）。
+Actor id 是永久合同，`https://sola.day/groups/<tsid>` 永远不会变成
+lunar.day 上的 URL。实际动作：
+
+1. 在目标 instance 建**新 actor**，其文档声明 `alsoKnownAs: [旧 id]`（认领）；
+2. 旧 actor 文档加 `movedTo: 新 id`（指认继承者），并向全体 follower 广播
+   `Move` 活动；
+3. 各 follower 的 instance **双向验证**（movedTo 与 alsoKnownAs 互指）后，
+   自动取关旧、关注新。两个声明缺一不可——这是防劫持设计，光在新家自称
+   不行，必须旧身份亲口指认。
+
+**因此旧 instance 负有永久存根义务**：旧 actor URL 必须一直应答（movedTo
+文档或 410）。这是 Instance 作为托管者的核心资源属性。
+
+各类链接在迁移中的命运（daospace = 无自有域名，zusocial = 绑定 zusocial.org）：
+
+| 链接 | daospace | zusocial |
+|---|---|---|
+| acct 地址 | **变**（`@daospace@sola.day`→`@daospace@lunar.day`），靠 Move 通知 | **不变**（`@zusocial@zusocial.org`），只需改自有域的 WebFinger JRD 指向 |
+| actor id | 变（新 id + movedTo 链） | 同样变（自有域名救不了 id） |
+| 关注者 | Move 自动转移（对端支持的话） | 同左 |
+| 历史事件/评论 | **不迁移**，旧 id 继续由旧 instance 应答 | 同左 |
+| 密钥 | 不带走，新 actor 新密钥 | 同左 |
+
+自有域名的价值在此兑现：它把"面向人类的身份"（acct）从 instance 手里赎回，
+迁移对外无感——正是 §9.4 选 WebFinger 委托的深层理由。诚实的代价清单：
+历史内容不搬家（协议现实，Mastodon 迁移同样丢全部嘟文）；Mobilizon 基本
+不处理 Move，其上的关注者需人肉重关。
+
+**旧内容的 AP 归档**：目标 instance 可以爬旧 instance 的 outbox
+（分页 OrderedCollection → 逐个解引用事件对象）做镜像，这与 Mastodon 缓存
+远端内容同机制。但四个硬边界：副本 id 仍是旧域的（镜像救内容救不了链接）；
+无 LD Signatures 时副本不可向第三方证真；只有公开内容可爬（outbox 只列
+public+published，评论无 replies 集合，爬不回来）；要过对方的抓取预算/限速。
+完整产权交割（含私有内容）走带外导出，不走 AP。
+
+### 9.7 Instance 关站预案（sola.day 死亡韧性）
+
+"让关站不发生"是组织问题，"让关站不致命"是架构问题。一个 id 依赖三层：
+域名所有权、TLS、应答进程。关站只杀第三层，而第三层可以退化到近零成本：
+
+**存根义务静态化**。所有 AP 端点都是数据库的确定性纯函数，关站流程 =
+全量导出 AP JSON → 冻结成静态文件树 → 对象存储/CDN 托管 → 域名指过去。
+之后永久应答的只是静态 JSON（actor 带 movedTo、删除对象是 Tombstone、
+历史事件原文可解引用），年成本 = 域名续费 + 近零静态托管。承诺写法：
+**Instance 的存根义务以静态快照形式履行，不依赖应用存活。**
+
+**有序关站三阶段**（对照 Mastodon `tootctl self-destruct` 只广播 Delete 的
+焦土做法）：
+
+1. 公告期：提前数月通知，Move 全量开放，群组逐个迁出（自有域名者 acct
+   无损，无者靠 Move 转移关注者）；
+2. 冻结期：停写，生成静态快照，每个 actor 盖 movedTo；
+3. 墓碑期：静态托管无限期维持。
+
+**不可约依赖只剩域名所有权**：静态化剔除了服务器/代码/运维，剩下域名的
+续费与控制权——放在有存续安排的主体名下（基金会/多签托管）、长周期续费、
+转移锁。这是全方案唯一必须持续付费的东西。
+
+**连锁结论**：
+
+- **Move 收发从"产品能力缺口"升格为"生命周期必备"**——关站伤害的大小取决
+  于 Move 是否早已实现并被日常使用，它是逃生通道不是锦上添花；
+- **FEP-8b32（对象完整性证明）重新评估**：§8 对 LD Signatures 的裁剪理由
+  从"不需要"改为"归档场景需要"——对象自带 Ed25519 签名后，镜像副本在
+  origin 死后仍可向第三方证真。列入 Move 之后的第二梯队。（彻底域名无关
+  身份是 FEP-ef61 nomadic identity 路线，生态未熟，记录不跟进。）
+
+优先级：
+
+| 层 | 措施 | 时机 |
+|---|---|---|
+| 承诺 | 存根静态化 + 域名托管安排，写进公开承诺 | 文档即刻 |
+| 协议 | Move 收发（逃生通道） | 上线后第一梯队 |
+| 协议 | FEP-8b32 完整性证明（镜像可证真） | 第二梯队 |
+| 流程 | 有序关站三阶段预案 | 文档即刻，希望永不执行 |
+
+一个 instance 最大的信誉资产，是它把自己的死亡预案写得清清楚楚。
