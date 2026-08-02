@@ -200,4 +200,25 @@ class FederationParticipationTest < ActionDispatch::IntegrationTest
     end
     assert_response :accepted
   end
+  test "purging a remote actor takes its content with it, leaving no orphans" do
+    # comments and participants carry the actor as the author's identity, so a
+    # row that lost it is not a valid record — it rendered with no author at
+    # all, neither local nor remote, until the foreign keys went in.
+    event = public_event
+    send_join(event)
+    note = {
+      "@context" => Federation::JsonLd::AS,
+      "id" => "#{@remote.uri}/statuses/orphan/activity", "type" => "Create", "actor" => @remote.uri,
+      "object" => {"type" => "Note", "id" => "#{@remote.uri}/statuses/orphan",
+                   "inReplyTo" => Federation::Urls.event_url(event), "content" => "bye"}
+    }
+    perform_enqueued_jobs { post_signed_activity(@remote, @key, note) }
+
+    assert_equal 1, Participant.where(fed_actor_id: @remote.id).count
+    assert_equal 1, Comment.where(fed_actor_id: @remote.id).count
+
+    @remote.destroy!
+    assert_equal 0, Participant.where(fed_actor_id: @remote.id).count
+    assert_equal 0, Comment.where(fed_actor_id: @remote.id).count
+  end
 end
