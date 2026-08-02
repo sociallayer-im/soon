@@ -310,3 +310,55 @@ docker）作为合并前手动门禁 + 每周定时全量，报告归档。
 约束，已缓存旧身份的实例会把新身份当作重复用户名**拒绝插入**。也就是说，
 actor id 一旦被对端缓存就实质无法更换——必须清空对端缓存才能换。这实证了为什么
 这项改造必须在上生产之前完成；上线之后再改，等于要求全网每个对端手工清缓存。
+
+## 10. 第二轮加固后的实验室复测（2026-08-03）
+
+第二轮 review 整改（DEVLOG §11）后重新部署 sg.sola.day 实验室，重点复测
+**改动是否破坏既有互通**，以及**新增的撤回/屏障/封禁路径是否真的到达对端**。
+
+拓扑不变：sola-A `sola.seven.fan`（经 Next 代理）、sola-B `solab.seven.fan`
+（Traefik 直连）、Mastodon `mas.seven.fan`、Mobilizon `mob.seven.fan`。
+
+### 10.1 回归：加固没有破坏既有能力
+
+| 场景 | 结果 |
+|---|---|
+| 强化后的 actor schema 校验 vs 真实对端文档 | Mobilizon `joiner@mob.seven.fan`、Mastodon `tester@mas.seven.fan` 均通过（publicKey.id 同源、owner 一致、PEM 可解析） |
+| Follow → Accept 往返 | Mastodon 关注 sola group，两侧状态一致 |
+| Event Create | Mastodon 渲染 `<h2>标题</h2>` + 时间/时区/地点 + 回链 |
+| Event Update | 内容更新，Mastodon 写入 `edited_at`；sola-B 镜像同步 |
+| Mastodon → sola 评论 | 落为 event comment，带远端 actor；ledger `processed` |
+| sola → Mastodon 评论 | 进入线程，`in_reply_to` 正确 |
+
+**签名身份快照（P1-1）在真实投递中生效**：评论出站的三条 delivery 都带
+`signing_key_id=…/users/<tsid>#main-key`，即发布者本人的 key，而非投递时再解析。
+
+### 10.2 新增路径的实测
+
+| 能力 | 实测结果 |
+|---|---|
+| 评论撤回 → Delete(Note) | Mastodon 侧 status 行被真实删除，并写入 `tombstones` |
+| 事件 public→private → Delete(Tombstone) | Mastodon status 归零、Mobilizon 记录消失、sola-B 镜像转 CANCELLED 且退出 `visible` |
+| 乱序屏障 | Delete 之后投递「更旧」的 Update，标题与状态均未被复活 |
+| 封禁覆盖已镜像内容 | actor 封禁 3→2，域封禁 3→2，解除后恢复 3 |
+| 出站策略闸门 | 域被封时 `OutboxService.follow` 返回 nil，不产生任何 delivery |
+
+队列健康：54 delivered、0 卡在 `delivering`；ledger 46 条全部 `processed`；
+三个域的 stat 无失败计数。
+
+### 10.3 一个非代码发现：关注关系会单向漂移
+
+首次发布事件时 Mastodon 回 `Rejected Create activity`。根因**不是**本轮改动，
+而是更早用 `destroy_all` 清理 Mastodon 缓存（DEVLOG §4 记为操作失误）连带删掉了
+关注关系：soon 仍认为对方在关注，Mastodon 因 `related_to_local_activity?`
+找不到本地关注者而丢弃。重建关注后全部恢复。
+
+这暴露一个真实的运维缺口，且不限于人为失误——对端实例重装、账号删除、数据库
+回滚都会造成同样的单向漂移：
+
+> **我们没有关注关系的对账机制。** 本地 `FedFollow` 是我们单方面的记录，对端
+> 的 follower 列表才是投递是否有意义的真相。二者漂移时表现为「投递成功但内容
+> 不出现」——是最难从日志发现的一类故障，因为每一层都报成功。
+
+上公网前应补：定期抓取对端 followers collection 与本地 inbound follow 对账，
+差异纳入 `[fed-alert]`；与 P2-1 的账本/投递留存策略一并设计。
