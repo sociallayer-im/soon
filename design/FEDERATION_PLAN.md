@@ -658,10 +658,11 @@ Rails 落地骨架 → nebula/nebula/lib/activity_pub/urls.rb、test_federation_
 
 ---
 
-## 8. 实施状态（2026-08-02）
+## 8. 实施状态（2026-08-03）
 
-`federation` 分支，914 例测试全绿，三方实验室（sola-A / sola-B / Mobilizon 5.2.4 /
-Mastodon 4.6.4）全部验收项通过。
+`federation` 分支，951 例测试全绿，三方实验室（sola-A / sola-B / Mobilizon 5.2.4 /
+Mastodon 4.6.4）全部验收项通过。两轮外部 review 的整改见 DEVLOG §10/§11，
+加固后的复测见 INTEROP §10。
 
 | 分期 | 状态 |
 |---|---|
@@ -681,6 +682,24 @@ stats 与策略管理端点 ✓、**告警阈值 ✓**（`Federation::HealthChec
 总数而非页大小）。
 
 ### 仍未实现
+
+**上公网前应处理**（两轮 review 中确认成立、但需独立设计而非补丁的几项）：
+
+- **出站限速与队列隔离**：GoodJob 单后台线程、`*` 队列，联邦扇出与邮件/验证码
+  共享同一个 worker。当前只有每批 30 条的粗粒度节流，没有 token bucket、
+  没有按域并发上限，也没有单次扇出的上限与分页。大群组的一次发布可能饿死业务
+  作业。需要队列分离 + 优先级 + 父 outbox 分批扇出一起设计。
+- **HTTP 响应体流式硬上限**：现在是读完再判大小，超大响应在检查前已进内存。
+  应下沉到 httpx adapter 层，并给 actor/webfinger/inbox 分别配额。
+- **DNS rebinding**：SSRF 检查在请求前独立解析一次，与建连时的解析存在竞态。
+  需要连接层对最终 socket IP 做 pinning/复检。
+- **关注关系对账**：本地 `FedFollow` 与对端 followers 集合会单向漂移（对端重装、
+  账号删除、数据库回滚都会造成），表现为"投递成功但内容不出现"——每一层都报
+  成功，最难发现。见 INTEROP §10.3。
+- **账本与投递的留存策略**：`fed_inbound_activities` / `fed_deliveries` 只增不减，
+  幂等查询会随时间退化。需要按状态与年龄分级归档。
+
+**产品能力缺口**：
 
 - **群组成员联邦**（Member/Invite/Remove 与七个集合的爬取）。Mobilizon 最复杂的
   子系统，当前群组只能被关注、不能跨实例加入成员。
