@@ -24,12 +24,29 @@ module Federation
 
     # Actor ids live at root-level paths on the canonical host; the frontend
     # proxies them to this app (design/FEDERATION_PLAN.md §2.2).
+    #
+    # Keyed on the immutable id, NOT the handle. Handles are editable, and an
+    # actor id is immutable in practice — the moment a peer caches it, changing
+    # it orphans every follower, participation and delivery. Mastodon uses
+    # /ap/users/<numeric id> for exactly this reason and lets webfinger map the
+    # handle onto it; so do we. The handle still appears as preferredUsername
+    # and in the human URL, both of which are allowed to change.
     def actor_url(actor)
       case actor
-      when User then "#{base_url}/users/#{actor.name}"
-      when Group then "#{base_url}/groups/#{actor.name}"
+      when User then "#{base_url}/users/#{actor.id}"
+      when Group then "#{base_url}/groups/#{actor.id}"
       else raise ArgumentError, "not a federated actor: #{actor.class}"
       end
+    end
+
+    # Resolves either form: the canonical id, or a handle (peers that cached a
+    # handle URL before, and humans typing one, both still land).
+    def find_user(key)
+      User.find_by(id: key) || User.find_by(name: key)
+    end
+
+    def find_group(key)
+      Group.find_by(id: key) || Group.find_by(name: key)
     end
 
     def key_id(actor)

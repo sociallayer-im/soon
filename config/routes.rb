@@ -34,6 +34,7 @@ Rails.application.routes.draw do
     get "/.well-known/nodeinfo", to: "well_known#nodeinfo_discovery"
     get "/nodeinfo/2.0", to: "well_known#nodeinfo"
     get "/actor", to: "actors#instance"
+    get "/actor/outbox", to: "actors#instance_outbox"
 
     get "/users/:handle", to: "actors#user", constraints: {handle: user_handle}
     get "/users/:user_handle/outbox", to: "collections#outbox", constraints: {user_handle: user_handle}

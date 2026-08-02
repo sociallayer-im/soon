@@ -94,8 +94,8 @@ module Federation
         path = URI.parse(resource).path
         case path
         when "/actor" then :instance
-        when %r{\A/users/(?<name>[a-z0-9_]+)\z} then User.find_by(name: Regexp.last_match[:name])
-        when %r{\A/groups/(?<name>[a-z0-9_-]+)\z} then Group.find_by(name: Regexp.last_match[:name])
+        when %r{\A/users/(?<key>[a-z0-9_]+)\z} then Urls.find_user(Regexp.last_match[:key])
+        when %r{\A/groups/(?<key>[a-z0-9_-]+)\z} then Urls.find_group(Regexp.last_match[:key])
         end
       end
     end

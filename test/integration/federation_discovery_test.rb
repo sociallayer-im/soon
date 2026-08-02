@@ -38,7 +38,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal "acct:#{@user.name}@app.sola.day", body["subject"]
     self_link = body["links"].find { |l| l["rel"] == "self" }
     assert_equal "application/activity+json", self_link["type"]
-    assert_equal "https://app.sola.day/users/#{@user.name}", self_link["href"]
+    assert_equal "https://app.sola.day/users/#{@user.id}", self_link["href"]
     assert_includes body["aliases"], self_link["href"]
     subscribe = body["links"].find { |l| l["rel"] == "http://ostatus.org/schema/1.0/subscribe" }
     assert_includes subscribe["template"], "{uri}"
@@ -48,12 +48,12 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     get "/.well-known/webfinger", params: {resource: "acct:#{@group.name}@app.sola.day:443"}
     assert_response :success
     body = JSON.parse(response.body)
-    assert_equal "https://app.sola.day/groups/#{@group.name}",
+    assert_equal "https://app.sola.day/groups/#{@group.id}",
                  body["links"].find { |l| l["rel"] == "self" }["href"]
   end
 
   test "webfinger accepts URL-form resources" do
-    get "/.well-known/webfinger", params: {resource: "https://app.sola.day/users/#{@user.name}"}
+    get "/.well-known/webfinger", params: {resource: "https://app.sola.day/users/#{@user.id}"}
     assert_response :success
   end
 
@@ -113,7 +113,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "application/activity+json", response.media_type
     doc = JSON.parse(response.body)
-    assert_equal "https://app.sola.day/users/#{@user.name}", doc["id"]
+    assert_equal "https://app.sola.day/users/#{@user.id}", doc["id"]
     assert_equal "Person", doc["type"]
     assert_equal @user.name, doc["preferredUsername"]
     assert doc["inbox"].present?
@@ -164,7 +164,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     doc = JSON.parse(response.body)
     assert_equal "OrderedCollection", doc["type"]
     assert_equal 0, doc["totalItems"]
-    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=0", doc["first"]
+    assert_equal "https://app.sola.day/groups/#{@group.id}/followers?page=0", doc["first"]
     refute doc.key?("orderedItems"), "the collection head carries no items"
 
     3.times { create_event(group: @group, owner: @user, visibility: "public", status: "published") }
@@ -176,7 +176,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal "OrderedCollectionPage", page["type"]
     assert_equal 3, page["totalItems"]
     assert_equal 3, page["orderedItems"].size
-    assert_equal "https://app.sola.day/groups/#{@group.name}/outbox", page["partOf"]
+    assert_equal "https://app.sola.day/groups/#{@group.id}/outbox", page["partOf"]
     refute page.key?("next"), "a single page must not advertise another"
     refute page.key?("prev")
   end
@@ -203,13 +203,13 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_response :success
     doc = JSON.parse(response.body)
     assert_empty doc["orderedItems"]
-    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=4", doc["prev"]
+    assert_equal "https://app.sola.day/groups/#{@group.id}/followers?page=4", doc["prev"]
   end
 
   test "a negative page number does not escape the first page" do
     get "/groups/#{@group.name}/followers", params: {page: -3}, headers: AP_ACCEPT
     assert_response :success
-    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=0",
+    assert_equal "https://app.sola.day/groups/#{@group.id}/followers?page=0",
                  JSON.parse(response.body)["id"]
   end
 
@@ -225,7 +225,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal "Event", doc["type"]
     assert_equal "https://app.sola.day/events/#{event.id}", doc["id"]
     assert_equal "https://app.sola.day/event/detail/#{event.id}", doc["url"]
-    assert_equal "https://app.sola.day/groups/#{@group.name}", doc["attributedTo"]
+    assert_equal "https://app.sola.day/groups/#{@group.id}", doc["attributedTo"]
     assert_equal "CONFIRMED", doc["status"]
     assert_equal "CONFIRMED", doc["ical:status"]
     assert_equal "free", doc["joinMode"]
@@ -233,7 +233,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal 0, doc["participantCount"]
     assert doc["endTime"].present?, "endTime must never be nil (Mobilizon heuristic)"
     assert_equal ["https://www.w3.org/ns/activitystreams#Public"], doc["to"]
-    assert_equal ["https://app.sola.day/groups/#{@group.name}/followers"], doc["cc"]
+    assert_equal ["https://app.sola.day/groups/#{@group.id}/followers"], doc["cc"]
     assert_equal [{"type" => "Hashtag", "name" => "#web"}], doc["tag"]
     refute_includes doc["content"], "<script>", "content must be sanitized"
     assert_includes doc["summary"], "GMT+08:00"
@@ -285,7 +285,7 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     doc = JSON.parse(response.body)
     assert_equal "Note", doc["type"]
     assert_equal "https://app.sola.day/comments/#{comment.id}", doc["id"]
-    assert_equal "https://app.sola.day/users/#{@user.name}", doc["attributedTo"]
+    assert_equal "https://app.sola.day/users/#{@user.id}", doc["attributedTo"]
     assert_equal doc["attributedTo"], doc["actor"], "signer and attribution must agree"
     assert_equal "https://app.sola.day/events/#{event.id}", doc["inReplyTo"]
     refute_includes doc["content"], "<script>"
@@ -297,6 +297,45 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
                               content: "secret", content_type: "text")
     get "/comments/#{comment.id}", headers: AP_ACCEPT
     assert_response :not_found
+  end
+
+  # --- identity stability (the reason actor ids are not handles) -------------
+
+  test "renaming an actor does not move its federated identity" do
+    get "/.well-known/webfinger", params: {resource: "acct:#{@group.name}@app.sola.day"}
+    href_before = JSON.parse(response.body)["links"].find { |l| l["rel"] == "self" }["href"]
+
+    @group.update!(name: "renamed#{SecureRandom.hex(3)}")
+
+    # the old id still resolves — peers hold it, and it must not 404
+    get URI.parse(href_before).path, headers: AP_ACCEPT
+    assert_response :success
+    assert_equal href_before, JSON.parse(response.body)["id"]
+
+    # and webfinger on the NEW handle loops back to that same id, which is what
+    # Mastodon re-checks after a username change
+    get "/.well-known/webfinger", params: {resource: "acct:#{@group.name}@app.sola.day"}
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal href_before, body["links"].find { |l| l["rel"] == "self" }["href"]
+    assert_equal "acct:#{@group.name}@app.sola.day", body["subject"]
+  end
+
+  test "an actor still resolves by handle, so cached handle URLs keep working" do
+    get "/groups/#{@group.name}", headers: AP_ACCEPT
+    assert_response :success
+    # but the canonical id it reports is the stable one
+    assert_equal "https://app.sola.day/groups/#{@group.id}", JSON.parse(response.body)["id"]
+  end
+
+  test "the instance actor's advertised outbox resolves" do
+    get "/actor", headers: AP_ACCEPT
+    outbox = JSON.parse(response.body)["outbox"]
+    get URI.parse(outbox).path, headers: AP_ACCEPT
+    assert_response :success
+    doc = JSON.parse(response.body)
+    assert_equal "OrderedCollection", doc["type"]
+    assert_equal outbox, doc["id"]
   end
 
   # --- nodeinfo (NI matrix) --------------------------------------------------

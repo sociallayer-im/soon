@@ -101,6 +101,44 @@ module Federation
       part
     end
 
+    # A group being deleted has to be announced, or every follower keeps a
+    # zombie actor and zombie events forever — there is no other signal, since
+    # the actor URL simply starts 404ing. Sent before the row goes away, while
+    # the followers and the signing key still exist.
+    def self.delete_actor(actor)
+      return unless Federation.enabled?
+      inboxes = FedFollow.accepted.inbound.where(local: actor)
+                         .includes(:fed_actor).filter_map { |f|
+        next unless FedDomainPolicy.domain_allowed?(f.fed_actor.domain)
+        f.fed_actor.delivery_inbox_url
+      }.uniq
+      return if inboxes.empty?
+
+      url = Urls.actor_url(actor)
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => "#{url}#delete",
+        "type" => "Delete",
+        "actor" => url,
+        "to" => [JsonLd::PUBLIC],
+        "object" => url
+      }
+      enqueue(payload, sender: actor, inboxes: inboxes)
+      Logging.log(:out, "Delete", status: "actor_queued", inboxes: inboxes.size)
+    end
+
+    # Retire a single event. The normal path is a status change (an Update
+    # carrying CANCELLED), which keeps the record; this is for an actual
+    # destroy, where the object is about to stop existing.
+    def self.delete_event(event)
+      return unless Federation.enabled?
+      return unless event.visibility == "public"
+      inboxes = event_audience_inboxes(event)
+      return if inboxes.empty?
+      enqueue(tombstone_activity(event), sender: event.group, inboxes: inboxes)
+      Logging.log(:out, "Delete", status: "event_queued", event: event.id)
+    end
+
     # Accept(Join): object is the inlined Join, id path mirrors Mobilizon's
     # "<endpoint>/accept/join/<participant_id>" so peers see a familiar shape.
     def self.accept_join(event, fed_actor, join_activity, participant)

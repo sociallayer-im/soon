@@ -252,4 +252,51 @@ class FederationOutboundTest < ActionDispatch::IntegrationTest
     get "/api/v1/federation/events"
     assert_response :not_found
   end
+  # --- retiring things -------------------------------------------------------
+
+  test "deleting a group tells its followers, before the row disappears" do
+    group = create_group(owner: @user)
+    FedFollow.create!(local: group, fed_actor: @remote, direction: "inbound",
+                      state: "accepted", uri: "#{@remote.uri}#f/1")
+    event = create_event(group: group, owner: @user, visibility: "public", status: "published")
+
+    assert_difference -> { FedDelivery.count } => 2 do
+      delete "/api/v1/groups/#{group.id}", headers: auth_headers(@user)
+    end
+    assert_response :no_content
+
+    types = FedDelivery.order(:created_at).last(2).map { |d| d.payload["type"] }
+    assert_equal %w[Delete Delete], types
+    payloads = FedDelivery.order(:created_at).last(2).map(&:payload)
+    assert payloads.any? { |p| p.dig("object", "type") == "Tombstone" },
+           "the event is retired with a Tombstone"
+    assert payloads.any? { |p| p["object"].is_a?(String) && p["object"].include?("/groups/") },
+           "the actor itself is deleted too"
+    refute Group.exists?(group.id)
+  end
+
+  test "a remote actor deleting itself purges what we mirrored for it" do
+    obj = remote_event_json
+    deliver(create_activity(obj))
+    assert_equal 1, FedEvent.where(fed_actor_id: @remote.id).count
+
+    del = {"@context" => Federation::JsonLd::AS, "id" => "#{@remote.uri}#delete",
+           "type" => "Delete", "actor" => @remote.uri, "object" => @remote.uri}
+    deliver(del)
+    assert_response :accepted
+    refute FedActor.exists?(@remote.id), "the actor is gone"
+    assert_equal 0, FedEvent.where(uri: obj["id"]).count, "and so is everything it published"
+  end
+
+  test "one actor cannot delete another" do
+    obj = remote_event_json
+    deliver(create_activity(obj))
+    other, other_key = create_fed_actor
+
+    del = {"@context" => Federation::JsonLd::AS, "id" => "#{other.uri}#delete",
+           "type" => "Delete", "actor" => other.uri, "object" => @remote.uri}
+    perform_enqueued_jobs { post_signed_activity(other, other_key, del) }
+    assert FedActor.exists?(@remote.id), "only an actor may delete itself"
+    assert_equal 1, FedEvent.where(uri: obj["id"]).count
+  end
 end

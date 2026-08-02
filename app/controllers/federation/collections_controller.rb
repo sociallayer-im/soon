@@ -91,9 +91,9 @@ module Federation
 
     def find_actor
       if params[:user_handle]
-        User.find_by(name: params[:user_handle])
+        Urls.find_user(params[:user_handle])
       else
-        Group.find_by(name: params[:group_handle])
+        Urls.find_group(params[:group_handle])
       end
     end
   end

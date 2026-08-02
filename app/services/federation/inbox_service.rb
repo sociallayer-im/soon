@@ -95,6 +95,16 @@ module Federation
     def self.handle_delete(fed_actor, activity)
       uri = object_uri(activity["object"])
       return :ignored if uri.blank?
+
+      # An actor deleting itself. Only it may do so, and everything we hold on
+      # its behalf goes — otherwise a deleted group lingers here as a zombie
+      # actor whose events can never be updated again.
+      if uri == fed_actor.uri
+        fed_actor.destroy!
+        Logging.log(:in, "Delete", domain: fed_actor.domain, status: "actor_purged")
+        return :processed
+      end
+
       event = FedEvent.find_by(uri: uri)
       if event.nil? || event.fed_actor_id != fed_actor.id
         Logging.log(:in, "Delete", domain: fed_actor.domain, status: "not_owned")
@@ -190,8 +200,8 @@ module Federation
     def self.resolve_local_actor(uri)
       return nil unless uri.is_a?(String) && Urls.local?(uri)
       case URI.parse(uri).path
-      when %r{\A/users/(?<name>[a-z0-9_]+)\z} then User.find_by(name: Regexp.last_match[:name])
-      when %r{\A/groups/(?<name>[a-z0-9_-]+)\z} then Group.find_by(name: Regexp.last_match[:name])
+      when %r{\A/users/(?<key>[a-z0-9_]+)\z} then Urls.find_user(Regexp.last_match[:key])
+      when %r{\A/groups/(?<key>[a-z0-9_-]+)\z} then Urls.find_group(Regexp.last_match[:key])
       end
     rescue URI::Error
       nil

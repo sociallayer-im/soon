@@ -12,11 +12,16 @@ class Federation::UrlsTest < ActiveSupport::TestCase
     ENV.delete("FEDERATION_HOST")
   end
 
-  test "actor urls by type, key id fragment stable" do
+  test "actor urls are keyed on the immutable id, not the editable handle" do
     user = create_user
     group = create_group
-    assert_equal "https://app.sola.day/users/#{user.name}", URLS.actor_url(user)
-    assert_equal "https://app.sola.day/groups/#{group.name}", URLS.actor_url(group)
+    assert_equal "https://app.sola.day/users/#{user.id}", URLS.actor_url(user)
+    assert_equal "https://app.sola.day/groups/#{group.id}", URLS.actor_url(group)
+
+    # the whole point: renaming must not move the actor
+    before = URLS.actor_url(user)
+    user.update!(name: "renamed_#{SecureRandom.hex(3)}")
+    assert_equal before, URLS.actor_url(user.reload)
     assert_equal "#{URLS.actor_url(user)}#main-key", URLS.key_id(user)
     assert_equal "#{URLS.actor_url(user)}/inbox", URLS.inbox_url(user)
     assert_equal "https://app.sola.day/inbox", URLS.shared_inbox_url
@@ -37,5 +42,14 @@ class Federation::UrlsTest < ActiveSupport::TestCase
     assert URLS.local?("https://app.sola.day/users/foo")
     refute URLS.local?("https://evil.example/users/foo")
     refute URLS.local?("not a uri")
+  end
+  test "find_user and find_group accept the id or the handle" do
+    user = create_user
+    group = create_group
+    assert_equal user, URLS.find_user(user.id)
+    assert_equal user, URLS.find_user(user.name)
+    assert_equal group, URLS.find_group(group.id)
+    assert_equal group, URLS.find_group(group.name)
+    assert_nil URLS.find_user("nobody_at_all")
   end
 end
