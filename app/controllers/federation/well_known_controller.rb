@@ -1,6 +1,8 @@
 module Federation
   class WellKnownController < BaseController
-    ACCT_RE = /\Aacct:(?<name>[a-z0-9_-]+)@(?<host>[a-z0-9_.\-:]+)\z/i
+    # Dots are allowed in the name because the instance actor's username is the
+    # host itself, mirroring how Mastodon addresses instance actors.
+    ACCT_RE = /\Aacct:(?<name>[a-z0-9_.\-]+)@(?<host>[a-z0-9_.\-:]+)\z/i
 
     # GET /.well-known/webfinger?resource=acct:name@host
     # Contract details are Mastodon's (INTEROP §2.1): exact self-link type
@@ -11,6 +13,7 @@ module Federation
 
       actor = resolve_resource(resource)
       return head :not_found if actor.nil?
+      return render_instance_actor_finger if actor == :instance
 
       actor_url = Urls.actor_url(actor)
       response.headers["Cache-Control"] = "public, max-age=300"
@@ -64,15 +67,33 @@ module Federation
 
     private
 
+    # The instance actor signs our outbound fetches. Under authorized-fetch
+    # Mastodon verifies that signer by webfingering
+    # `acct:<preferredUsername>@<host of the actor id>` and requiring it to loop
+    # back — so this endpoint has to answer for the instance actor, whose
+    # username is the host itself. Without it, every signed GET is 401 and no
+    # secure-mode instance can read anything of ours.
+    def render_instance_actor_finger
+      url = Urls.instance_actor_url
+      response.headers["Cache-Control"] = "public, max-age=300"
+      render json: {
+        subject: "acct:#{Urls.host}@#{Urls.host}",
+        aliases: [url],
+        links: [{rel: "self", type: "application/activity+json", href: url}]
+      }, content_type: "application/jrd+json"
+    end
+
     def resolve_resource(resource)
       if (m = resource.match(ACCT_RE))
         return nil unless host_matches?(m[:host])
+        return :instance if m[:name].casecmp(Urls.host).zero?
         find_actor(m[:name])
       elsif resource.start_with?("http://", "https://")
         # URL-form lookup (Mobilizon sends these too, WF-7)
         return nil unless Urls.local?(resource)
         path = URI.parse(resource).path
         case path
+        when "/actor" then :instance
         when %r{\A/users/(?<name>[a-z0-9_]+)\z} then User.find_by(name: Regexp.last_match[:name])
         when %r{\A/groups/(?<name>[a-z0-9_-]+)\z} then Group.find_by(name: Regexp.last_match[:name])
         end

@@ -81,6 +81,31 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "/.well-known/webfinger?resource={uri}"
   end
 
+  test "webfinger answers for the instance actor under its host-as-username" do
+    # Mastodon in authorized-fetch mode verifies the signer of our outbound
+    # GETs by webfingering acct:<preferredUsername>@<host> and requiring the
+    # self link to loop back to the actor id. Our instance actor's username is
+    # the host, so this lookup must resolve — without it every signed fetch
+    # 401s and secure-mode instances can read nothing of ours.
+    get "/.well-known/webfinger", params: {resource: "acct:app.sola.day@app.sola.day"}
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "acct:app.sola.day@app.sola.day", body["subject"]
+    href = body["links"].find { |l| l["rel"] == "self" }["href"]
+    assert_equal "https://app.sola.day/actor", href
+
+    get URI.parse(href).path, headers: AP_ACCEPT
+    doc = JSON.parse(response.body)
+    assert_equal href, doc["id"], "actor id must equal the webfinger self href"
+    assert_equal "app.sola.day", doc["preferredUsername"]
+  end
+
+  test "webfinger resolves the instance actor by URL too" do
+    get "/.well-known/webfinger", params: {resource: "https://app.sola.day/actor"}
+    assert_response :success
+    assert_equal "acct:app.sola.day@app.sola.day", JSON.parse(response.body)["subject"]
+  end
+
   # --- actors (AC matrix) ----------------------------------------------------
 
   test "user actor document satisfies Mastodon's required fields" do
