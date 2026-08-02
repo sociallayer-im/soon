@@ -8,6 +8,7 @@ class Api::V1::CommentsController < Api::BaseController
     comment = Comment.new(comment_params.merge(user: current_user))
     if comment.save
       CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"
+      federate_comment(comment)
       render json: CommentBlueprint.render(comment), status: :created
     else
       render_error(comment.errors.full_messages.join(", "))
@@ -41,7 +42,7 @@ class Api::V1::CommentsController < Api::BaseController
 
   # GET /api/v1/comments
   def index
-    comments = Comment.visible.includes(:user).where(comment_type: params[:comment_type])
+    comments = Comment.visible.includes(:user, :fed_actor).where(comment_type: params[:comment_type])
     comments = comments.where(item_type: params[:item_type]) if params[:item_type].present?
     comments = comments.where(item_id: params[:item_id]) if params[:item_id].present?
     comments = comments.where(user_id: params[:user_id]) if params[:user_id].present?
@@ -64,6 +65,18 @@ class Api::V1::CommentsController < Api::BaseController
     return if model.nil?
 
     model.with_deleted.find_by(id: comment.item_id)&.refresh_stars_count!
+  end
+
+  # Push a comment on a public event out to the servers following it. Never
+  # let a federation problem fail the write — the comment is already saved.
+  def federate_comment(comment)
+    return unless Federation.enabled?
+    return unless comment.comment_type == "comment" && comment.item_type == "Event"
+    event = comment.item
+    return unless event&.visibility == "public" && event.status == "published"
+    Federation::OutboxService.publish_comment(comment, event)
+  rescue StandardError => e
+    Rails.logger.error("[fed] publish_comment #{comment.id} failed: #{e.message}")
   end
 
   def set_comment
