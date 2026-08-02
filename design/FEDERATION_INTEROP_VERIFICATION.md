@@ -228,3 +228,48 @@ docker）作为合并前手动门禁 + 每周定时全量，报告归档。
 - RFC 9421 出站（只验证入站能收 9421 并按 cavage 回落）；
 - Pleroma/Misskey/GoToSocial 等其他实现：不主动验证，收到其流量按通用路径处理，兼容性问题按报告修复（writefreely 的 Hubzilla/Pleroma workaround 清单提示这类问题会来，但不预支）；
 - 性能压测：连接预算下的吞吐上限由 §6 生产观察给出经验值，不做合成压测。
+
+---
+
+## 9. 实测发现记录（2026-08-02，sg.sola.day 实验室）
+
+三实例实验室（sola / Mobilizon 5.2.4 / Mastodon 4.6.4）跑通全部验收清单，共发现
+**6 个只有真机联调才会暴露的缺陷**——发现时单元/集成测试有 870 例全绿。这份记录
+是"为什么必须有 L3/L4 层"的实证。
+
+| # | 缺陷 | 症状 | 为何单测发现不了 |
+|---|---|---|---|
+| 1 | 反代改写 `Host`，签名验证失败 | Mastodon 每一个入站 Follow 都 401 | 单测直接打控制器，没有反代改写 Host 这一层 |
+| 2 | `uuid` 发 TSID | Mobilizon 把 `uuid` cast 成 `Ecto.UUID` 失败，**整个活动被丢弃**，错误只在它的 changeset 里 | 需要对端的强类型 schema 才会暴露 |
+| 3 | 评论签名者≠归属 actor | Mastodon 静默丢弃（只在有 LD 签名时才容忍不一致） | 我们自己的验签不做这项检查 |
+| 4 | `/comments/:id` 未进反代白名单 | 规范域上 404，对端无法解引用线程 | 单测里路由是全的 |
+| 5 | 实例 actor 无法被 webfinger | `AUTHORIZED_FETCH=true` 下**所有签名 GET 被 401**，严格模式实例读不到任何内容 | 默认模式下完全不触发 |
+| 6 | （非缺陷，配置陷阱）Mastodon 账号 `approved=false` 时 actor 端点 404 | 取不到公钥→验签失败，极易误判为签名 bug | — |
+
+另有两条**对端行为**而非缺陷，值得记住：
+
+- **Mobilizon 只允许关注 Group 和实例**，Person 关注返回 `:person_no_follow`。我们的
+  出站 Follow 正确地停在 `pending`（不臆造 Accept）。
+- **Mobilizon 的 `fetch_and_create` 对已存在的活动只返回缓存、不更新**
+  （`{:existing_event, event} -> {:ok, nil, event}`）。状态同步只能靠推送给关注者的
+  Update，重新抓取是无效的——测同步时必须先建立关注关系。
+
+### 已验证通过的场景
+
+- **发现**：Mastodon 与 Mobilizon 均能解析 sola 的 Group/Person actor 并保存公钥；
+  webfinger 回环、`self` link 精确类型、`id == 请求 URI`、content-type 全部符合。
+- **关注**：Mastodon 关注/取关往返；Mobilizon 关注 sola 群组；sola 出站关注
+  Mobilizon 群组并收到 Accept。**`AUTHORIZED_FETCH=true` 严格模式下全流程通过。**
+- **内容**：活动 Create/Update/取消三向同步；Mastodon 渲染为
+  `<h2>标题</h2> + summary + 回链`（证实 `summary` 是它唯一能显示的结构化信息）；
+  Mobilizon 完整解析结构化字段（时区/joinMode/容量/地址/经纬度 lon-first）。
+- **评论**：sola → Mastodon、Mastodon → sola 双向；`inReplyTo` 正确挂在活动上。
+- **报名（入站）**：free 立即落座、restricted 挂起并经现有审批 UI 放行、满员与
+  购票活动 Reject、Leave 释放席位——Mobilizon 侧角色随之变为
+  `participant`/`rejected`。
+- **报名（出站）**：sola 用户报名 Mobilizon 原生活动，Mobilizon 参与者列表出现
+  `alice@sola.seven.fan`，`participant_stats` 计数正确。
+- **健壮性**（26/26，经公网+反代）：签名九项负例、载荷四项、幂等三项、共享与
+  per-actor inbox、黑名单 403 与即时解除、限流 429、五个 AP GET 端点。
+- **投递可靠性**：真实实例 29 条投递全部成功；两个不可解析的假域名累计 218 次
+  失败，正确走退避重试并触发域级熔断标记。
