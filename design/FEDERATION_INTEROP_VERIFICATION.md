@@ -362,3 +362,60 @@ actor id 一旦被对端缓存就实质无法更换——必须清空对端缓�
 
 上公网前应补：定期抓取对端 followers collection 与本地 inbound follow 对账，
 差异纳入 `[fed-alert]`；与 P2-1 的账本/投递留存策略一并设计。
+
+## 11. Move / FEP-8b32 / 自定义域名的实验室验证（2026-08-03）
+
+代码：soon `federation` 分支（Move + FEP-8b32 + custom_domain 提交后），
+两个 sola 节点与 Mastodon 4.6.4 同跑 sg.sola.day 实验室。
+
+### 11.1 sola→sola 迁移（daospace，无自有域名）
+
+1. A（sola.seven.fan）建群 `daospace`；B（solab.seven.fan）用户 bob 出站关注，
+   Accept 回流后 `accepted`。
+2. B 建继任群组并经 alias API 认领旧 id（actor 文档即时输出 `alsoKnownAs`）。
+3. A 经 `POST /api/v1/federation/groups/:id/move` 广播 Move：
+   - A 的 actor 文档立即带 `movedTo`（存根语义生效）；
+   - B 收到 Move，走 **local-target 分支**：核对本地群组的
+     `fed_also_known_as` 后标记 `fed_actors.moved_to`，解除 bob 对旧身份的
+     关注；入站账本 `processed`。
+
+### 11.2 sola→Mastodon 迁移（voyagers）
+
+1. Mastodon `tester` 关注 `@voyagers@sola.seven.fan`（严格模式下全程签名抓取）。
+2. Mastodon 侧 `tootctl accounts create voyagers` + `AccountAlias`
+   （acct → 我们的群组 url），账号文档输出 `alsoKnownAs`。
+3. **一个实测教训**：Mastodon 4.6 的 actor 规范 id 是
+   `/ap/users/<数字id>`，`/users/<handle>` 返回的文档 id 与请求 URI 不一致，
+   我们的严格校验（id == fetched uri）正确拒绝——Move 的 target 必须用对端的
+   **规范 id**，不能用 handle 形式。
+4. A 广播 Move 后 Mastodon 完整认可：旧账号 `moved_to_account` 指向本地
+   `voyagers`，`tester` 的关注被 MoveWorker 自动重指（follows old=false,
+   new=true）。**迁移后身份被对端持续承认。**
+
+### 11.3 FEP-8b32 实测
+
+- 新发布事件三方全收：Mastodon 渲染 `<h2>标题</h2>`、Mobilizon `confirmed`
+  ——证明「对象整体嵌入（含 @context 与 proof）」不破坏两家的入站解析。
+- `/events/<id>` 公网文档携带 `eddsa-jcs-2022` proof；**第三方归档验证闭环**：
+  在实验室之外的机器上仅凭公网抓取的事件文档 + actor 文档里的 Multikey，
+  `verify(original)=true`、`verify(tampered)=false`。镜像可证真从设想变为实测。
+
+### 11.4 自定义域名（hi.seven.fan）
+
+应用层闭环全部通过（经节点 A 公网 URL）：
+
+- `resource=acct:zuseven@hi.seven.fan` → subject 为自定义域 acct，self link
+  指向规范 host 上的 actor id；
+- 规范 host 查询同群组 → subject 同样报自定义域（Mastodon canonicalization
+  所要求的闭环）；
+- 错误的 name@绑定域 → 404；一域一群组的唯一约束生效。
+
+**未竟项（DNS 阻塞）**：`hi.seven.fan` 的公网解析当前指向 51.159.97.137
+（seven.fan 泛解析），不在实验室主机上，Traefik 无法为它签发证书，因此
+「Mastodon 直接搜索 @zuseven@hi.seven.fan」的最后一跳无法实测。需要把
+`hi.seven.fan` 的 A 记录指到 172.81.108.136 并加 Traefik 路由后补测。
+
+### 结论
+
+Move 双向、FEP-8b32 签发/三方验证、自定义域名 WebFinger 委托全部按 §9.4/§9.6
+的设计运转；唯一的外部依赖是自定义域的 DNS 与证书（运营侧动作）。
