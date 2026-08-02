@@ -78,6 +78,8 @@ Rails.application.routes.draw do
       get    "federation/events/:id",        to: "federation_discovery#event"
       post   "federation/events/:id/join",   to: "federation_discovery#join"
       delete "federation/events/:id/join",   to: "federation_discovery#leave"
+      post   "federation/groups/:id/aliases", to: "federation_discovery#add_alias"
+      post   "federation/groups/:id/move",    to: "federation_discovery#move_group"
 
       # Auth (no JWT required, except bind_email)
       post "auth/request_code",   to: "auth#request_code"

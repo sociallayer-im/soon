@@ -85,7 +85,16 @@ module Federation
 
     def resolve_resource(resource)
       if (m = resource.match(ACCT_RE))
-        return nil unless host_matches?(m[:host])
+        # A group's bound custom domain answers for exactly that group under
+        # exactly its own name (PLAN §9.4). The canonical-host branch below
+        # emits the same custom-domain subject, so Mastodon's canonicalization
+        # (re-webfinger at the subject's domain, require the same actor id)
+        # closes the loop in both directions.
+        unless host_matches?(m[:host])
+          bound = Group.find_by(custom_domain: m[:host].downcase)
+          return bound if bound && bound.name == m[:name].downcase
+          return nil
+        end
         return :instance if m[:name].casecmp(Urls.host).zero?
         find_actor(m[:name])
       elsif resource.start_with?("http://", "https://")

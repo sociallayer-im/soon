@@ -120,6 +120,49 @@ module Federation
       part
     end
 
+    # Migrate a local actor to a successor on another instance (PLAN §9.6).
+    # The successor must already claim us in alsoKnownAs — verified by a
+    # fresh fetch of the target, mirroring what every receiving peer will
+    # itself check. Broadcast goes to all accepted followers; each of their
+    # instances then re-points its follows. Raises NotAttested rather than
+    # returning nil so the API layer can tell the operator exactly why.
+    class NotAttested < StandardError; end
+
+    def self.move_actor(actor, target_uri)
+      return nil unless Federation.enabled?
+      target = ActorFetchService.fetch!(target_uri)
+      unless target.also_known_as.include?(Urls.actor_url(actor))
+        raise NotAttested, "#{target_uri} does not list #{Urls.actor_url(actor)} in alsoKnownAs"
+      end
+
+      inboxes = FedFollow.accepted.inbound.where(local: actor)
+                         .includes(:fed_actor).filter_map { |f|
+        next unless FedDomainPolicy.domain_allowed?(f.fed_actor.domain)
+        f.fed_actor.delivery_inbox_url
+      }.uniq
+
+      url = Urls.actor_url(actor)
+      payload = {
+        "@context" => JsonLd::AS,
+        # fresh id per broadcast: a re-run after fixing a bad alias must not
+        # be dropped by peers' idempotency ledgers
+        "id" => "#{url}#moves/#{(Time.current.to_f * 1000).to_i}-#{SecureRandom.hex(4)}",
+        "type" => "Move",
+        "actor" => url,
+        "object" => url,
+        "target" => target_uri,
+        "to" => [JsonLd::PUBLIC]
+      }
+      ActiveRecord::Base.transaction do
+        # the actor document must say movedTo before any peer re-fetches us
+        # to double-check the announcement
+        actor.update!(fed_moved_to: target_uri)
+        enqueue(payload, sender: actor, inboxes: inboxes) if inboxes.any?
+      end
+      Logging.log(:out, "Move", status: "queued", target: target_uri, inboxes: inboxes.size)
+      payload
+    end
+
     # A group being deleted has to be announced, or every follower keeps a
     # zombie actor and zombie events forever — there is no other signal, since
     # the actor URL simply starts 404ing. Sent before the row goes away, while
@@ -202,7 +245,9 @@ module Federation
       serializer = CommentSerializer.new(comment, event)
       sender = serializer.author_actor
       actor_url = Urls.actor_url(sender)
-      note = serializer.as_ap(context: false)
+      # full-context form: the FEP-8b32 proof binds @context, so the note is
+      # embedded whole (nested @context is valid JSON-LD; Mastodon accepts it)
+      note = serializer.as_ap
       activity = {
         "@context" => JsonLd.context,
         "id" => "#{note['id']}/activity",
@@ -258,7 +303,8 @@ module Federation
             "actor" => object["attributedTo"],
             "to" => object["to"],
             "cc" => object["cc"],
-            "object" => object.except("@context")
+            # whole, @context included: the integrity proof binds the context
+            "object" => object
           }
         end
 

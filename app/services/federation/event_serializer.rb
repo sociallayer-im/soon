@@ -42,7 +42,10 @@ module Federation
       doc["externalParticipationUrl"] = Urls.event_html_url(@event) if join_mode == "external"
       doc["location"] = location if location
       doc.merge!(audience)
-      doc.compact
+      # FEP-8b32: the group signs its own event object. `created` pinned to
+      # updated_at makes serialization deterministic — the same content
+      # always yields byte-identical proofs, so mirrors can dedupe.
+      IntegrityProof.sign(doc.compact, @event.group, created: @event.updated_at)
     end
 
     # to/cc per Mobilizon's audience rule (audience.ex:135-138): public gets

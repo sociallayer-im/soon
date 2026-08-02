@@ -45,6 +45,15 @@ class Group < ApplicationRecord
   validates :name, presence: true, uniqueness: true
   include HandleName
 
+  # WebFinger delegation domain (FEDERATION_PLAN §9.4): one domain binds one
+  # group, and it is a *signature* not an identity — the actor id never moves
+  # onto it, so unbinding is lossless. Ops-assigned (needs DNS + a Traefik
+  # route), deliberately absent from group_params.
+  normalizes :custom_domain, with: ->(d) { d.strip.downcase.presence }
+  validates :custom_domain, uniqueness: true, allow_nil: true,
+    format: { with: /\A(?=.{4,253}\z)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\z/,
+              message: "must be a bare hostname like hi.seven.fan" }
+
   # Eager-loads every association GroupBlueprint's :detail view walks. Render
   # that view without this and each group costs five extra queries, plus one
   # per membership for its user — against a networked database that is round

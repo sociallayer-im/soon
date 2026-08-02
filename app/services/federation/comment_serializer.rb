@@ -29,7 +29,9 @@ module Federation
         "cc" => [Urls.followers_url(@event.group)]
       }
       doc["@context"] = JsonLd.context if context
-      doc
+      # FEP-8b32: proofs bind the @context, so only the standalone (full
+      # context) form is signed. Embedders must carry the object whole.
+      context ? IntegrityProof.sign(doc, author_actor, created: @comment.updated_at) : doc
     end
 
     def in_reply_to

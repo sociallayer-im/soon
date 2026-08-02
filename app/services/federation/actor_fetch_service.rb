@@ -161,6 +161,10 @@ module Federation
         followers_url: doc["followers"],
         public_key_pem: key["publicKeyPem"],
         key_id: key["id"],
+        # Move semantics: both sides of the mutual attestation live on the
+        # actor document, so they have to be captured here to be checkable.
+        moved_to: doc["movedTo"].is_a?(String) ? doc["movedTo"] : nil,
+        also_known_as: Array(doc["alsoKnownAs"]).grep(String),
         last_fetched_at: Time.current,
         raw: doc
       )

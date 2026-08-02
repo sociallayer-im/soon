@@ -18,8 +18,12 @@ module Federation
       "#{scheme}://#{host}"
     end
 
+    # A group with a bound custom domain presents its acct there (WebFinger
+    # delegation, PLAN §9.4); the actor id stays on the canonical host either
+    # way — the domain is a signature, not an identity.
     def acct(actor)
-      "#{actor.name}@#{host}"
+      domain = actor.is_a?(Group) ? actor.custom_domain.presence : nil
+      "#{actor.name}@#{domain || host}"
     end
 
     # Actor ids live at root-level paths on the canonical host; the frontend

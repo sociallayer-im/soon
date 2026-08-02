@@ -16,6 +16,7 @@ module Federation
       when "Delete" then handle_delete(fed_actor, activity)
       when "Accept" then handle_accept(fed_actor, activity)
       when "Reject" then handle_reject(fed_actor, activity)
+      when "Move" then handle_move(fed_actor, activity)
       else
         Logging.log(:in, activity["type"], domain: fed_actor.domain, status: "ignored")
         :ignored
@@ -73,6 +74,73 @@ module Federation
       when String then object
       when Hash then object["id"]
       end
+    end
+
+    # --- actor migration (PLAN §9.6) -----------------------------------------
+
+    # Move: the verified sender announces it has migrated to `target`. The
+    # mutual attestation is what stops hijacks: the OLD actor says movedTo
+    # (implicit in this signed activity), and the NEW actor must independently
+    # claim the old id in alsoKnownAs — checked on a fresh fetch, never on the
+    # activity's own say-so. Mastodon's Move handler enforces the same pair.
+    def self.handle_move(fed_actor, activity)
+      object = object_uri(activity["object"]) || fed_actor.uri
+      # only an actor may announce its own move
+      unless object == fed_actor.uri
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "not_self")
+        return :ignored
+      end
+      target_uri = activity["target"]
+      unless target_uri.is_a?(String) && target_uri.match?(%r{\Ahttps?://}) && target_uri != fed_actor.uri
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "bad_target")
+        return :ignored
+      end
+
+      if Urls.local?(target_uri)
+        return handle_move_to_local(fed_actor, target_uri)
+      end
+
+      begin
+        target = ActorFetchService.fetch!(target_uri)
+      rescue ActorFetchService::FetchError, HttpClient::Error => e
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "target_unfetchable", error: e.message)
+        return :ignored
+      end
+      unless target.also_known_as.include?(fed_actor.uri)
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "attestation_missing")
+        return :ignored
+      end
+
+      fed_actor.update!(moved_to: target_uri)
+      # Re-point our side of the relationship: every local actor following the
+      # old identity follows the new one instead (fresh Follow activity — the
+      # peer's ledger has never seen it), the old edge goes away.
+      moved = 0
+      FedFollow.where(fed_actor: fed_actor, direction: "outbound").find_each do |f|
+        OutboxService.follow(f.local, target)
+        f.destroy!
+        moved += 1
+      end
+      Logging.log(:in, "Move", domain: fed_actor.domain, status: "processed",
+                  target: target_uri, follows_moved: moved)
+      :processed
+    end
+
+    # A remote actor migrating INTO this instance: the target is one of our
+    # own actors, which must have claimed the old id in fed_also_known_as
+    # beforehand (there is nothing to fetch — we ARE the authority here).
+    def self.handle_move_to_local(fed_actor, target_uri)
+      target = resolve_local_actor(target_uri)
+      if target.nil? || !Array(target.fed_also_known_as).include?(fed_actor.uri)
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "local_attestation_missing")
+        return :ignored
+      end
+      fed_actor.update!(moved_to: target_uri)
+      # outbound follows of the old remote identity dissolve — the successor
+      # is local, so there is no remote relationship left to maintain
+      FedFollow.where(fed_actor: fed_actor, direction: "outbound").destroy_all
+      Logging.log(:in, "Move", domain: fed_actor.domain, status: "processed_local", target: target_uri)
+      :processed
     end
 
     # --- remote content mirroring --------------------------------------------

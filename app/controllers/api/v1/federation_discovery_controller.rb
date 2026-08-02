@@ -77,6 +77,37 @@ module Api
         head :no_content
       end
 
+      # --- group migration (PLAN §9.6) ---------------------------------------
+
+      # POST /api/v1/federation/groups/:id/aliases {uri}
+      # Destination side of a migration: this group claims a previous identity
+      # in alsoKnownAs, which is what lets the old side's Move verify.
+      def add_alias
+        group = Group.find_by(id: params[:id]) or return render_not_found
+        authorize group, :manage?, policy_class: GroupPolicy
+        uri = params[:uri].to_s
+        unless uri.match?(%r{\Ahttps?://\S+\z})
+          return render_error("uri must be an http(s) URL")
+        end
+        aliases = Array(group.fed_also_known_as) | [uri]
+        group.update!(fed_also_known_as: aliases)
+        render json: {also_known_as: aliases}, status: :created
+      end
+
+      # POST /api/v1/federation/groups/:id/move {target}
+      # Origin side: broadcast the Move. Fails 422 unless the target actor
+      # already lists this group in alsoKnownAs (mutual attestation).
+      def move_group
+        group = Group.find_by(id: params[:id]) or return render_not_found
+        authorize group, :manage?, policy_class: GroupPolicy
+        Federation::OutboxService.move_actor(group, params[:target].to_s)
+        render json: {moved_to: group.reload.fed_moved_to}, status: :created
+      rescue Federation::OutboxService::NotAttested => e
+        render_error(e.message, status: :unprocessable_entity)
+      rescue Federation::ActorFetchService::FetchError, Federation::HttpClient::Error => e
+        render_error("could not fetch target: #{e.message}", status: :unprocessable_entity)
+      end
+
       private
 
       def require_federation!

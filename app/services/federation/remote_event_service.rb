@@ -22,6 +22,12 @@ module Federation
         Logging.log(:in, "Event", domain: fed_actor.domain, status: "attribution_mismatch")
         return nil
       end
+      # FEP-8b32, warn-only: transport identity (HTTP signature) already
+      # authenticated the sender, so a bad embedded proof is logged, not
+      # fatal — peers legitimately re-serialize objects on retry.
+      if IntegrityProof.verify_embedded(object, fed_actor) == false
+        Logging.log(:in, "Event", domain: fed_actor.domain, status: "integrity_proof_failed", uri: uri)
+      end
 
       place = object["location"].is_a?(Hash) ? object["location"] : {}
       address = place["address"].is_a?(Hash) ? place["address"] : {}

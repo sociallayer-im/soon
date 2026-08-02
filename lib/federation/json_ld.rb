@@ -6,6 +6,8 @@ module Federation
   module JsonLd
     AS = "https://www.w3.org/ns/activitystreams".freeze
     SECURITY = "https://w3id.org/security/v1".freeze
+    # Multikey + DataIntegrityProof terms (FEP-8b32)
+    DATA_INTEGRITY = "https://w3id.org/security/data-integrity/v1".freeze
     PUBLIC = "https://www.w3.org/ns/activitystreams#Public".freeze
 
     EXTENSIONS = {
@@ -43,13 +45,16 @@ module Federation
     module_function
 
     def context
-      [AS, SECURITY, EXTENSIONS]
+      [AS, SECURITY, DATA_INTEGRITY, EXTENSIONS]
     end
 
     def actor_context
-      [AS, SECURITY, {"manuallyApprovesFollowers" => "as:manuallyApprovesFollowers",
-                      "toot" => "http://joinmastodon.org/ns#",
-                      "discoverable" => "toot:discoverable"}]
+      [AS, SECURITY, DATA_INTEGRITY,
+       {"manuallyApprovesFollowers" => "as:manuallyApprovesFollowers",
+        "toot" => "http://joinmastodon.org/ns#",
+        "discoverable" => "toot:discoverable",
+        "movedTo" => {"@id" => "as:movedTo", "@type" => "@id"},
+        "alsoKnownAs" => {"@id" => "as:alsoKnownAs", "@type" => "@id"}}]
     end
   end
 end

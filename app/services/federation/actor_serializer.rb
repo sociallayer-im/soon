@@ -38,6 +38,23 @@ module Federation
       }
       doc["icon"] = {"type" => "Image", "url" => @actor.image_url} if @actor.image_url.present?
       doc["memberCount"] = @actor.memberships_count if @type == "Group"
+      # FEP-8b32: the Ed25519 Multikey that verifies our object integrity
+      # proofs. Minted alongside the RSA key — this render path is exactly
+      # the "first exposure" moment.
+      @actor.ensure_ed25519_keys!
+      doc["assertionMethod"] = [{
+        "id" => "#{base}#{IntegrityProof::KEY_FRAGMENT}",
+        "type" => "Multikey",
+        "controller" => base,
+        "publicKeyMultibase" => @actor.fed_ed25519_public_key
+      }]
+      # Move semantics (PLAN §9.6): movedTo marks a departed actor, and
+      # alsoKnownAs is how this actor claims identities it may receive a
+      # Move from — peers verify the mutual attestation on both fields.
+      doc["movedTo"] = @actor.fed_moved_to if @actor.fed_moved_to.present?
+      if @actor.fed_also_known_as.present?
+        doc["alsoKnownAs"] = @actor.fed_also_known_as
+      end
       doc
     end
 
