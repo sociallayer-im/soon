@@ -655,3 +655,37 @@ mobilizon/lib/federation/activity_stream/converter/{event,participant,address}.e
 lib/federation/activity_pub/{utils,audience}.ex、test/fixtures/*.json；
 Rails 落地骨架 → nebula/nebula/lib/activity_pub/urls.rb、test_federation_s2s.rb；
 最小面参照 → writefreely/activitypub.go。*
+
+---
+
+## 8. 实施状态（2026-08-02）
+
+`federation` 分支，914 例测试全绿，三方实验室（sola-A / sola-B / Mobilizon 5.2.4 /
+Mastodon 4.6.4）全部验收项通过。
+
+| 分期 | 状态 |
+|---|---|
+| P0 密钥/库表/签名库 | 完成 |
+| P1 发现面（webfinger/actor/nodeinfo/事件对象） | 完成 |
+| P2 inbox/Follow/投递/治理/观测 | 完成 |
+| P3 跨实例报名与评论 | 完成（双向） |
+| P4 远端镜像/出站关注与报名/前端 | 完成 |
+| P5 群组成员联邦、中继、RFC 9421 出站 | **未做**（见下） |
+
+§2.9/§2.10 逐条落地情况：结构化日志 ✓、`fed_domain_stats` 与 7 天熔断 ✓、
+stats 与策略管理端点 ✓、**告警阈值 ✓**（`Federation::HealthCheckJob`，五分钟 cron，
+每条阈值都有越线用例）、域级与 actor 级限流 ✓、**密钥抓取负缓存与发现限流 ✓**
+（这条曾只写在文档里而代码未实现，是真实的放大攻击面）、黑白名单四执法点 ✓。
+
+集合已按 `OrderedCollection` + `OrderedCollectionPage` 分页（`totalItems` 是真实
+总数而非页大小）。
+
+### 仍未实现
+
+- **群组成员联邦**（Member/Invite/Remove 与七个集合的爬取）。Mobilizon 最复杂的
+  子系统，当前群组只能被关注、不能跨实例加入成员。
+- **中继（relay）**：无法通过中继实例广播或订阅。
+- **RFC 9421 出站**：只按 cavage 签名；入站两种都能收。
+- **LD Signatures / 对象完整性证明**：不做，因此不支持经第三方转发的活动。
+- **前端**：远端活动只有列表与详情，没有"关注中的社区"管理界面；群组页只显示
+  远端关注者计数，不能展开列表。
