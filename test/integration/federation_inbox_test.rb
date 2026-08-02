@@ -124,6 +124,39 @@ class FederationInboxTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  # --- reverse proxy in front of the inbox -----------------------------------
+
+  test "signature signed for the canonical host verifies after a proxy rewrites Host" do
+    # The canonical host proxies AP paths here and replaces Host with its
+    # upstream target, so the value the sender signed never reaches us. Caught
+    # against a live Mastodon: every inbound Follow 401'd.
+    activity = follow_activity(@remote, @group)
+    body = JSON.generate(activity)
+    headers = signed_inbox_headers(@remote, @key, body) # signs Host: app.sola.day
+    headers["Host"] = "soon" # what the proxy actually forwards
+
+    assert_difference -> { FedFollow.count } => 1 do
+      perform_enqueued_jobs { post "/inbox", params: body, headers: headers }
+    end
+    assert_response :accepted
+  end
+
+  test "a forged X-Forwarded-Host cannot make a foreign-signed request verify" do
+    activity = follow_activity(@remote, @group)
+    body = JSON.generate(activity)
+    # signed for someone else's host entirely
+    headers = Federation::HttpSignature.sign(
+      method: :post, url: "https://victim.example/inbox",
+      key_id: @remote.key_id, private_key: @key.to_pem, body: body
+    ).merge("Content-Type" => "application/activity+json",
+            "X-Forwarded-Host" => "victim.example", "Host" => "soon")
+
+    assert_no_difference -> { FedFollow.count } do
+      post "/inbox", params: body, headers: headers
+    end
+    assert_response :unauthorized
+  end
+
   # --- governance (BL matrix) ------------------------------------------------
 
   test "blocked domain is 403 before any processing" do

@@ -89,21 +89,48 @@ module Federation
     end
 
     def verify_against(actor, body)
-      HttpSignature.verify!(
-        method: request.method, path: request.fullpath,
-        headers: signature_headers, body: body,
-        public_key_pem: actor.public_key_pem
-      )
+      error = nil
+      candidate_hosts.each do |host|
+        begin
+          return HttpSignature.verify!(
+            method: request.method, path: request.fullpath,
+            headers: signature_headers.merge("host" => host), body: body,
+            public_key_pem: actor.public_key_pem
+          )
+        rescue HttpSignature::VerificationError => e
+          error = e
+        end
+      end
+      raise error || HttpSignature::VerificationError.new("no host candidate verified")
     end
 
+    # The sender signs the host it addressed — always the canonical federation
+    # host, since that is where every actor URL lives. But the canonical host
+    # proxies these paths to this app, and a proxy rewrites Host to its
+    # upstream target, so by the time the request lands here the signed value
+    # is gone. Try both what we received and the canonical host.
+    #
+    # X-Forwarded-Host is deliberately NOT consulted: it is attacker-controlled,
+    # and trusting it would let a request signed for some other instance be
+    # replayed into this inbox.
+    def candidate_hosts
+      [request.headers["Host"], Urls.host].compact.uniq
+    end
+
+    # Every request header, not a fixed subset — the signature may legitimately
+    # cover headers we do not enumerate (Mastodon signs everything except
+    # User-Agent/Accept/Accept-Encoding, which includes Content-Type and
+    # Collection-Synchronization), and a signed-but-missing header fails
+    # verification.
     def signature_headers
-      {
-        "signature" => request.headers["Signature"],
-        "host" => request.headers["Host"],
-        "date" => request.headers["Date"],
-        "digest" => request.headers["Digest"],
-        "content-type" => request.headers["Content-Type"]
-      }.compact
+      request.headers.each_with_object({}) do |(key, value), acc|
+        next unless value.is_a?(String)
+        if key.start_with?("HTTP_")
+          acc[key.delete_prefix("HTTP_").tr("_", "-").downcase] = value
+        elsif %w[CONTENT_TYPE CONTENT_LENGTH].include?(key)
+          acc[key.tr("_", "-").downcase] = value
+        end
+      end
     end
 
     def actor_rate_ok?(fed_actor, type)
