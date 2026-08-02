@@ -794,3 +794,19 @@ Traefik 为每个绑定域加路由与证书。约束：一个域只能绑一个
 域名会成为永久身份的载体——域名流失即该群组在全联邦死亡且不可迁移；且
 `Urls`/`local?`/验签/域策略全部要感知多本地域，成本一个量级。联邦宇宙无此
 先例是有原因的。
+
+### 9.5 术语定名：Instance
+
+作为托管资源的"这类服务器"，正式定名 **Instance**（实例）。定名依据：
+
+- 代码已在用同一词表（`FedInstanceKey`、`Urls.instance_actor_url`），不引入
+  第二套名字；
+- 联邦生态的通用术语（Mastodon/Mobilizon 的协议、API、社区语境均用 instance），
+  对端零解释成本；
+- 排除项：**Host** 与 `EventRole` 的 `group_host`/`custom_host`（活动主办方）
+  撞名，禁用于服务器含义；**Node** 被 NodeInfo 之外的 k8s/Nomad 语境污染
+  （Nomad 集群里 node 指物理机）；**Server** 过泛。
+
+分层使用：schema/协议/文档层统一用 Instance（未来若建表即 `fed_instances`，
+`FedDomainStat` + `FedDomainPolicy` 是其雏形）；产品/品牌层如需叙事名，另用
+"母港 Home Port"，不进 schema。
