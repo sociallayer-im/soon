@@ -708,3 +708,89 @@ stats 与策略管理端点 ✓、**告警阈值 ✓**（`Federation::HealthChec
 - **LD Signatures / 对象完整性证明**：不做，因此不支持经第三方转发的活动。
 - **前端**：远端活动只有列表与详情，没有"关注中的社区"管理界面；群组页只显示
   远端关注者计数，不能展开列表。
+
+---
+
+## 9. URL 结构、固定链接与域名规划（2026-08-03）
+
+> 本节是 URL 规范的**权威版本**，取代 §2.2/§2.3 中"AP 路由用 handle"的早期
+> 表述。实现以 `lib/federation/urls.rb` 为唯一铸造点。
+
+### 9.1 固定链接（对象 id）—— 永久合同
+
+对象 id 一经对端缓存即不可变，且必须可解引用（GET + `Accept:
+application/activity+json` 返回对象本身）：
+
+| 对象 | 固定链接 | 锚点 |
+|---|---|---|
+| 用户 | `https://<host>/users/<tsid>` | TSID 主键，**不是 handle** |
+| 群组 | `https://<host>/groups/<tsid>` | 同上 |
+| 事件 | `https://<host>/events/<id>` | Event 主键 |
+| 评论 | `https://<host>/comments/<id>` | Comment 主键 |
+| 实例 actor | `https://<host>/actor` | 常量 |
+| 公钥 | `<actor id>#main-key` | 随 actor id |
+
+原则：**固定链接不含任何可编辑字段**。handle 改名、事件换组、群组改名都不
+影响 id；handle 只出现在 `preferredUsername` 与 WebFinger acct 中，改名由
+WebFinger 重新映射。`find_user`/`find_group` 同时接受 TSID 与 handle，早期
+缓存过 handle 型 URL 的对端仍可解析。已删除对象的 uri 永不复用（Mastodon 侧
+有 Tombstone，复用会被永久拒收，实验室已实测）。
+
+层级不进 URL：event 属于哪个 group、comment 回复哪个 event，全部由
+`attributedTo`/`inReplyTo`/`audience` 表达。URL 扁平，改组/移动不破坏已缓存
+的 id。
+
+人类页面与 AP id 刻意分离（同 Mobilizon）：事件 HTML 页是
+`/event/detail/<id>`，AP id 是 `/events/<id>`；由前端 rewrite 按 Accept 头
+分流，同一域名对浏览器返回 HTML、对联邦对端返回 AP JSON。
+
+### 9.2 活动（Activity）id —— 一次性收据
+
+活动 id 只需全局唯一以防重放，不要求永久可解引用（`outbox_service.rb`）：
+
+- **确定性 id**（同一动作重发必须同 id，对端天然去重）：
+  `/accept/follow/<follow_id>`、`/accept/join/<participant_id>`
+- **每次尝试新 id**（旧 id 已被对端记录，复用会被当重放丢弃）：
+  Follow `/follows/<uuid>`、Join `/joins/<uuid>`（仅上一条仍 pending 时复用）；
+  Update/Delete 形如 `<对象id>/activity/<verb>-<毫秒时间戳>-<随机>`，时间戳
+  同时是乱序屏障的依据。
+
+一句话：**对象 URL 是合同，活动 URL 是收据。**
+
+### 9.3 规范域名切换（app.sola.day → sola.day）
+
+计划正式上线以 `sola.day` 为规范域名（由运营方处理，此处只记录约束）：
+
+- 切换是**单向门**：必须发生在首次真实公网联邦之前；一旦有对端缓存了 actor
+  id，域名即永久锁定。当前 federation 未上生产、实验室对端可重置，窗口仍开。
+- 代码侧只需 `FEDERATION_HOST=sola.day` 一行——所有 URL 从 `Urls.host` 单点
+  生成。切换后实验室需清空重测（actor id 全变）。
+- `sola.day` 必须实际应答全部 AP 路径（webfinger/nodeinfo/actors/objects/
+  inbox），即现有 `next.config.mjs` 的 rewrite 集合要随规范域走。
+- HTML 站可留在 app.sola.day（Mastodon `LOCAL_DOMAIN` vs `WEB_DOMAIN` 的标准
+  拆法）；不可变的只是 id 的域。
+
+### 9.4 群组自定义域名（规划，未实现）
+
+需求：群组绑定自有域名（如 `zusocial.org`，泛解析到同一集群）。
+
+**采用路线：WebFinger 委托（域名做"署名"，不做"身份"）**
+
+- actor id 不变，仍是 `https://sola.day/groups/<tsid>`；
+- `zusocial.org/.well-known/webfinger?resource=acct:zusocial@zusocial.org`
+  返回指向真实 actor id 的 JRD；actor 文档的 WebFinger subject 声明
+  `zusocial@zusocial.org`；
+- Mastodon 抓取 actor 后会反向 webfinger 验证 subject 域并确认闭环，之后以
+  `@zusocial@zusocial.org` 展示该群组——这正是 Mastodon 自身 acct 域 ≠ 服务域
+  的机制，全联邦兼容；
+- 域名解绑/过期时身份无损，显示名跌回 `@name@sola.day`。
+
+改动清单（增量、可上线后再做）：`Urls.acct` 从全局 host 改为按 actor 查绑定
+域；WebFinger 控制器接受外来 Host 且只对绑定该域的群组应答（含 host-meta）；
+Traefik 为每个绑定域加路由与证书。约束：一个域只能绑一个群组（subject 必须
+无歧义）。
+
+**明确不做**：把自定义域做进 actor id（`https://zusocial.org/groups/…`）。
+域名会成为永久身份的载体——域名流失即该群组在全联邦死亡且不可迁移；且
+`Urls`/`local?`/验签/域策略全部要感知多本地域，成本一个量级。联邦宇宙无此
+先例是有原因的。
