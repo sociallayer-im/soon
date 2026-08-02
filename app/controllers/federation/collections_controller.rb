@@ -1,9 +1,13 @@
 module Federation
-  # followers / following / outbox as OrderedCollections. Phase 1: real
-  # totalItems (the nebula limited-count bug is a named regression), paged
-  # items land in Phase 2 with real follow data.
+  # followers / following / outbox as paged OrderedCollections.
+  #
+  # Nebula returned every follower in one array and capped its outbox at 100
+  # while reporting that cap as the total — both were listed as things not to
+  # repeat. Here the collection itself carries only the total and a link to the
+  # first page; items live on OrderedCollectionPage, and totalItems is the real
+  # count, not the page size.
   class CollectionsController < BaseController
-    PAGE_SIZE = 20
+    PAGE_SIZE = 40
 
     def followers
       collection_for(:followers)
@@ -15,33 +19,74 @@ module Federation
 
     def outbox
       actor = find_actor or return head(:not_found)
-      total =
-        if actor.is_a?(Group)
-          actor.events.where(visibility: "public", status: "published").count
-        else
-          Event.where(owner: actor, visibility: "public", status: "published").count
-        end
-      render_ap ordered_collection(Urls.outbox_url(actor), total)
+      scope = outbox_scope(actor)
+      render_paged(
+        id: Urls.outbox_url(actor),
+        total: scope.count,
+        page_items: ->(page) {
+          scope.order(start_time: :desc).offset(page * PAGE_SIZE).limit(PAGE_SIZE).map { |event|
+            {
+              "id" => "#{Urls.event_url(event)}/activity/create",
+              "type" => "Create",
+              "actor" => Urls.actor_url(actor),
+              "published" => event.created_at.utc.iso8601,
+              "to" => [JsonLd::PUBLIC],
+              "object" => Urls.event_url(event)
+            }
+          }
+        }
+      )
     end
 
     private
 
+    def outbox_scope(actor)
+      base = Event.where(visibility: "public", status: "published")
+      actor.is_a?(Group) ? base.where(group: actor) : base.where(owner: actor)
+    end
+
     def collection_for(kind)
       actor = find_actor or return head(:not_found)
       direction = kind == :followers ? "inbound" : "outbound"
-      total = FedFollow.accepted.where(local: actor, direction: direction).count
+      scope = FedFollow.accepted.where(local: actor, direction: direction)
       url = kind == :followers ? Urls.followers_url(actor) : Urls.following_url(actor)
-      render_ap ordered_collection(url, total)
+      render_paged(
+        id: url,
+        total: scope.count,
+        page_items: ->(page) {
+          scope.order(:created_at).offset(page * PAGE_SIZE).limit(PAGE_SIZE)
+               .includes(:fed_actor).map { |f| f.fed_actor.uri }
+        }
+      )
     end
 
-    def ordered_collection(id, total)
-      {
+    # `?page=N` returns the page; no param returns the collection head. That is
+    # the shape Mastodon and Mobilizon both serve, and it keeps an actor with
+    # many followers from ever building one enormous response.
+    def render_paged(id:, total:, page_items:)
+      if params[:page].blank?
+        return render_ap({
+          "@context" => JsonLd::AS,
+          "id" => id,
+          "type" => "OrderedCollection",
+          "totalItems" => total,
+          "first" => "#{id}?page=0"
+        })
+      end
+
+      page = [params[:page].to_i, 0].max
+      items = page_items.call(page)
+      doc = {
         "@context" => JsonLd::AS,
-        "id" => id,
-        "type" => "OrderedCollection",
+        "id" => "#{id}?page=#{page}",
+        "type" => "OrderedCollectionPage",
+        "partOf" => id,
         "totalItems" => total,
-        "orderedItems" => []
+        "orderedItems" => items
       }
+      doc["next"] = "#{id}?page=#{page + 1}" if (page + 1) * PAGE_SIZE < total
+      doc["prev"] = "#{id}?page=#{page - 1}" if page.positive?
+      render_ap doc
     end
 
     def find_actor

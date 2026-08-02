@@ -156,16 +156,61 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
 
   # --- collections -----------------------------------------------------------
 
-  test "followers and outbox are valid OrderedCollections with true totals" do
+  test "collections are paged, and totalItems is the real total not the page size" do
+    # nebula returned every follower at once and reported its 100-item outbox
+    # cap as the total; both were named as things not to repeat.
     get "/groups/#{@group.name}/followers", headers: AP_ACCEPT
     assert_response :success
     doc = JSON.parse(response.body)
     assert_equal "OrderedCollection", doc["type"]
     assert_equal 0, doc["totalItems"]
+    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=0", doc["first"]
+    refute doc.key?("orderedItems"), "the collection head carries no items"
 
-    create_event(group: @group, owner: @user, visibility: "public", status: "published")
+    3.times { create_event(group: @group, owner: @user, visibility: "public", status: "published") }
     get "/groups/#{@group.name}/outbox", headers: AP_ACCEPT
-    assert_equal 1, JSON.parse(response.body)["totalItems"]
+    assert_equal 3, JSON.parse(response.body)["totalItems"]
+
+    get "/groups/#{@group.name}/outbox", params: {page: 0}, headers: AP_ACCEPT
+    page = JSON.parse(response.body)
+    assert_equal "OrderedCollectionPage", page["type"]
+    assert_equal 3, page["totalItems"]
+    assert_equal 3, page["orderedItems"].size
+    assert_equal "https://app.sola.day/groups/#{@group.name}/outbox", page["partOf"]
+    refute page.key?("next"), "a single page must not advertise another"
+    refute page.key?("prev")
+  end
+
+  test "follower pages list actor uris and chain with next/prev" do
+    actors = 3.times.map { |i|
+      a = FedActor.create!(uri: "https://remote#{i}.example/users/a", domain: "remote#{i}.example",
+                           actor_type: "Person", preferred_username: "a",
+                           inbox_url: "https://remote#{i}.example/users/a/inbox")
+      FedFollow.create!(local: @group, fed_actor: a, direction: "inbound",
+                        state: "accepted", uri: "#{a.uri}#f")
+      a
+    }
+
+    get "/groups/#{@group.name}/followers", headers: AP_ACCEPT
+    assert_equal 3, JSON.parse(response.body)["totalItems"]
+
+    get "/groups/#{@group.name}/followers", params: {page: 0}, headers: AP_ACCEPT
+    items = JSON.parse(response.body)["orderedItems"]
+    assert_equal actors.map(&:uri).sort, items.sort
+
+    # a page past the end is empty rather than an error, and links back
+    get "/groups/#{@group.name}/followers", params: {page: 5}, headers: AP_ACCEPT
+    assert_response :success
+    doc = JSON.parse(response.body)
+    assert_empty doc["orderedItems"]
+    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=4", doc["prev"]
+  end
+
+  test "a negative page number does not escape the first page" do
+    get "/groups/#{@group.name}/followers", params: {page: -3}, headers: AP_ACCEPT
+    assert_response :success
+    assert_equal "https://app.sola.day/groups/#{@group.name}/followers?page=0",
+                 JSON.parse(response.body)["id"]
   end
 
   # --- event objects (§2.4 shape, Mobilizon-aligned) -------------------------
