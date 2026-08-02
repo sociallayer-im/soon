@@ -294,3 +294,19 @@ docker）作为合并前手动门禁 + 每周定时全量，报告归档。
 
 这条链路是 SG↔CN 互联的预演：两个节点用的是同一个镜像、同一套代码，差别只有
 `FEDERATION_HOST` 和数据库。
+
+### Actor 身份改造的实测（2026-08-02 补充）
+
+把 actor id 从 handle 改为不可变 TSID 后，在实验室实测：
+
+- Mastodon 与 Mobilizon 都能用新的 `/groups/<tsid>` 身份完整解析并保存公钥。
+- 旧的 `/groups/<handle>` URL 仍然解析（对端已缓存的不会断），但文档报告的
+  `id` 是稳定形式。
+- **改名不再破坏身份**：改名后 actor id 不变，对端持有的 URL 继续可解引用，
+  用新 handle 查 webfinger 回到同一个 id——正是 Mastodon 在 username 变更后
+  重新校验的那条路径。
+
+**一条实测出来的迁移风险**：Mobilizon 对 `(preferred_username, domain)` 有唯一
+约束，已缓存旧身份的实例会把新身份当作重复用户名**拒绝插入**。也就是说，
+actor id 一旦被对端缓存就实质无法更换——必须清空对端缓存才能换。这实证了为什么
+这项改造必须在上生产之前完成；上线之后再改，等于要求全网每个对端手工清缓存。
