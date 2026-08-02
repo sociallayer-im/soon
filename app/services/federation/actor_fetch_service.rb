@@ -9,6 +9,43 @@ module Federation
 
     class FetchError < StandardError; end
 
+    # An inbox POST naming an unknown keyId makes us fetch that actor. Without
+    # a brake, N forged keyIds become N outbound requests — the inbox becomes
+    # an amplifier, and each fetch also holds a request thread for up to the
+    # HTTP timeout. So a failed fetch is remembered briefly and not retried,
+    # and discovery is rate limited per domain (the same shape as Mastodon's
+    # per-IP stoplight and its DISCOVERIES_PER_REQUEST cap).
+    NEGATIVE_TTL = 5.minutes
+
+    @failures = {}
+    @failures_mutex = Mutex.new
+
+    def self.recently_failed?(uri)
+      @failures_mutex.synchronize do
+        expires = @failures[uri]
+        next false if expires.nil?
+        next true if expires > Time.current
+        @failures.delete(uri)
+        false
+      end
+    end
+
+    def self.remember_failure(uri)
+      @failures_mutex.synchronize do
+        @failures.delete_if { |_, exp| exp <= Time.current } if @failures.size > 5_000
+        @failures[uri] = Time.current + NEGATIVE_TTL
+      end
+    end
+
+    def self.forget_failure(uri)
+      @failures_mutex.synchronize { @failures.delete(uri) }
+    end
+
+    # test hook
+    def self.reset_failures!
+      @failures_mutex.synchronize { @failures.clear }
+    end
+
     # key_id → [FedActor, public_key_pem]; refetch: true forces a refresh
     # (used once after a failed verification, KY-5 semantics).
     def self.resolve_key(key_id, refetch: false)
@@ -22,9 +59,19 @@ module Federation
     def self.fetch!(uri)
       domain = URI.parse(uri).host.to_s.downcase
       raise FetchError, "domain #{domain} not allowed" unless FedDomainPolicy.domain_allowed?(domain)
+      raise FetchError, "#{uri} failed recently, not retrying" if recently_failed?(uri)
+      unless RateLimiter.allow?(:discovery, domain)
+        raise FetchError, "discovery rate limit reached for #{domain}"
+      end
 
-      doc = signed_get(uri)
-      validate!(doc, uri)
+      begin
+        doc = signed_get(uri)
+        validate!(doc, uri)
+      rescue FetchError, HttpClient::Error
+        remember_failure(uri)
+        raise
+      end
+      forget_failure(uri)
       upsert(doc, uri, domain)
     end
 

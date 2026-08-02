@@ -29,6 +29,12 @@ class GroupBlueprint < Blueprinter::Base
   # the associations below are a per-record N+1 otherwise.
   view :detail do
     include_view :card
+    # How many accounts on other servers follow this group. Federation is
+    # invisible to a member otherwise — the events go out, but nothing here
+    # shows that anyone out there receives them.
+    field :fed_followers_count do |group|
+      Federation.enabled? ? FedFollow.accepted.inbound.where(local: group).count : 0
+    end
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint

@@ -10,6 +10,7 @@ class FederationInboxTest < ActionDispatch::IntegrationTest
     ENV["FEDERATION_ENABLED"] = "true"
     Rails.cache.clear
     Federation::RateLimiter.reset!
+    Federation::ActorFetchService.reset_failures!
     @group = create_group
     @remote, @key = create_fed_actor
   end
@@ -219,5 +220,62 @@ class FederationInboxTest < ActionDispatch::IntegrationTest
     post "/inbox", params: "{}", headers: {"Content-Type" => "application/activity+json"}
     stat = FedDomainStat.for(@remote.domain)
     assert_operator stat.inbound_count, :>=, 1
+  end
+  # --- amplification (TEST_PLAN §6.1 RL-7) -----------------------------------
+
+  test "forged keyIds cannot turn the inbox into an outbound amplifier" do
+    # Every unknown keyId costs one outbound fetch. Without a brake, N forged
+    # ids become N outbound requests, each holding a request thread for the
+    # length of the HTTP timeout.
+    fetches = 0
+    fetcher = lambda { |_uri, headers: nil|
+      fetches += 1
+      raise Federation::HttpClient::Error, "unreachable"
+    }
+
+    Federation::HttpClient.stub(:get, fetcher) do
+      20.times do |i|
+        key_id = "https://forged.example/users/x#{i}#main-key"
+        body = JSON.generate({"@context" => Federation::JsonLd::AS,
+                              "id" => "https://forged.example/a/#{i}", "type" => "Follow",
+                              "actor" => "https://forged.example/users/x#{i}",
+                              "object" => Federation::Urls.actor_url(@group)})
+        headers = Federation::HttpSignature.sign(
+          method: :post, url: "https://app.sola.day/inbox",
+          key_id: key_id, private_key: @key.to_pem, body: body
+        ).merge("Content-Type" => "application/activity+json")
+        post "/inbox", params: body, headers: headers
+        assert_response :unauthorized
+      end
+    end
+
+    limit, = Federation::RateLimiter::LIMITS.fetch(:discovery)
+    assert_operator fetches, :<=, limit,
+                    "outbound fetches must stay under the discovery cap, got #{fetches}"
+    assert_equal 0, FedFollow.count
+  end
+
+  test "a keyId that just failed is not fetched again" do
+    fetches = 0
+    fetcher = lambda { |_uri, headers: nil|
+      fetches += 1
+      raise Federation::HttpClient::Error, "unreachable"
+    }
+    key_id = "https://forged.example/users/same#main-key"
+
+    Federation::HttpClient.stub(:get, fetcher) do
+      5.times do |i|
+        body = JSON.generate({"@context" => Federation::JsonLd::AS,
+                              "id" => "https://forged.example/same/#{i}", "type" => "Follow",
+                              "actor" => "https://forged.example/users/same",
+                              "object" => Federation::Urls.actor_url(@group)})
+        headers = Federation::HttpSignature.sign(
+          method: :post, url: "https://app.sola.day/inbox",
+          key_id: key_id, private_key: @key.to_pem, body: body
+        ).merge("Content-Type" => "application/activity+json")
+        post "/inbox", params: body, headers: headers
+      end
+    end
+    assert_equal 1, fetches, "the same failing keyId must be fetched once, not once per request"
   end
 end

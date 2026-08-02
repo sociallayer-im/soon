@@ -9,7 +9,11 @@ module Federation
       follow: [10, 60],    # per remote actor
       join: [10, 60],
       note: [6, 60],
-      actor: [60, 60]      # any activity per remote actor
+      actor: [60, 60],     # any activity per remote actor
+      # Outbound actor fetches per domain. Every unknown keyId in an inbox POST
+      # costs one, so this is what stops a flood of forged keyIds from turning
+      # our inbox into an amplifier.
+      discovery: [30, 60]
     }.freeze
 
     @counters = {}
