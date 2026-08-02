@@ -171,11 +171,16 @@ class Api::V1::ParticipantsController < Api::BaseController
     participant = @event.participants.find(params[:id])
     return render_error("participant is not pending") unless participant.status == "pending"
 
-    participant.transition!(:attending)
-    sync_form_submission!(participant, "approved")
-    if participant.remote?
-      federate_participation(participant, :approve)
-    else
+    ActiveRecord::Base.transaction do
+      # No increment!(:participant_count) here any more: the seat counter moved
+      # inside Participant#transition! on main, so writing it here as well would
+      # count the same approval twice.
+      participant.transition!(:attending)
+      sync_form_submission!(participant, "approved")
+      # outbox rows commit with the transition (outbox pattern)
+      federate_participation(participant, :approve) if participant.remote?
+    end
+    unless participant.remote?
       EventMailer.participant_approved(participant_id: participant.id).deliver_later
     end
     render json: ParticipantBlueprint.render(participant)
@@ -191,11 +196,12 @@ class Api::V1::ParticipantsController < Api::BaseController
     participant = @event.participants.find(params[:id])
     return render_error("participant is not pending") unless participant.status == "pending"
 
-    participant.transition!(:declined)
-    sync_form_submission!(participant, "rejected")
-    if participant.remote?
-      federate_participation(participant, :decline)
-    else
+    ActiveRecord::Base.transaction do
+      participant.transition!(:declined)
+      sync_form_submission!(participant, "rejected")
+      federate_participation(participant, :decline) if participant.remote?
+    end
+    unless participant.remote?
       EventMailer.participant_rejected(participant_id: participant.id).deliver_later
     end
     render json: ParticipantBlueprint.render(participant)
@@ -223,11 +229,11 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # Federation never breaks the local approval flow: the manager's action
   # already succeeded when this runs.
+  # Outbox rows only — written in the caller's transaction so the approval
+  # and the Accept/Reject owed to the remote commit or roll back together.
   def federate_participation(participant, verb)
     return unless Federation.enabled?
     Federation::ParticipationService.public_send(verb, participant)
-  rescue StandardError => e
-    Rails.logger.error("[fed] participation #{verb} #{participant.id} failed: #{e.message}")
   end
 
   # The approval decision lives on the participant; the application form's

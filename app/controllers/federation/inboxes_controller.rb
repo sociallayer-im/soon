@@ -46,12 +46,22 @@ module Federation
       return reject(:bad_activity_id, status: 400) unless valid_activity_id?(activity)
 
       FedDomainStat.record_inbound!(@domain)
-      if FedInboundActivity.record!(uri: activity["id"], activity_type: activity["type"],
-                                    fed_actor_id: fed_actor.id)
-        InboundJob.perform_later(fed_actor.id, activity)
-        Logging.log(:in, activity["type"], domain: @domain, status: "accepted")
-      else
+      outcome = FedInboundActivity.record!(uri: activity["id"], activity_type: activity["type"],
+                                           fed_actor_id: fed_actor.id)
+      if outcome == :duplicate
         Logging.log(:in, activity["type"], domain: @domain, status: "duplicate")
+      else
+        begin
+          InboundJob.perform_later(fed_actor.id, activity)
+        rescue StandardError => e
+          # Ledger row written but no job — mark failed so the remote's
+          # redelivery re-runs it instead of hitting the duplicate branch,
+          # and 500 so the remote does redeliver.
+          FedInboundActivity.mark!(activity["id"], "failed")
+          Logging.log(:in, activity["type"], domain: @domain, status: "enqueue_failed", error: e.message)
+          return head :internal_server_error
+        end
+        Logging.log(:in, activity["type"], domain: @domain, status: outcome == :retry ? "retried" : "accepted")
       end
       head :accepted
     end

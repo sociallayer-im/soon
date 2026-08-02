@@ -44,10 +44,26 @@ module Federation
       raise Error, "transport error: #{response.error.message}" if response.is_a?(HTTPX::ErrorResponse)
 
       if [301, 302, 303, 307, 308].include?(response.status)
+        # A signed POST must not be replayed at a redirect target: the
+        # signature covers the original host and request-target (invalid at
+        # the new URL anyway), and following would hand the payload to a
+        # host nobody vetted. Surface the 3xx; FedDelivery treats it as a
+        # permanent misconfiguration on the remote's side.
+        if method == :post
+          return Result.new(status: response.status, headers: response.headers.to_h, body: "")
+        end
         raise Error, "too many redirects" if redirects_left.zero?
         location = response.headers["location"] or raise Error, "redirect without location"
-        return request(method, URI.join(uri, location).to_s,
-                       headers: headers, body: body, redirects_left: redirects_left - 1)
+        new_uri = URI.join(uri, location)
+        next_headers = headers
+        if new_uri.host != uri.host
+          # Cross-host hop: the signature is bound to the old host — sending
+          # it along both fails verification and leaks a signed request to a
+          # third party. Strip and continue unsigned, like a plain fetch.
+          next_headers = headers.reject { |k, _| %w[signature authorization date digest].include?(k.to_s.downcase) }
+        end
+        return request(method, new_uri.to_s,
+                       headers: next_headers, body: body, redirects_left: redirects_left - 1)
       end
 
       if response.headers["content-length"].to_i > MAX_BODY

@@ -76,27 +76,36 @@ class Api::V1::EventsController < Api::BaseController
     if (err = reference_error(@event))
       return render_error(err)
     end
-    if @event.save
+    unless @event.valid?
+      return render_error(@event.errors.full_messages.join(", "))
+    end
+    # Save and outbox rows commit together (outbox pattern): a federation
+    # write failure rolls the business change back rather than silently
+    # leaving followers on a stale version.
+    ActiveRecord::Base.transaction do
+      @event.save!
       apply_group_ticket_designation!(@event)
-      notify_attendees_of_update if calendar_relevant_change?
       if @event.status == "published"
         federate_event!(@event, @event.status_previously_changed?(to: "published") ? :create : :update)
       elsif @event.status == "cancelled" && @event.status_previously_changed?
         federate_event!(@event, :update)
       end
-      render json: EventBlueprint.render(@event)
-    else
-      render_error(@event.errors.full_messages.join(", "))
     end
+    notify_attendees_of_update if calendar_relevant_change?
+    render json: EventBlueprint.render(@event)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # "Cancelling" an event must not destroy it (and cascade away every
   # participant/ticket/coupon) — it flips status to cancelled and keeps the record.
   def destroy
     authorize @event
-    @event.update(status: "cancelled")
+    ActiveRecord::Base.transaction do
+      @event.update!(status: "cancelled")
+      federate_event!(@event, :update)
+    end
     notify_attendees_of_cancellation
-    federate_event!(@event, :update)
     head :no_content
   end
 
@@ -113,21 +122,24 @@ class Api::V1::EventsController < Api::BaseController
   def approve
     authorize @event
     return render_error("event is not pending approval") unless @event.status == "pending"
-    @event.update!(status: "published")
-    federate_event!(@event, :create)
+    ActiveRecord::Base.transaction do
+      @event.update!(status: "published")
+      federate_event!(@event, :create)
+    end
     render json: EventBlueprint.render(@event)
   end
 
   private
 
-  # Federation must never break the API write path — publish failures are
-  # logged, the request succeeds. Cheap no-op while FEDERATION_ENABLED is off.
+  # Writes outbox rows in the caller's transaction (outbox pattern) — a
+  # failure here rolls the business change back, which is the point: local
+  # state and what followers will be told must not diverge. The HTTP delivery
+  # itself stays async in the sweeper. Cheap no-op while FEDERATION_ENABLED
+  # is off.
   def federate_event!(event, verb)
     return unless Federation.enabled?
     return unless event.visibility == "public"
     Federation::OutboxService.publish_event(event, verb)
-  rescue StandardError => e
-    Rails.logger.error("[fed] publish_event #{verb} #{event.id} failed: #{e.message}")
   end
 
   def set_event

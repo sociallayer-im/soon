@@ -209,7 +209,10 @@ module Federation
           object = EventSerializer.new(event).as_ap
           {
             "@context" => JsonLd.context,
-            "id" => "#{Urls.event_url(event)}/activity/#{verb}-#{event.updated_at.to_i}",
+            # ms precision + random tail: two saves in the same second must
+            # not share an id, or the peer's idempotency ledger drops the
+            # second update as a replay
+            "id" => "#{Urls.event_url(event)}/activity/#{verb}-#{(event.updated_at.to_f * 1000).to_i}-#{SecureRandom.hex(4)}",
             "type" => verb == :create ? "Create" : "Update",
             "actor" => object["attributedTo"],
             "to" => object["to"],
@@ -226,7 +229,7 @@ module Federation
       uri = Urls.event_url(event)
       {
         "@context" => JsonLd::AS,
-        "id" => "#{uri}/activity/delete-#{Time.current.to_i}",
+        "id" => "#{uri}/activity/delete-#{(Time.current.to_f * 1000).to_i}-#{SecureRandom.hex(4)}",
         "type" => "Delete",
         "actor" => Urls.actor_url(event.group),
         "to" => [JsonLd::PUBLIC],
@@ -251,10 +254,15 @@ module Federation
     end
 
     def self.enqueue(payload, sender:, inboxes:)
-      rows = inboxes.map { |inbox|
-        FedDelivery.create!(payload: payload, sender_type: sender.class.name,
-                            sender_id: sender.id, inbox_url: inbox)
-      }
+      # One transaction for the whole fan-out (joining the caller's when there
+      # is one): a failure mid-loop must not leave some inboxes owed the
+      # activity and others not.
+      rows = ActiveRecord::Base.transaction do
+        inboxes.map { |inbox|
+          FedDelivery.create!(payload: payload, sender_type: sender.class.name,
+                              sender_id: sender.id, inbox_url: inbox)
+        }
+      end
       # after_commit so the sweeper never races an uncommitted row
       ActiveRecord::Base.current_transaction.after_commit { Federation::SweeperJob.perform_later }
       rows

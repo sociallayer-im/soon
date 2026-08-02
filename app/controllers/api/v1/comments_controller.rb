@@ -6,13 +6,20 @@ class Api::V1::CommentsController < Api::BaseController
   # POST /api/v1/comments
   def create
     comment = Comment.new(comment_params.merge(user: current_user))
-    if comment.save
-      CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"
-      federate_comment(comment)
-      render json: CommentBlueprint.render(comment), status: :created
-    else
-      render_error(comment.errors.full_messages.join(", "))
+    unless comment.valid?
+      return render_error(comment.errors.full_messages.join(", "))
     end
+    # Comment and its outbox rows commit together — a federation write
+    # failure rolls the comment back rather than saving it locally while the
+    # servers following the event never hear of it.
+    ActiveRecord::Base.transaction do
+      comment.save!
+      federate_comment(comment)
+    end
+    CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"
+    render json: CommentBlueprint.render(comment), status: :created
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # POST /api/v1/comments/:id/remove
@@ -67,16 +74,14 @@ class Api::V1::CommentsController < Api::BaseController
     model.with_deleted.find_by(id: comment.item_id)&.refresh_stars_count!
   end
 
-  # Push a comment on a public event out to the servers following it. Never
-  # let a federation problem fail the write — the comment is already saved.
+  # Push a comment on a public event out to the servers following it —
+  # outbox rows only, written in create's transaction; delivery is async.
   def federate_comment(comment)
     return unless Federation.enabled?
     return unless comment.comment_type == "comment" && comment.item_type == "Event"
     event = comment.item
     return unless event&.visibility == "public" && event.status == "published"
     Federation::OutboxService.publish_comment(comment, event)
-  rescue StandardError => e
-    Rails.logger.error("[fed] publish_comment #{comment.id} failed: #{e.message}")
   end
 
   def set_comment

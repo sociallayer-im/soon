@@ -21,11 +21,21 @@ module Federation
       return :ignored if existing && !existing.cancelled?
 
       seat = mode == "free"
+      # cheap unlocked pre-check; the authoritative one is under the row lock
       return reject(event, fed_actor, activity, "event is full") if seat && full?(event)
 
       status = seat ? "attending" : "pending"
       participant = nil
+      capacity_hit = false
       ActiveRecord::Base.transaction do
+        # Serialize capacity: concurrent Joins each lock the event row, so the
+        # count they check is the count their increment builds on — without
+        # this, N Joins in flight all pass full? and the event oversells.
+        event.lock!
+        if seat && full?(event)
+          capacity_hit = true
+          raise ActiveRecord::Rollback
+        end
         participant = existing || Participant.new(event: event, fed_actor_id: fed_actor.id)
         if existing
           participant.transition!(status, fed_join_uri: activity["id"], registered_at: Time.current,
@@ -39,6 +49,7 @@ module Federation
         event.increment!(:participant_count) if status == "attending"
         OutboxService.accept_join(event, fed_actor, activity, participant) if seat
       end
+      return reject(event, fed_actor, activity, "event is full") if capacity_hit
       Logging.log(:in, "Join", domain: fed_actor.domain, status: status, event: event.id)
       seat ? :accepted : :pending
     end

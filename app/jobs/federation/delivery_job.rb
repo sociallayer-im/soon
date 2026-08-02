@@ -19,10 +19,10 @@ module Federation
       headers["Content-Type"] = "application/activity+json"
 
       domain = URI.parse(delivery.inbox_url).host.to_s.downcase
-      status, error = perform_request(delivery.inbox_url, body, headers)
+      status, error, retry_after = perform_request(delivery.inbox_url, body, headers)
 
       delivery.increment!(:attempts)
-      delivery.mark_result!(status, error: error)
+      delivery.mark_result!(status, error: error, retry_after: retry_after)
       FedDomainStat.record_delivery!(domain, success: delivery.status == "delivered", error: error)
       Logging.log(:out, delivery.payload["type"], domain: domain, status: delivery.status,
                   http: status, attempts: delivery.attempts, ms: nil)
@@ -35,9 +35,9 @@ module Federation
       # lazily re-checks out on the next query
       ActiveRecord::Base.connection_pool.release_connection
       response = HttpClient.post(url, body: body, headers: headers)
-      [response.status, nil]
+      [response.status, nil, response.headers["retry-after"]]
     rescue HttpClient::Error => e
-      [nil, e.message]
+      [nil, e.message, nil]
     end
 
     def sender_key_id(delivery)

@@ -214,3 +214,22 @@ ssh root@sg.sola.day 'cd /opt/fedlab && docker compose stop seastar mastodon-sid
 
 **开关**：`FEDERATION_ENABLED` 默认关闭，所有联邦路由 404。这是灰度与回滚的总闸，
 关掉后已铸造的 actor id 与密钥保留，重开身份连续。
+
+## 10. 外部 review 整改（2026-08-02）
+
+一份独立 review 对照代码提出 19 项。其中约半数（评论出站、集合分页、keyId 负
+缓存、远端 Event 镜像、出站 Follow/Join、Accept/Reject/Update/Delete、联邦前端）
+在其撰写后已实现；核实后确认真实存在并修复的六项：
+
+| # | 缺陷 | 修复 |
+|---|------|------|
+| 1 | 入站账本在 Job 运行前就标 `processed`，处理失败的活动被永久丢失（远端重投被当成重复） | 状态机 `received → processed/ignored/failed`；`failed` 行在重投时被原子认领重跑；入队失败标 `failed` 并回 500 让远端重试 |
+| 2 | 业务保存后才写 delivery，出站异常被吞掉——本地成功、联邦静默丢失；多 inbox 扇出可能写一半 | Event 更新/取消/审批、评论、报名审批全部与 outbox 行同事务提交；`enqueue` 扇出整体一个事务；不再吞异常，失败回滚业务变更 |
+| 3 | 远端 Join 的容量检查在事务外，并发可超卖 | 事务内 `event.lock!` 后重查容量，锁外保留廉价预检 |
+| 4 | 429 的 Retry-After 被忽略；POST 跟随重定向会把签名请求重放到新 host | Retry-After（秒数/HTTP-date，封顶一天）与自身退避取大；POST 遇 3xx 不跟随、按永久失败处理；GET 跨 host 跳转剥掉 Signature/Date/Digest |
+| 5 | Event activity id 用秒级 `updated_at`，同秒两次更新 id 相同，被对端幂等丢弃 | 毫秒 + 随机后缀 |
+| 6 | `fed_instance_keys` 无数据库级单例约束，`rescue RecordNotUnique` 背后没有唯一索引 | `singleton_guard` 常量列 + 唯一索引，并发首建确定性收敛为一行 |
+
+每项都有对应回归测试（`federation_hardening_test.rb` 等，套件 942 例全绿）。
+仍有效的遗留项：公网真实实例验证（上线前置）、生产 `FEDERATION_ENABLED`
+灰度方案、S2S harness 的故障注入扩展。
