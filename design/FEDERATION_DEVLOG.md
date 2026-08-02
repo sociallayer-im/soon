@@ -263,3 +263,40 @@ ssh root@sg.sola.day 'cd /opt/fedlab && docker compose stop seastar mastodon-sid
 | P2-9/10 | seastar：pending 统一为"取消申请"；外链 noopener,noreferrer |
 
 **明确遗留**（不阻塞实验室，上线前评估）：P1-10（GoodJob 队列隔离与 token-bucket 出站限速——生产单线程约束下需要独立设计）、P1-13（HTTP 响应流式硬上限——httpx 层）、P1-14 的 DNS rebinding socket pinning、P2-1（账本/投递留存策略）、P2-5（handle 复用的 tombstone 策略）、P2-8（migration preflight 惯例）。
+
+## 12. Move / FEP-8b32 / 自定义域名（2026-08-03）
+
+一轮把 PLAN §9.4/§9.6 从规划变为实现，全部经 sg.sola.day 实验室真机验证
+（INTEROP §11）。commits `05ab911`（实现+测试）、`cee9467`/`cb76e01`（实测记录）。
+
+**Move**：入站在 `InboxService#handle_move`——只认 actor 自述（object 必须等于
+已验签的 sender uri），target 新鲜抓取后核对 `alsoKnownAs` 互指，通过才重指
+本地关注（旧边销毁、向继任者发全新 id 的 Follow）；target 是本地 actor 时走
+local-target 分支，核对的是本地的 `fed_also_known_as`。出站
+`OutboxService.move_actor` 先抓 target 验证认领（不通过抛 `NotAttested`），
+广播事务内写 `fed_moved_to`。API：`POST /api/v1/federation/groups/:id/aliases`
+与 `/move`（GroupPolicy#manage?）。
+
+**FEP-8b32**（eddsa-jcs-2022）：`lib/federation/{jcs,multibase,integrity_proof}.rb`
+自实现（RFC 8785 + base58btc，无新 gem）。每个 actor 第二对密钥（Ed25519，
+私钥 encrypts，公钥即 Multikey 串），actor 文档以 `assertionMethod` 发布。
+出站 Event/Note 带 proof，`created` 锚定 `updated_at` 使序列化确定；因 proof
+绑定 `@context`，活动改为**整体嵌入对象**（Mastodon/Mobilizon 实测不受影响）。
+入站校验 warn-only——对端重试时重序列化是合法行为。
+
+**自定义域名**：`groups.custom_domain`（唯一、normalizes 小写、不进
+group_params——绑定是运维动作）。WebFinger 双向闭环：绑定域只应答自己群组的
+精确 name；规范域对该群组也报自定义域 subject。`Urls.acct` 按 actor 分派。
+
+**实测教训**：
+
+- Mastodon 4.6 规范 actor id 是 `/ap/users/<数字id>`；`/users/<handle>` 文档的
+  id 与请求 URI 不同，被我们的 `id == fetched uri` 校验正确拒绝。**Move target
+  必须用对端规范 id。**
+- 实验室 DNS：`*.seven.fan` 泛解析已整体指到 172.81.108.136（cf CLI 修改），
+  `hi.seven.fan` 走 Traefik + LE，Mastodon 端到端发现/关注/投递全通，canonical
+  acct 归属自定义域。
+- 已知未做：迁移后的旧群组未禁止继续发布（Mastodon 会冻结已迁移账号）；
+  User 侧无 alias/move API（服务层支持，入口只开了 Group）。
+
+测试：966 runs / 3056 assertions / 0 failures（新增 15 例）。
