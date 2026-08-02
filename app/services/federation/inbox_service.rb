@@ -110,7 +110,9 @@ module Federation
         Logging.log(:in, "Delete", domain: fed_actor.domain, status: "not_owned")
         return :ignored
       end
-      event.update!(status: "CANCELLED")
+      # the barrier also advances: an old Create/Update retry arriving after
+      # this Delete must not resurrect the event (P1-11)
+      event.update!(status: "CANCELLED", remote_updated_at: Time.current)
       Logging.log(:in, "Delete", domain: fed_actor.domain, status: "event_cancelled")
       :processed
     end
@@ -175,6 +177,12 @@ module Federation
       event ||= parent&.item if parent&.item_type == "Event"
       if event.nil?
         Logging.log(:in, "Create", domain: fed_actor.domain, status: "no_local_parent")
+        return :ignored
+      end
+      # a remote Note must not attach to (and thereby probe) a non-public
+      # local event — only federated-visible events accept remote replies
+      unless event.visibility == "public" && event.status == "published"
+        Logging.log(:in, "Create", domain: fed_actor.domain, status: "target_not_public")
         return :ignored
       end
 

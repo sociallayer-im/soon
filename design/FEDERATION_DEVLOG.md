@@ -233,3 +233,33 @@ ssh root@sg.sola.day 'cd /opt/fedlab && docker compose stop seastar mastodon-sid
 每项都有对应回归测试（`federation_hardening_test.rb` 等，套件 942 例全绿）。
 仍有效的遗留项：公网真实实例验证（上线前置）、生产 `FEDERATION_ENABLED`
 灰度方案、S2S harness 的故障注入扩展。
+
+## 11. 第二轮外部 review 整改（2026-08-03）
+
+18 项 P1 + 10 项 P2。核实后修复的（每项带回归测试，套件 951 例全绿）：
+
+| Review | 修复 |
+|---|---|
+| P1-1 | 出站签名身份在 **enqueue 时快照**进 `fed_deliveries`（`signing_key_id`/`signing_key_pem`，加密）——被删 Group 的 Delete 公告仍用它自己的 key 签名；group destroy 与公告同事务，不再吞异常 |
+| P1-2 | Follow/Unfollow/Join/Leave 的关系变更与 outbox 行同事务 |
+| P1-3 | 活动 id 按**尝试**铸造：pending 复用（幂等重发），rejected/cancelled 后重试铸新 id——否则对端按 id 去重永久丢弃重试 |
+| P1-4 | 入站账本绑定 actor+type（不匹配 → 403 conflict）；body digest 存档、漂移仅告警（重试可能重新序列化，不能误杀合法重投） |
+| P1-5 | "已写 received、未入队"的进程崩溃窗口：超过 15 分钟的 received 行可被远端重投原子认领重跑 |
+| P1-6 | 同 host 接管：attributedTo 必须等于验签 actor；已存在镜像的 owner 不可被 Update 更换 |
+| P1-7 | 只镜像 to/cc 含 `as:Public` 的事件（完全无 addressing 的旧对端除外） |
+| P1-8 | public→private/draft 发 Tombstone Delete；评论 remove 联邦 Delete(Note) |
+| P1-9 | DeliveryJob 发送前重查开关与域策略：域被封 → `suppressed`，开关关 → 回 pending 稍后恢复 |
+| P1-11 | `remote_updated_at` 单调屏障：旧 Update 不回滚新状态，Delete 后旧活动不复活 |
+| P1-12 | actor 文档强校验（publicKey.id 同源、owner 一致、PEM 可解析、inbox 为 URL）；畸形文档统一进负缓存而非 500/绕缓存 |
+| P1-14(部分) | 补 IPv6 特殊段（::/128、ff00::/8、64:ff9b::/96 等）；socket 级 IP pinning 仍遗留 |
+| P1-15 | 全局 discovery 预算（域轮换绕不过）；域名统一 canonicalize |
+| P1-16 | 出站 Follow/Join 前统一域策略检查；discovery cache-hit 路径同 |
+| P1-17 | `FedEvent.visible` scope：封禁 actor/域后已镜像内容从公共 list/detail 消失 |
+| P1-18 | 验签成功但 metadata 过期 → 异步 ActorRefreshJob（限流 2/5min/域） |
+| P2-2 | FedDomainStat 计数改单语句 SQL 自增（消除 lost update） |
+| P2-3 | 集合分页 page clamp 到真实页数（拒绝任意深 OFFSET） |
+| P2-6 | 远端 Note 指向非 public 本地事件 → ignored |
+| P2-7 | 非法 FEDERATION_MODE fail-closed（按 allowlist 处理） |
+| P2-9/10 | seastar：pending 统一为"取消申请"；外链 noopener,noreferrer |
+
+**明确遗留**（不阻塞实验室，上线前评估）：P1-10（GoodJob 队列隔离与 token-bucket 出站限速——生产单线程约束下需要独立设计）、P1-13（HTTP 响应流式硬上限——httpx 层）、P1-14 的 DNS rebinding socket pinning、P2-1（账本/投递留存策略）、P2-5（handle 复用的 tombstone 策略）、P2-8（migration preflight 惯例）。

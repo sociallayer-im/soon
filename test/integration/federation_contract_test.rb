@@ -54,6 +54,8 @@ class FederationContractTest < ActionDispatch::IntegrationTest
     when Array
       node.map { |v| deep_rehost(v) }
     when String
+      # the AS namespace (incl. as:Public) is vocabulary, not a host to move
+      return node if node.start_with?("https://www.w3.org/")
       node.match?(%r{\Ahttps?://}) ? rehost(node) : node
     else
       node
@@ -189,12 +191,13 @@ class FederationContractTest < ActionDispatch::IntegrationTest
     join = fixture("mobilizon-join-activity", "object" => Federation::Urls.event_url(event))
     deliver(join)
 
-    # same id, different intent — the ledger is keyed on the activity id, so
-    # this never reaches the handler
+    # same id, different TYPE — no longer a silent duplicate: the ledger
+    # binds the claim to actor+type, so this is rejected as a conflict
+    # (P1-4) and never reaches the handler
     leave = fixture("mobilizon-leave-activity",
                     "object" => Federation::Urls.event_url(event), "id" => join["id"])
     deliver(leave)
-    assert_response :accepted
+    assert_response :forbidden
     assert_equal "attending", Participant.last.status, "replayed id must not act"
   end
 

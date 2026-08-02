@@ -53,15 +53,26 @@ module Federation
       actor = FedActor.find_by(key_id: key_id) || FedActor.find_by(uri: actor_uri)
       actor = fetch!(actor_uri) if actor.nil? || actor.public_key_pem.blank? || refetch
       raise FetchError, "no public key for #{key_id}" if actor.public_key_pem.blank?
+      # a verifying-but-stale actor gets an ASYNC refresh: metadata (inbox,
+      # sharedInbox) drifts remotely and no failure would ever trigger a
+      # refetch on this path (P1-18). Never blocks the request.
+      if actor.stale? && RateLimiter.allow?(:refresh, actor.domain)
+        ActorRefreshJob.perform_later(actor.uri)
+      end
       actor
     end
 
     def self.fetch!(uri)
-      domain = URI.parse(uri).host.to_s.downcase
+      domain = FedDomainPolicy.canonicalize(URI.parse(uri).host)
       raise FetchError, "domain #{domain} not allowed" unless FedDomainPolicy.domain_allowed?(domain)
       raise FetchError, "#{uri} failed recently, not retrying" if recently_failed?(uri)
       unless RateLimiter.allow?(:discovery, domain)
         raise FetchError, "discovery rate limit reached for #{domain}"
+      end
+      # Per-domain budgets alone are defeated by rotating throwaway domains —
+      # every fetch also draws from ONE global pool (P1-15).
+      unless RateLimiter.allow?(:discovery_global, "all")
+        raise FetchError, "global discovery rate limit reached"
       end
 
       begin
@@ -70,6 +81,11 @@ module Federation
       rescue FetchError, HttpClient::Error
         remember_failure(uri)
         raise
+      rescue URI::Error, TypeError, NoMethodError => e
+        # a hostile document must become a cacheable failure, not a 500 and
+        # not an uncached path that re-fetches on every bad signature (P1-12)
+        remember_failure(uri)
+        raise FetchError, "malformed actor document: #{e.class}"
       end
       forget_failure(uri)
       upsert(doc, uri, domain)
@@ -92,6 +108,7 @@ module Federation
     end
 
     def self.validate!(doc, uri)
+      raise FetchError, "actor document is not an object" unless doc.is_a?(Hash)
       raise FetchError, "id #{doc['id']} != fetched uri #{uri}" unless doc["id"] == uri
       context = Array(doc["@context"]).flatten
       unless context.include?(JsonLd::AS) || doc["@context"] == JsonLd::AS
@@ -99,11 +116,37 @@ module Federation
       end
       type = Array(doc["type"]).find { |t| SUPPORTED_TYPES.include?(t) }
       raise FetchError, "unsupported actor type #{doc['type']}" if type.nil?
-      raise FetchError, "actor has no inbox" if doc["inbox"].blank?
+      raise FetchError, "actor inbox is not an http(s) URL" unless http_url?(doc["inbox"])
+
+      # Only a complete, internally consistent key may enter the cache: a
+      # cached actor with a broken key would fail resolve_key on every
+      # request and re-fetch forever, bypassing the negative cache (P1-12).
+      key = doc["publicKey"]
+      key = key.first if key.is_a?(Array)
+      raise FetchError, "actor has no publicKey object" unless key.is_a?(Hash)
+      raise FetchError, "publicKey.id is not a URL" unless http_url?(key["id"])
+      unless URI.parse(key["id"].split("#").first).host == URI.parse(uri).host
+        raise FetchError, "publicKey.id is on a different host than the actor"
+      end
+      owner = key["owner"]
+      raise FetchError, "publicKey.owner != actor id" if owner.present? && owner != uri
+      pem = key["publicKeyPem"]
+      raise FetchError, "publicKeyPem missing" unless pem.is_a?(String)
+      begin
+        OpenSSL::PKey::RSA.new(pem)
+      rescue OpenSSL::PKey::PKeyError
+        raise FetchError, "publicKeyPem is not a valid RSA key"
+      end
+    end
+
+    def self.http_url?(value)
+      value.is_a?(String) && value.match?(%r{\Ahttps?://\S+\z})
     end
 
     def self.upsert(doc, uri, domain)
-      key = doc["publicKey"] || {}
+      key = doc["publicKey"]
+      key = key.first if key.is_a?(Array)
+      key = {} unless key.is_a?(Hash)
       actor = FedActor.find_or_initialize_by(uri: uri)
       actor.assign_attributes(
         domain: domain,

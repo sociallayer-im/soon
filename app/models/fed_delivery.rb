@@ -3,11 +3,14 @@
 # sweeper under a rate cap — never delivered inline
 # (design/FEDERATION_PLAN.md §2.6, design/FEDERATION_TEST_PLAN.md §2).
 class FedDelivery < ApplicationRecord
-  STATUSES = %w[pending delivering delivered failed_permanent].freeze
+  STATUSES = %w[pending delivering delivered failed_permanent suppressed].freeze
   MAX_ATTEMPTS = 10
   # Mastodon semantics: these response codes are retryable, every other 4xx
   # (and 501) is permanent.
   RETRYABLE_HTTP = [401, 408, 429].freeze
+
+  # the private half of the snapshotted signing identity (P1-1)
+  encrypts :signing_key_pem
 
   validates :status, inclusion: {in: STATUSES}
   validates :inbox_url, presence: true

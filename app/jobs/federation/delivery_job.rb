@@ -10,6 +10,21 @@ module Federation
       delivery = FedDelivery.find_by(id: delivery_id)
       return if delivery.nil? || delivery.status != "delivering"
 
+      domain_gate = URI.parse(delivery.inbox_url).host.to_s.downcase
+      # Re-check the gates at send time, not just at enqueue: an admin block
+      # or the kill switch flipping mid-flight must stop a claimed delivery.
+      unless Federation.enabled?
+        # not terminal — re-enabling the switch resumes where we stopped
+        delivery.update!(status: "pending", next_attempt_at: 10.minutes.from_now,
+                         last_error: "federation disabled")
+        return
+      end
+      unless FedDomainPolicy.domain_allowed?(domain_gate)
+        delivery.update!(status: "suppressed", last_error: "domain blocked by policy")
+        Logging.log(:out, delivery.payload["type"], domain: domain_gate, status: "suppressed")
+        return
+      end
+
       body = JSON.generate(delivery.payload)
       headers = HttpSignature.sign(
         method: :post, url: delivery.inbox_url,
@@ -40,12 +55,17 @@ module Federation
       [nil, e.message, nil]
     end
 
+    # Prefer the key snapshotted at enqueue time: the sender row may be gone
+    # by now (a deleted group's own Delete announcement) or its key rotated —
+    # the signature must match the identity the payload claims.
     def sender_key_id(delivery)
+      return delivery.signing_key_id if delivery.signing_key_id.present?
       sender = sender_for(delivery)
       sender ? Urls.key_id(sender) : Urls.instance_key_id
     end
 
     def sender_private_key(delivery)
+      return delivery.signing_key_pem if delivery.signing_key_pem.present?
       sender = sender_for(delivery)
       sender ? sender.federation_keypair!.to_pem : FedInstanceKey.current.private_key
     end

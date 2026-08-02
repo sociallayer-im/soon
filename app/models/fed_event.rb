@@ -8,6 +8,16 @@ class FedEvent < ApplicationRecord
 
   scope :upcoming, -> { where("end_time IS NULL OR end_time >= ?", Time.current) }
   scope :listable, -> { where.not(status: "CANCELLED") }
+  # Everything the public read surface may show: an admin block must cover
+  # content mirrored BEFORE the block, not just future inbound (P1-17).
+  scope :visible, -> {
+    base = joins(:fed_actor).where(fed_actors: {blocked_at: nil})
+    if FedDomainPolicy.mode == "allowlist"
+      base.where(fed_actors: {domain: FedDomainPolicy.allowed_domains})
+    else
+      base.where.not(fed_actors: {domain: FedDomainPolicy.blocked_domains})
+    end
+  }
 
   def cancelled? = status == "CANCELLED"
 

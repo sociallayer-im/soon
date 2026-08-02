@@ -74,7 +74,10 @@ module Federation
         })
       end
 
-      page = [params[:page].to_i, 0].max
+      # clamp: an arbitrary ?page=10^9 is a free deep-OFFSET table scan (P2-3);
+      # nothing legitimate walks past what totalItems says exists
+      max_page = [(total - 1) / PAGE_SIZE, 0].max
+      page = params[:page].to_i.clamp(0, max_page)
       items = page_items.call(page)
       doc = {
         "@context" => JsonLd::AS,

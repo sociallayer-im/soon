@@ -99,6 +99,153 @@ class FederationHardeningTest < ActionDispatch::IntegrationTest
     assert_equal 2, ids.uniq.size, "same-second updates must not share an activity id"
   end
 
+  # --- retraction ------------------------------------------------------------
+
+  def followed_public_event
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    FedFollow.create!(local: group, fed_actor: @remote, direction: "inbound",
+                      state: "accepted", uri: "#{@remote.uri}#f-#{SecureRandom.hex(3)}")
+    [owner, event]
+  end
+
+  test "flipping a federated event to private sends a Delete, not silence" do
+    owner, event = followed_public_event
+    assert_difference "FedDelivery.count", 1 do
+      patch "/api/v1/events/#{event.id}", params: {event: {visibility: "private"}},
+        headers: auth_headers(owner)
+    end
+    assert_response :success
+    payload = FedDelivery.last.payload
+    assert_equal "Delete", payload["type"]
+    assert_equal "Tombstone", payload["object"]["type"]
+  end
+
+  test "removing a federated comment sends a Delete for its Note" do
+    owner, event = followed_public_event
+    comment = nil
+    assert_difference "FedDelivery.count", 1 do # the Create
+      post "/api/v1/comments", params: {comment: {item_type: "Event", item_id: event.id,
+        comment_type: "comment", content: "hello fediverse"}}, headers: auth_headers(owner)
+      assert_response :created
+      comment = Comment.last
+    end
+    assert_difference "FedDelivery.count", 1 do # the Delete
+      post "/api/v1/comments/#{comment.id}/remove", headers: auth_headers(owner)
+      assert_response :success
+    end
+    payload = FedDelivery.last.payload
+    assert_equal "Delete", payload["type"]
+    assert_includes payload["object"]["id"], "/comments/#{comment.id}"
+  end
+
+  # --- remote mirror integrity -----------------------------------------------
+
+  def remote_event(actor, **over)
+    {
+      "type" => "Event", "id" => "#{actor.uri}/events/#{SecureRandom.hex(4)}",
+      "name" => "Meetup", "startTime" => 2.days.from_now.utc.iso8601,
+      "attributedTo" => actor.uri,
+      "to" => ["https://www.w3.org/ns/activitystreams#Public"]
+    }.merge(over)
+  end
+
+  test "a same-host actor cannot take over another actor's mirrored event" do
+    victim, _vkey = create_fed_actor(uri: "https://shared.example/users/victim")
+    attacker, _akey = create_fed_actor(uri: "https://shared.example/users/attacker")
+    obj = remote_event(victim)
+    original = Federation::RemoteEventService.upsert(obj, victim)
+    assert original
+
+    hijack = obj.merge("name" => "Hijacked", "attributedTo" => attacker.uri)
+    assert_nil Federation::RemoteEventService.upsert(hijack, attacker)
+    # even claiming the victim's attribution fails on the ownership check
+    hijack2 = obj.merge("name" => "Hijacked", "attributedTo" => victim.uri)
+    assert_nil Federation::RemoteEventService.upsert(hijack2, attacker)
+    assert_equal "Meetup", original.reload.title
+  end
+
+  test "an event addressed to followers-only is not mirrored" do
+    obj = remote_event(@remote, "to" => ["#{@remote.uri}/followers"], "cc" => [])
+    assert_nil Federation::RemoteEventService.upsert(obj, @remote)
+    # explicit Public in cc is enough
+    pub = remote_event(@remote, "to" => ["#{@remote.uri}/followers"],
+                                "cc" => ["https://www.w3.org/ns/activitystreams#Public"])
+    assert Federation::RemoteEventService.upsert(pub, @remote)
+  end
+
+  test "an older Update cannot roll back a newer state, nor resurrect a Delete" do
+    obj = remote_event(@remote, "name" => "v1", "updated" => 2.hours.ago.utc.iso8601)
+    event = Federation::RemoteEventService.upsert(obj, @remote)
+    Federation::RemoteEventService.upsert(
+      obj.merge("name" => "v2", "updated" => 1.hour.ago.utc.iso8601), @remote)
+    assert_equal "v2", event.reload.title
+
+    # delayed retry of v1 arrives after v2
+    Federation::RemoteEventService.upsert(
+      obj.merge("name" => "v1", "updated" => 2.hours.ago.utc.iso8601), @remote)
+    assert_equal "v2", event.reload.title, "older update must not roll back"
+
+    # tombstone, then an old Update tries to revive
+    event.update!(status: "CANCELLED", remote_updated_at: Time.current)
+    Federation::RemoteEventService.upsert(
+      obj.merge("name" => "revived", "updated" => 30.minutes.ago.utc.iso8601), @remote)
+    assert_equal "CANCELLED", event.reload.status, "a delete is a version barrier"
+  end
+
+  test "a remote Note aimed at a private local event is ignored" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, visibility: "private", status: "published")
+    note = {"@context" => Federation::JsonLd::AS, "id" => "#{@remote.uri}/note/1",
+            "type" => "Create", "actor" => @remote.uri,
+            "object" => {"type" => "Note", "id" => "#{@remote.uri}/n/1",
+                         "inReplyTo" => Federation::Urls.event_url(event),
+                         "content" => "probing"}}
+    assert_no_difference "Comment.count" do
+      perform_enqueued_jobs { post_signed_activity(@remote, @key, note) }
+    end
+  end
+
+  # --- block coverage & kill switch ------------------------------------------
+
+  test "blocking an actor hides its already-mirrored events from the public API" do
+    obj = remote_event(@remote)
+    event = Federation::RemoteEventService.upsert(obj, @remote)
+
+    get "/api/v1/federation/events"
+    assert_response :success
+    assert_includes response.parsed_body.map { |e| e["uri"] }, event.uri
+
+    @remote.update!(blocked_at: Time.current)
+    get "/api/v1/federation/events"
+    assert_equal [], response.parsed_body.map { |e| e["uri"] }
+    get "/api/v1/federation/events/#{event.id}"
+    assert_response :not_found
+  end
+
+  test "a domain blocked after enqueue suppresses the claimed delivery at send time" do
+    d = FedDelivery.create!(payload: {"type" => "Create", "id" => "x"},
+                            sender_type: "instance", sender_id: nil,
+                            inbox_url: "https://#{@remote.domain}/inbox", status: "delivering")
+    FedDomainPolicy.create!(domain: @remote.domain, policy: "blocked")
+    Federation::DeliveryJob.perform_now(d.id)
+    assert_equal "suppressed", d.reload.status
+  end
+
+  test "the kill switch parks a claimed delivery instead of sending" do
+    d = FedDelivery.create!(payload: {"type" => "Create", "id" => "x"},
+                            sender_type: "instance", sender_id: nil,
+                            inbox_url: "https://#{@remote.domain}/inbox", status: "delivering")
+    ENV.delete("FEDERATION_ENABLED")
+    Federation::DeliveryJob.perform_now(d.id)
+    assert_equal "pending", d.reload.status
+    assert d.next_attempt_at > Time.current
+  ensure
+    ENV["FEDERATION_ENABLED"] = "true"
+  end
+
   # --- instance key singleton ------------------------------------------------
 
   test "create_singleton loses gracefully to an existing key" do

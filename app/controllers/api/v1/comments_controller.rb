@@ -26,7 +26,12 @@ class Api::V1::CommentsController < Api::BaseController
   def remove
     return render_error("not authorized", status: :forbidden) unless @comment.user_id == current_user.id
 
-    @comment.update(removed: true)
+    ActiveRecord::Base.transaction do
+      @comment.update!(removed: true)
+      # if this went out as a Note, remote threads must get the Delete —
+      # local removal alone leaves it live on every follower (P1-8)
+      federate_comment_removal(@comment)
+    end
     render json: { result: "ok" }
   end
 
@@ -82,6 +87,15 @@ class Api::V1::CommentsController < Api::BaseController
     event = comment.item
     return unless event&.visibility == "public" && event.status == "published"
     Federation::OutboxService.publish_comment(comment, event)
+  end
+
+  # Mirror of federate_comment's guards: only what was published gets retracted.
+  def federate_comment_removal(comment)
+    return unless Federation.enabled?
+    return unless comment.comment_type == "comment" && comment.item_type == "Event"
+    event = comment.item
+    return unless event&.visibility == "public" && event.status == "published"
+    Federation::OutboxService.delete_comment(comment, event)
   end
 
   def set_comment

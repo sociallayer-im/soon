@@ -5,32 +5,33 @@ class FedDomainStat < ApplicationRecord
   UNAVAILABLE_AFTER_DAYS = 7
 
   def self.for(domain)
-    domain = domain.to_s.downcase
+    domain = FedDomainPolicy.canonicalize(domain)
     find_by(domain: domain) || create!(domain: domain)
   rescue ActiveRecord::RecordNotUnique
     find_by!(domain: domain)
   end
 
+  # Counters use single-statement SQL increments: the read-modify-write via
+  # update! lost counts whenever two requests raced (P2-2 lost update).
   def self.record_delivery!(domain, success:, error: nil)
     stat = self.for(domain)
     if success
-      stat.update!(delivered_count: stat.delivered_count + 1,
-                   last_success_at: Time.current, unavailable_since: nil, last_error: nil)
+      where(id: stat.id).update_all(["delivered_count = delivered_count + 1, " \
+        "last_success_at = ?, unavailable_since = NULL, last_error = NULL", Time.current])
     else
-      stat.update!(failed_count: stat.failed_count + 1,
-                   last_failure_at: Time.current,
-                   unavailable_since: stat.unavailable_since || Date.current,
-                   last_error: error&.truncate(255))
+      where(id: stat.id).update_all(["failed_count = failed_count + 1, last_failure_at = ?, " \
+        "unavailable_since = COALESCE(unavailable_since, ?), last_error = ?",
+        Time.current, Date.current, error&.truncate(255)])
     end
   end
 
   def self.record_inbound!(domain, rejected: false)
     stat = self.for(domain)
     if rejected
-      stat.update!(inbound_rejected_count: stat.inbound_rejected_count + 1)
+      where(id: stat.id).update_all("inbound_rejected_count = inbound_rejected_count + 1")
     else
       # any legitimate inbound contact proves the domain is alive
-      stat.update!(inbound_count: stat.inbound_count + 1, unavailable_since: nil)
+      where(id: stat.id).update_all("inbound_count = inbound_count + 1, unavailable_since = NULL")
     end
   end
 

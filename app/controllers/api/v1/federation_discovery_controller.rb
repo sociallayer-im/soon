@@ -26,6 +26,9 @@ module Api
       def follow
         actor = FedActor.find_by(uri: params[:uri]) || Federation::ActorFetchService.fetch!(params[:uri].to_s)
         return render_error("actor is blocked", status: :forbidden) if actor.blocked?
+        unless FedDomainPolicy.domain_allowed?(actor.domain)
+          return render_error("domain is not allowed", status: :forbidden)
+        end
         f = Federation::OutboxService.follow(current_user, actor)
         render json: {state: f.state, actor: actor_json(actor)}, status: :created
       rescue Federation::ActorFetchService::FetchError, Federation::HttpClient::Error => e
@@ -47,13 +50,13 @@ module Api
 
       # GET /api/v1/federation/events — mirrored remote events
       def events
-        scope = FedEvent.listable.upcoming.includes(:fed_actor).order(:start_time).limit(50)
+        scope = FedEvent.visible.listable.upcoming.includes(:fed_actor).order(:start_time).limit(50)
         render json: scope.map { |e| event_json(e) }
       end
 
       # GET /api/v1/federation/events/:id
       def event
-        e = FedEvent.find_by(id: params[:id]) or return render_not_found
+        e = FedEvent.visible.find_by(id: params[:id]) or return render_not_found
         render json: event_json(e, detail: true)
       end
 

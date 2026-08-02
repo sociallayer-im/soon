@@ -72,6 +72,10 @@ class Api::V1::EventsController < Api::BaseController
     attrs = event_params.to_h.except("group_id")
     gate_pinned!(attrs, @event.group)
     normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
+    # captured before the change: leaving the federated surface must be
+    # announced (P1-8) — followers were told about this event and would
+    # otherwise show it forever
+    was_federated = @event.visibility == "public" && @event.status == "published"
     @event.assign_attributes(attrs)
     if (err = reference_error(@event))
       return render_error(err)
@@ -85,10 +89,15 @@ class Api::V1::EventsController < Api::BaseController
     ActiveRecord::Base.transaction do
       @event.save!
       apply_group_ticket_designation!(@event)
-      if @event.status == "published"
+      if @event.status == "published" && @event.visibility == "public"
         federate_event!(@event, @event.status_previously_changed?(to: "published") ? :create : :update)
       elsif @event.status == "cancelled" && @event.status_previously_changed?
         federate_event!(@event, :update)
+      elsif was_federated
+        # published+public → private/draft/unlisted: retract with a Delete —
+        # an Update would leak the new (non-public) state, and silence would
+        # leave the stale version live on every follower
+        Federation::OutboxService.delete_event(@event) if Federation.enabled?
       end
     end
     notify_attendees_of_update if calendar_relevant_change?

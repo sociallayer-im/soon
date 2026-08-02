@@ -47,7 +47,10 @@ module Federation
 
       FedDomainStat.record_inbound!(@domain)
       outcome = FedInboundActivity.record!(uri: activity["id"], activity_type: activity["type"],
-                                           fed_actor_id: fed_actor.id)
+                                           fed_actor_id: fed_actor.id,
+                                           body_digest: FedInboundActivity.digest(body))
+      # same id, different actor or type: a replay/pre-claim, not a retry
+      return reject(:activity_id_conflict, status: 403) if outcome == :conflict
       if outcome == :duplicate
         Logging.log(:in, activity["type"], domain: @domain, status: "duplicate")
       else

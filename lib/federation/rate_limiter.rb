@@ -13,7 +13,12 @@ module Federation
       # Outbound actor fetches per domain. Every unknown keyId in an inbox POST
       # costs one, so this is what stops a flood of forged keyIds from turning
       # our inbox into an amplifier.
-      discovery: [30, 60]
+      discovery: [30, 60],
+      # One global pool over ALL domains: per-domain budgets are defeated by
+      # rotating throwaway (sub)domains, each arriving with a fresh budget.
+      discovery_global: [300, 60],
+      # background refreshes of a stale-but-working actor, per domain
+      refresh: [2, 300]
     }.freeze
 
     @counters = {}

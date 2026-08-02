@@ -95,25 +95,27 @@ class Api::V1::GroupsController < Api::BaseController
 
   def destroy
     authorize @group
-    # Tell followers before the row goes away: afterwards there is no actor to
-    # sign with and no follower list to send to, and they would keep a zombie
-    # group and zombie events indefinitely.
-    federate_group_deletion(@group)
-    @group.destroy
+    # Tell followers before the row goes away — the outbox rows snapshot the
+    # group's signing key, so the Delete still verifies after the row is gone.
+    # One transaction: either the group is deleted AND the announcements are
+    # owed, or neither (a swallowed federation failure here would leave every
+    # follower with a zombie group forever).
+    ActiveRecord::Base.transaction do
+      federate_group_deletion(@group)
+      @group.destroy!
+    end
     head :no_content
   end
 
   private
 
-  # Never let federation block a delete the caller is authorised to make.
+  # Outbox rows only (no HTTP) — written in destroy's transaction.
   def federate_group_deletion(group)
     return unless Federation.enabled?
     group.events.where(visibility: "public", status: %w[published closed cancelled]).find_each do |event|
       Federation::OutboxService.delete_event(event)
     end
     Federation::OutboxService.delete_actor(group)
-  rescue StandardError => e
-    Rails.logger.error("[fed] delete_actor #{group.id} failed: #{e.message}")
   end
 
   def set_group

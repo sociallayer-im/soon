@@ -11,13 +11,41 @@ module Federation
       return nil unless uri.is_a?(String) && uri.start_with?("https://", "http://")
       # the object must come from the actor that sent it
       return nil unless same_origin?(uri, fed_actor&.uri)
+      # a non-Public event must never enter the public mirror (P1-7) — a peer
+      # addressing followers-only or a private circle did not consent to
+      # anonymous discovery here
+      return nil unless public_audience?(object)
+      # if the object names its author, it must be the verified sender —
+      # host equality alone lets any actor on a shared host claim it (P1-6)
+      claimed = object["attributedTo"]
+      if claimed.is_a?(String) && claimed != fed_actor.uri
+        Logging.log(:in, "Event", domain: fed_actor.domain, status: "attribution_mismatch")
+        return nil
+      end
 
       place = object["location"].is_a?(Hash) ? object["location"] : {}
       address = place["address"].is_a?(Hash) ? place["address"] : {}
 
       event = FedEvent.find_or_initialize_by(uri: uri)
+      # ownership is set at first sight and never transferred by an Update:
+      # a second same-host actor sending this uri must not take the mirror
+      # over (P1-6)
+      if event.persisted? && event.fed_actor_id != fed_actor&.id
+        Logging.log(:in, "Event", domain: fed_actor.domain, status: "owner_mismatch")
+        return nil
+      end
+      # monotonic barrier (P1-11): a delayed retry of an older Create/Update
+      # must not roll a newer state back, and nothing may resurrect a
+      # tombstoned event without a strictly newer version
+      incoming_updated = parse_time(object["updated"]) || parse_time(object["published"])
+      if event.persisted? && event.remote_updated_at.present? &&
+         incoming_updated.present? && incoming_updated <= event.remote_updated_at
+        return event
+      end
+
       event.assign_attributes(
         fed_actor_id: fed_actor&.id,
+        remote_updated_at: incoming_updated || Time.current,
         title: object["name"].to_s.presence,
         content: sanitize(object["content"]),
         summary: object["summary"].to_s.presence,
@@ -43,6 +71,19 @@ module Federation
       event
     rescue ActiveRecord::RecordNotUnique
       FedEvent.find_by(uri: uri)
+    end
+
+    PUBLIC_URIS = ["https://www.w3.org/ns/activitystreams#Public", "as:Public", "Public"].freeze
+
+    # Mobilizon and Mastodon both address public objects to as:Public in
+    # to/cc. An object with addressing that names no public collection is
+    # follower-only or direct — refuse it rather than publish it.
+    def self.public_audience?(object)
+      audience = Array(object["to"]) + Array(object["cc"])
+      # legacy peers sometimes omit addressing entirely on public events;
+      # only explicit non-public addressing is rejected
+      return true if audience.empty?
+      audience.any? { |a| PUBLIC_URIS.include?(a) }
     end
 
     def self.same_origin?(uri, actor_uri)

@@ -198,12 +198,14 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     items = JSON.parse(response.body)["orderedItems"]
     assert_equal actors.map(&:uri).sort, items.sort
 
-    # a page past the end is empty rather than an error, and links back
+    # a page past the end is clamped to the last real page (P2-3: an
+    # arbitrary ?page=10^9 must not buy a deep-OFFSET scan)
     get "/groups/#{@group.name}/followers", params: {page: 5}, headers: AP_ACCEPT
     assert_response :success
     doc = JSON.parse(response.body)
-    assert_empty doc["orderedItems"]
-    assert_equal "https://app.sola.day/groups/#{@group.id}/followers?page=4", doc["prev"]
+    assert_equal "https://app.sola.day/groups/#{@group.id}/followers?page=0", doc["id"]
+    assert_equal 3, doc["orderedItems"].size
+    assert_nil doc["next"]
   end
 
   test "a negative page number does not escape the first page" do
