@@ -171,6 +171,15 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal "https://mobilizon.org/ns#", ext["mz"]
   end
 
+  test "uuid is omitted when the id is not a UUID" do
+    # Mobilizon casts uuid as Ecto.UUID; a TSID there fails the changeset and
+    # the entire event is dropped. Verified against a live 5.2.4 instance.
+    event = create_event(group: @group, owner: @user, visibility: "public", status: "published")
+    refute_match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/, event.id, "fixture should have a TSID id")
+    get "/events/#{event.id}", headers: AP_ACCEPT
+    refute JSON.parse(response.body).key?("uuid")
+  end
+
   test "require_approval maps to restricted, tickets map to external" do
     restricted = create_event(group: @group, owner: @user, visibility: "public",
                               status: "published", require_approval: true)

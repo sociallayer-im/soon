@@ -32,7 +32,7 @@ module Federation
         "participantCount" => @event.participant_count,
         "commentsEnabled" => true,
         "anonymousParticipationEnabled" => false,
-        "uuid" => @event.id,
+        "uuid" => uuid,
         "published" => @event.created_at.utc.iso8601,
         "updated" => @event.updated_at.utc.iso8601,
         "tag" => hashtags,
@@ -54,6 +54,19 @@ module Federation
       else
         {"to" => [followers], "cc" => []}
       end
+    end
+
+    UUID_RE = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
+
+    # Mobilizon types `uuid` as Ecto.UUID and casts it on receipt, so a value
+    # that is not a UUID fails the changeset and the WHOLE event is rejected —
+    # our TSID ids did exactly that, caught against a live instance. Our ids
+    # are not UUIDs and inventing one would publish an identifier that
+    # identifies nothing, so the field is simply omitted (as other non-Mobilizon
+    # event implementations do). Receivers mint their own; `id` stays the
+    # authoritative identifier and is what they match on.
+    def uuid
+      @event.id if @event.id.to_s.match?(UUID_RE)
     end
 
     def join_mode
