@@ -273,3 +273,24 @@ docker）作为合并前手动门禁 + 每周定时全量，报告归档。
   per-actor inbox、黑名单 403 与即时解除、限流 429、五个 AP GET 端点。
 - **投递可靠性**：真实实例 29 条投递全部成功；两个不可解析的假域名累计 218 次
   失败，正确走退避重试并触发域级熔断标记。
+
+### sola↔sola 与三方广播（2026-08-02 补充）
+
+第二个 sola 节点（`solab.seven.fan`）与节点 A 同机部署，但**刻意不经 Next 反代**
+——Traefik 把整个 host 直接路由到它的 soon。两种拓扑各跑一个节点，都验证过：
+节点 A 证明了反代路径（连同它引入的 Host 改写签名问题），节点 B 证明了直连路径。
+
+已验证：
+
+- **A↔B 关注**：A 出站 Follow → B 落库并回 Accept → A 标记 accepted，两侧一致。
+- **A↔B 内容**：B 发布活动 → A 完整镜像（`tz=Asia/Tokyo`、joinMode、容量、
+  `Shibuya Crossing (35.6595,139.7004)`）。
+- **A↔B 报名**：A 的用户报名 B 的活动 → B 侧落座 `bob@sola.seven.fan` 并保留
+  `participationMessage` → A 收 Accept 变 attending。
+- **三方广播**：Mastodon、Mobilizon、sola-A 同时关注节点 B；B 一次发布，三个
+  inbox 全部 `delivered` 且一次成功。三方按各自能力渲染——Mobilizon 结构化
+  (`status=confirmed`)、Mastodon 降级为 `<h2>标题</h2> + summary + 回链`、
+  sola-A 存为完整镜像。
+
+这条链路是 SG↔CN 互联的预演：两个节点用的是同一个镜像、同一套代码，差别只有
+`FEDERATION_HOST` 和数据库。
