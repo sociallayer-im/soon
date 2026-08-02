@@ -410,12 +410,21 @@ actor id 一旦被对端缓存就实质无法更换——必须清空对端缓�
   所要求的闭环）；
 - 错误的 name@绑定域 → 404；一域一群组的唯一约束生效。
 
-**未竟项（DNS 阻塞）**：`hi.seven.fan` 的公网解析当前指向 51.159.97.137
-（seven.fan 泛解析），不在实验室主机上，Traefik 无法为它签发证书，因此
-「Mastodon 直接搜索 @zuseven@hi.seven.fan」的最后一跳无法实测。需要把
-`hi.seven.fan` 的 A 记录指到 172.81.108.136 并加 Traefik 路由后补测。
+**DNS 补测（同日完成）**：经 Cloudflare 把 `hi.seven.fan` A 记录指到实验室
+主机（此后 `*.seven.fan` 泛解析也整体切到 172.81.108.136），Traefik 加
+`Host(hi.seven.fan)` 路由指向节点 A 的 soon，Let's Encrypt 证书即时签发。
+最后一跳全通：
+
+- Mastodon `ResolveAccountService` 解析 `zuseven@hi.seven.fan` 成功，账号
+  **canonical acct 即为 `zuseven@hi.seven.fan`**（domain 归属自定义域），
+  actor uri 仍是 `https://sola.seven.fan/groups/<tsid>`；
+- tester 关注成功（Accept 回流）；
+- zuseven 发布新活动，Mastodon 时间线以 `@zuseven@hi.seven.fan` 名义收到
+  `<h2>Custom domain launch party</h2>`。
+
+自定义域"署名层可携带、身份层不动"的设计在真实 Mastodon 上完整成立。
 
 ### 结论
 
-Move 双向、FEP-8b32 签发/三方验证、自定义域名 WebFinger 委托全部按 §9.4/§9.6
-的设计运转；唯一的外部依赖是自定义域的 DNS 与证书（运营侧动作）。
+Move 双向、FEP-8b32 签发/三方验证、自定义域名 WebFinger 委托（含真实 DNS/证书
+与 Mastodon 端到端发现）全部按 §9.4/§9.6 的设计运转，无遗留阻塞。
