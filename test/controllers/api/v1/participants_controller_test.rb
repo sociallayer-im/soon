@@ -399,13 +399,13 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "attending", participant.reload.status
   end
 
-  test "approve works for an event co-host too (EventRole role: manager)" do
+  test "approve works for an event co-host too" do
     owner = create_user
     cohost = create_user
     attendee = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner, require_approval: true)
-    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(cohost)
@@ -419,7 +419,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
-    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
     create_participant(event: event, user: attendee, status: "attending")
 
     post "/api/v1/events/#{event.id}/participants/check_in", params: { user_id: attendee.id },

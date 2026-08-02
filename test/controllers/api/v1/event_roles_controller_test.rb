@@ -6,14 +6,14 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     cohost = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
-    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
 
     get "/api/v1/events/#{event.id}/event_roles", headers: auth_headers(owner)
     assert_response :success
     assert_equal 1, json_response.size
   end
 
-  test "create requires event manager: owner, existing manager-role EventRole, or group admin" do
+  test "create requires event manager: owner, existing EventRole holder, or group admin" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
@@ -21,7 +21,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     target = create_user
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: target.id, item_type: "User", role: "member" } },
+      params: { event_role: { item_id: target.id, item_type: "User", role: "speaker" } },
       headers: auth_headers(outsider)
     assert_response :forbidden
     assert_equal 0, event.event_roles.count
@@ -35,7 +35,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
 
     assert_difference "EventRole.count", 1 do
       post "/api/v1/events/#{event.id}/event_roles",
-        params: { event_role: { item_id: target.id, item_type: "User", role: "member" } },
+        params: { event_role: { item_id: target.id, item_type: "User", role: "speaker" } },
         headers: auth_headers(owner)
     end
     assert_response :created
@@ -50,21 +50,21 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     target = create_user
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: target.id, item_type: "User", role: "member" } },
+      params: { event_role: { item_id: target.id, item_type: "User", role: "speaker" } },
       headers: auth_headers(admin)
     assert_response :created
   end
 
-  test "create succeeds for an existing manager-role EventRole holder" do
+  test "create succeeds for an existing EventRole holder" do
     owner = create_user
     cohost = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
-    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
     target = create_user
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: target.id, item_type: "User", role: "member" } },
+      params: { event_role: { item_id: target.id, item_type: "User", role: "speaker" } },
       headers: auth_headers(cohost)
     assert_response :created
   end
@@ -88,7 +88,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     target = create_user
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: target.id, item_type: "widget", role: "member" } },
+      params: { event_role: { item_id: target.id, item_type: "widget", role: "speaker" } },
       headers: auth_headers(owner)
     assert_response :unprocessable_entity
   end
@@ -98,10 +98,10 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
     target = create_user
-    event.event_roles.create!(item_id: target.id, item_type: "User", role: "member")
+    event.event_roles.create!(item_id: target.id, item_type: "User", role: "speaker")
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: target.id, item_type: "User", role: "manager" } },
+      params: { event_role: { item_id: target.id, item_type: "User", role: "co_host" } },
       headers: auth_headers(owner)
     assert_response :unprocessable_entity
   end
@@ -112,16 +112,16 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
     target = create_user
-    role = event.event_roles.create!(item_id: target.id, item_type: "User", role: "member")
+    role = event.event_roles.create!(item_id: target.id, item_type: "User", role: "speaker")
 
     patch "/api/v1/events/#{event.id}/event_roles/#{role.id}",
-      params: { event_role: { role: "manager" } }, headers: auth_headers(outsider)
+      params: { event_role: { role: "co_host" } }, headers: auth_headers(outsider)
     assert_response :forbidden
 
     patch "/api/v1/events/#{event.id}/event_roles/#{role.id}",
-      params: { event_role: { role: "manager" } }, headers: auth_headers(owner)
+      params: { event_role: { role: "co_host" } }, headers: auth_headers(owner)
     assert_response :success
-    assert_equal "manager", role.reload.role
+    assert_equal "co_host", role.reload.role
   end
 
   test "update 404s for an unknown role" do
@@ -130,7 +130,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     event = create_event(group: group, owner: owner)
 
     patch "/api/v1/events/#{event.id}/event_roles/does-not-exist",
-      params: { event_role: { role: "manager" } }, headers: auth_headers(owner)
+      params: { event_role: { role: "co_host" } }, headers: auth_headers(owner)
     assert_response :not_found
   end
 
@@ -140,7 +140,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
     target = create_user
-    role = event.event_roles.create!(item_id: target.id, item_type: "User", role: "member")
+    role = event.event_roles.create!(item_id: target.id, item_type: "User", role: "speaker")
 
     delete "/api/v1/events/#{event.id}/event_roles/#{role.id}", headers: auth_headers(outsider)
     assert_response :forbidden
@@ -156,7 +156,7 @@ class Api::V1::EventRolesControllerTest < ActionDispatch::IntegrationTest
     other_group = create_group
 
     post "/api/v1/events/#{event.id}/event_roles",
-      params: { event_role: { item_id: other_group.id, item_type: "Group", role: "manager" } },
+      params: { event_role: { item_id: other_group.id, item_type: "Group", role: "group_host" } },
       headers: auth_headers(owner)
     assert_response :created
     assert_equal "Group", json_response["item_type"]

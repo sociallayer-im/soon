@@ -20,12 +20,11 @@ class EventPolicy < ApplicationPolicy
     else group_admin?(record.group) # "manager" or unset
     end
   end
-  # A co-host (EventRole role: "manager") can edit the event and gates the
-  # same approve/reject/check_in actions this method backs — sails/ granted
-  # this to any assigned EventRole regardless of role; narrowed here to
-  # "manager" specifically since soon/'s EventRole already distinguishes
-  # co-host (manager) from merely-listed speaker (member), and a speaker
-  # editing the whole event was never clearly intentional in sails/ either.
+  # Anyone assigned an EventRole (co-host, speaker, custom host — matched by
+  # account or by invite email) can edit the event, mirroring sails/ and the
+  # frontend's isEventOperator check. An earlier version gated this on
+  # role: "manager", a value that has never existed in the data, which
+  # silently revoked every co-host's edit access.
   def update?  = owner?(record) || group_admin?(record.group) || event_co_host?(record)
   def destroy? = owner?(record) || group_admin?(record.group)
 
@@ -38,6 +37,8 @@ class EventPolicy < ApplicationPolicy
   def event_co_host?(event)
     return false unless user
 
-    event.event_roles.exists?(item_type: "User", item_id: user.id, role: "manager")
+    scope = event.event_roles.where(item_type: "User", item_id: user.id)
+    scope = scope.or(event.event_roles.where(email: user.email)) if user.email.present?
+    scope.exists?
   end
 end

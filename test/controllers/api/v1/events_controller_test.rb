@@ -51,7 +51,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     co_host = create_user
     group = create_group
     with_role = create_event(group: group, owner: create_user, status: "published")
-    create_event_role(event: with_role, item: co_host, role: "manager")
+    create_event_role(event: with_role, item: co_host, role: "co_host")
     without_role = create_event(group: group, owner: create_user, status: "published")
 
     get "/api/v1/events", params: { co_host_id: co_host.id }
@@ -65,7 +65,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     co_host = create_user(name: "cohost_handle")
     group = create_group
     event = create_event(group: group, owner: create_user, status: "published")
-    create_event_role(event: event, item: co_host, role: "member")
+    create_event_role(event: event, item: co_host, role: "speaker")
 
     get "/api/v1/events", params: { co_host_id: "cohost_handle" }
     assert_response :success
@@ -358,7 +358,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_difference ["Event.count", "EventRole.count", "Ticket.count"], 1 do
       post "/api/v1/events", params: {
         event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
-        event_roles: [{ item_id: cohost.id, item_type: "User", role: "manager", display_name: "Co" }],
+        event_roles: [{ item_id: cohost.id, item_type: "User", role: "co_host", display_name: "Co" }],
         tickets: [{ title: "GA", ticket_type: "event", quantity: 50 }]
       }, headers: auth_headers(owner)
     end
@@ -366,6 +366,44 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     event = Event.find(json_response["id"])
     assert_equal cohost.id, event.event_roles.first.item_id
     assert_equal "GA", event.tickets.first.title
+  end
+
+  # Regression: production events carry group_host/co_host/speaker/custom_host
+  # roles, and email-invited or hand-typed people have no item_id at all. The
+  # model briefly demanded item + role in (member manager) — values that have
+  # never existed in the data — so every event with a host failed to create
+  # ("Item must exist, Role is not included in the list").
+  test "create accepts the real-world roles: group_host and an account-less email co-host" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_difference "EventRole.count", 3 do
+      post "/api/v1/events", params: {
+        event: { title: "Hosted", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
+        event_roles: [
+          { item_id: group.id, item_type: "Group", role: "group_host", display_name: group.name },
+          { item_type: "User", role: "co_host", email: "invitee@example.com", display_name: "Invitee" },
+          { item_type: "User", role: "speaker", display_name: "Typed-in Speaker" }
+        ]
+      }, headers: auth_headers(owner)
+    end
+    assert_response :created
+    event = Event.find(json_response["id"])
+    assert_equal %w[co_host group_host speaker], event.event_roles.pluck(:role).sort
+    assert_nil event.event_roles.find_by(role: "co_host").item_id
+  end
+
+  test "create rejects an event_role whose item_id resolves to nothing" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_no_difference ["Event.count", "EventRole.count"] do
+      post "/api/v1/events", params: {
+        event: { title: "Ghost host", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
+        event_roles: [{ item_id: "does-not-exist", item_type: "User", role: "co_host" }]
+      }, headers: auth_headers(owner)
+    end
+    assert_response :unprocessable_entity
   end
 
   test "is_group_ticket_event designates the group's ticket event, manager-only and at most one" do
@@ -466,7 +504,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Event.count" do
       post "/api/v1/events", params: {
         event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id },
-        event_roles: [{ item_id: owner.id, item_type: "Bogus", role: "manager" }]
+        event_roles: [{ item_id: owner.id, item_type: "Bogus", role: "speaker" }]
       }, headers: auth_headers(owner)
     end
     assert_response :unprocessable_entity
@@ -628,12 +666,12 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Renamed", event.reload.title
   end
 
-  test "update succeeds for a co-host (EventRole role: manager) who is neither owner nor group admin" do
+  test "update succeeds for a co-host who is neither owner nor group admin" do
     owner = create_user
     cohost = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
-    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "manager")
+    event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
 
     patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed by co-host" } },
       headers: auth_headers(cohost)
@@ -641,14 +679,28 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Renamed by co-host", event.reload.title
   end
 
-  test "update is forbidden for a merely-listed EventRole (role: member, e.g. a speaker)" do
+  test "update succeeds for an email-invited co-host with no linked account" do
     owner = create_user
-    speaker = create_user
+    cohost = create_user(email: "cohost-#{SecureRandom.hex(4)}@example.com")
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner)
-    event.event_roles.create!(item_id: speaker.id, item_type: "User", role: "member")
+    event.event_roles.create!(item_type: "User", role: "co_host", email: cohost.email,
+                              display_name: "Invited Co-host")
 
-    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed" } }, headers: auth_headers(speaker)
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed via email role" } },
+      headers: auth_headers(cohost)
+    assert_response :success
+    assert_equal "Renamed via email role", event.reload.title
+  end
+
+  test "update is forbidden for a user with no event role at all" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    event.event_roles.create!(item_type: "User", role: "speaker", display_name: "Someone Else")
+
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Renamed" } }, headers: auth_headers(outsider)
     assert_response :forbidden
   end
 

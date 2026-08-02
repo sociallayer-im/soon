@@ -58,7 +58,7 @@ class Api::V1::EventRolesController < Api::BaseController
 
   def authorize_event_manager!
     is_manager = @event.owner_id == current_user.id ||
-                 @event.event_roles.exists?(item: current_user, role: "manager") ||
+                 @event.event_roles.exists?(item: current_user) ||
                  current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
     render json: { error: "Forbidden" }, status: :forbidden unless is_manager
   end

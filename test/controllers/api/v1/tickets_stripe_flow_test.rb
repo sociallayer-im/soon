@@ -104,7 +104,7 @@ class Api::V1::TicketsStripeFlowTest < ActionDispatch::IntegrationTest
   test "a co-host can refund; a group manager (non-co-host) cannot; group owner can for group tickets" do
     item = create_order(status: "succeeded", txhash: "pi_2")
     cohost = create_user
-    EventRole.create!(event: @event, item_type: "User", item_id: cohost.id, role: "manager", display_name: cohost.name)
+    EventRole.create!(event: @event, item_type: "User", item_id: cohost.id, role: "co_host", display_name: cohost.name)
     manager = create_user
     create_membership(user: manager, group: @group, role: "manager")
 

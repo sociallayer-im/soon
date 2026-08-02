@@ -55,7 +55,7 @@ module FactoryHelpers
     Participant.create!({ event: event, user: user, status: "attending" }.merge(attrs))
   end
 
-  def create_event_role(event:, item:, role: "member", **attrs)
+  def create_event_role(event:, item:, role: "speaker", **attrs)
     EventRole.create!({ event: event, item: item, role: role }.merge(attrs))
   end
 
