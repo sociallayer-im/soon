@@ -18,6 +18,89 @@ module Federation
       enqueue(payload, sender: local_actor, inboxes: [fed_actor.delivery_inbox_url])
     end
 
+    # --- outbound: we are the follower / participant -------------------------
+
+    # A local actor follows a remote one. The Follow stays pending until the
+    # remote answers with an Accept naming this id, so the id has to be stable
+    # and stored.
+    def self.follow(local_actor, fed_actor)
+      existing = FedFollow.find_by(local: local_actor, fed_actor: fed_actor, direction: "outbound")
+      return existing if existing&.state == "accepted"
+
+      follow = existing || FedFollow.new(local: local_actor, fed_actor: fed_actor,
+                                         direction: "outbound")
+      follow.assign_attributes(state: "pending",
+                               uri: follow.uri.presence || Urls.activity_url("follows/#{SecureRandom.uuid}"))
+      follow.save!
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => follow.uri,
+        "type" => "Follow",
+        "actor" => Urls.actor_url(local_actor),
+        "object" => fed_actor.uri,
+        "to" => [fed_actor.uri]
+      }
+      enqueue(payload, sender: local_actor, inboxes: [fed_actor.delivery_inbox_url])
+      follow
+    end
+
+    # Undo carries the full Follow inline: Mastodon's undo handler resolves the
+    # target from object.object, and a bare uri only works if it recognises the
+    # id (activity/undo.rb:89-130).
+    def self.unfollow(local_actor, fed_actor)
+      follow = FedFollow.find_by(local: local_actor, fed_actor: fed_actor, direction: "outbound")
+      return nil if follow.nil?
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => "#{follow.uri}/undo",
+        "type" => "Undo",
+        "actor" => Urls.actor_url(local_actor),
+        "object" => {"id" => follow.uri, "type" => "Follow",
+                     "actor" => Urls.actor_url(local_actor), "object" => fed_actor.uri},
+        "to" => [fed_actor.uri]
+      }
+      enqueue(payload, sender: local_actor, inboxes: [fed_actor.delivery_inbox_url])
+      follow.destroy!
+      true
+    end
+
+    # Join a remote event. Only the origin instance may approve, so this stays
+    # pending until its Accept arrives (Mobilizon types/events.ex:197-248).
+    def self.join(user, fed_event, message: nil)
+      return nil if fed_event.origin_inbox_url.blank?
+      part = FedParticipation.find_or_initialize_by(user: user, fed_event: fed_event)
+      part.assign_attributes(status: "pending",
+                             uri: part.uri.presence || Urls.activity_url("joins/#{SecureRandom.uuid}"))
+      part.save!
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => part.uri,
+        "type" => "Join",
+        "actor" => Urls.actor_url(user),
+        "object" => fed_event.uri,
+        "to" => [fed_event.fed_actor.uri]
+      }
+      payload["participationMessage"] = message if message.present?
+      enqueue(payload, sender: user, inboxes: [fed_event.origin_inbox_url])
+      part
+    end
+
+    def self.leave(user, fed_event)
+      part = FedParticipation.find_by(user: user, fed_event: fed_event)
+      return nil if part.nil?
+      payload = {
+        "@context" => JsonLd::AS,
+        "id" => "#{part.uri}/leave",
+        "type" => "Leave",
+        "actor" => Urls.actor_url(user),
+        "object" => fed_event.uri,
+        "to" => [fed_event.fed_actor.uri]
+      }
+      enqueue(payload, sender: user, inboxes: [fed_event.origin_inbox_url])
+      part.update!(status: "cancelled")
+      part
+    end
+
     # Accept(Join): object is the inlined Join, id path mirrors Mobilizon's
     # "<endpoint>/accept/join/<participant_id>" so peers see a familiar shape.
     def self.accept_join(event, fed_actor, join_activity, participant)

@@ -67,6 +67,17 @@ Rails.application.routes.draw do
       post "federation/policies", to: "federation#create_policy"
       delete "federation/policies/:domain", to: "federation#destroy_policy", constraints: {domain: /[^\/]+/}
 
+      # Federation for end users: resolve a remote handle, follow it, browse
+      # and join the events it publishes.
+      post   "federation/resolve",           to: "federation_discovery#resolve"
+      post   "federation/follow",            to: "federation_discovery#follow"
+      delete "federation/follow",            to: "federation_discovery#unfollow"
+      get    "federation/following",         to: "federation_discovery#following"
+      get    "federation/events",            to: "federation_discovery#events"
+      get    "federation/events/:id",        to: "federation_discovery#event"
+      post   "federation/events/:id/join",   to: "federation_discovery#join"
+      delete "federation/events/:id/join",   to: "federation_discovery#leave"
+
       # Auth (no JWT required, except bind_email)
       post "auth/request_code",   to: "auth#request_code"
       post "auth/verify_code",    to: "auth#verify_code"

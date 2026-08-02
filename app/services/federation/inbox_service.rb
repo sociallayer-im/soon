@@ -1,9 +1,9 @@
 module Federation
   # Business processing of a signature-verified inbound activity. Identity is
   # the verified fed_actor — never the payload's own actor claim (the
-  # controller already rejected mismatches). Phase 2 handles Follow and
-  # Undo(Follow); everything else is ignored with a log line (Mastodon-style
-  # silent drop). Join/Note land in Phase 3.
+  # controller already rejected mismatches). Anything unhandled is dropped with
+  # a log line rather than an error, the same silent discard Mastodon does, so
+  # a peer's unsupported vocabulary never looks like a delivery failure.
   class InboxService
     def self.process(fed_actor, activity)
       case activity["type"]
@@ -12,10 +12,97 @@ module Federation
       when "Join" then ParticipationService.join(fed_actor, activity)
       when "Leave" then ParticipationService.leave(fed_actor, activity)
       when "Create" then handle_create(fed_actor, activity)
+      when "Update" then handle_update(fed_actor, activity)
+      when "Delete" then handle_delete(fed_actor, activity)
+      when "Accept" then handle_accept(fed_actor, activity)
+      when "Reject" then handle_reject(fed_actor, activity)
       else
         Logging.log(:in, activity["type"], domain: fed_actor.domain, status: "ignored")
         :ignored
       end
+    end
+
+    # --- outbound-side responses ---------------------------------------------
+
+    # Accept resolves one of our own outbound activities: a Follow we sent, or
+    # a Join. Peers echo the original activity (inline or by uri), which is why
+    # we stored its id.
+    def self.handle_accept(fed_actor, activity)
+      uri = object_uri(activity["object"])
+      return :ignored if uri.blank?
+
+      if (follow = FedFollow.find_by(uri: uri, direction: "outbound", fed_actor: fed_actor))
+        follow.update!(state: "accepted")
+        Logging.log(:in, "Accept", domain: fed_actor.domain, status: "follow_accepted")
+        return :processed
+      end
+      if (part = FedParticipation.find_by(uri: uri))
+        # only the instance owning the event may approve a participation
+        return :ignored unless part.fed_event.fed_actor_id == fed_actor.id
+        part.update!(status: "attending")
+        Logging.log(:in, "Accept", domain: fed_actor.domain, status: "join_accepted")
+        return :processed
+      end
+      Logging.log(:in, "Accept", domain: fed_actor.domain, status: "no_match")
+      :ignored
+    end
+
+    def self.handle_reject(fed_actor, activity)
+      uri = object_uri(activity["object"])
+      return :ignored if uri.blank?
+
+      if (follow = FedFollow.find_by(uri: uri, direction: "outbound", fed_actor: fed_actor))
+        follow.update!(state: "rejected")
+        Logging.log(:in, "Reject", domain: fed_actor.domain, status: "follow_rejected")
+        return :processed
+      end
+      if (part = FedParticipation.find_by(uri: uri))
+        return :ignored unless part.fed_event.fed_actor_id == fed_actor.id
+        part.update!(status: "rejected")
+        Logging.log(:in, "Reject", domain: fed_actor.domain, status: "join_rejected",
+                    reason: activity["summary"])
+        return :processed
+      end
+      :ignored
+    end
+
+    # Peers send Accept/Reject with the original activity either inlined or as
+    # a bare uri string; both forms have to resolve to the same id.
+    def self.object_uri(object)
+      case object
+      when String then object
+      when Hash then object["id"]
+      end
+    end
+
+    # --- remote content mirroring --------------------------------------------
+
+    def self.handle_update(fed_actor, activity)
+      object = activity["object"]
+      if object.is_a?(Hash) && object["type"] == "Event"
+        event = RemoteEventService.upsert(object, fed_actor)
+        Logging.log(:in, "Update", domain: fed_actor.domain,
+                    status: event ? "event_updated" : "event_rejected")
+        return event ? :processed : :ignored
+      end
+      Logging.log(:in, "Update", domain: fed_actor.domain, status: "unsupported_object")
+      :ignored
+    end
+
+    # A Delete or a Tombstone retires the mirror. Only the origin may do it —
+    # the unauthenticated remote delete that nebula's inbox allowed is exactly
+    # what this check prevents.
+    def self.handle_delete(fed_actor, activity)
+      uri = object_uri(activity["object"])
+      return :ignored if uri.blank?
+      event = FedEvent.find_by(uri: uri)
+      if event.nil? || event.fed_actor_id != fed_actor.id
+        Logging.log(:in, "Delete", domain: fed_actor.domain, status: "not_owned")
+        return :ignored
+      end
+      event.update!(status: "CANCELLED")
+      Logging.log(:in, "Delete", domain: fed_actor.domain, status: "event_cancelled")
+      :processed
     end
 
     def self.handle_follow(fed_actor, activity)
@@ -62,6 +149,12 @@ module Federation
     # the event page (Mobilizon comment.ex:156-201 does the same).
     def self.handle_create(fed_actor, activity)
       object = activity["object"]
+      if object.is_a?(Hash) && object["type"] == "Event"
+        event = RemoteEventService.upsert(object, fed_actor)
+        Logging.log(:in, "Create", domain: fed_actor.domain,
+                    status: event ? "event_mirrored" : "event_rejected")
+        return event ? :processed : :ignored
+      end
       unless object.is_a?(Hash) && object["type"] == "Note"
         Logging.log(:in, "Create", domain: fed_actor.domain, status: "unsupported_object")
         return :ignored
