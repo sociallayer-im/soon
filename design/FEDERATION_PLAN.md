@@ -693,9 +693,12 @@ stats 与策略管理端点 ✓、**告警阈值 ✓**（`Federation::HealthChec
   应下沉到 httpx adapter 层，并给 actor/webfinger/inbox 分别配额。
 - **DNS rebinding**：SSRF 检查在请求前独立解析一次，与建连时的解析存在竞态。
   需要连接层对最终 socket IP 做 pinning/复检。
-- **关注关系对账**：本地 `FedFollow` 与对端 followers 集合会单向漂移（对端重装、
-  账号删除、数据库回滚都会造成），表现为"投递成功但内容不出现"——每一层都报
-  成功，最难发现。见 INTEROP §10.3。
+- ~~关注关系对账~~：**已实现（2026-08-03）**——探测式对账
+  （`FollowReconciliationService`，每日 cron）：超过 7 天无确认的出站关注按原
+  activity id 重发 Follow（对端幂等重回 Accept 即确认，顺带把丢边的对端修好）；
+  3 次无回应标记 `lapsed`（可见、可重关，绝不静默保留）；探测中发现 actor
+  404/410 则双向清边，发现 movedTo 则走认领校验重指（补收错过的 Move）。
+  见 INTEROP §10.3 附记。
 - **账本与投递的留存策略**：`fed_inbound_activities` / `fed_deliveries` 只增不减，
   幂等查询会随时间退化。需要按状态与年龄分级归档。
 

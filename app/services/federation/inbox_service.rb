@@ -33,7 +33,9 @@ module Federation
       return :ignored if uri.blank?
 
       if (follow = FedFollow.find_by(uri: uri, direction: "outbound", fed_actor: fed_actor))
-        follow.update!(state: "accepted")
+        # an Accept is also the reconciliation loop's proof of life — it
+        # re-arms a probed or even lapsed edge (§10.3)
+        follow.update!(state: "accepted", last_confirmed_at: Time.current, probe_count: 0)
         Logging.log(:in, "Accept", domain: fed_actor.domain, status: "follow_accepted")
         return :processed
       end

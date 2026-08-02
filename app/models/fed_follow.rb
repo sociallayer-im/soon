@@ -3,7 +3,10 @@
 # remote. `uri` is the Follow activity id — Accept and Undo match on it.
 class FedFollow < ApplicationRecord
   DIRECTIONS = %w[inbound outbound].freeze
-  STATES = %w[pending accepted rejected].freeze
+  # "lapsed": reconciliation probed the peer MAX_PROBES times without an
+  # Accept — the edge is presumed gone on the remote side. A lapsed follow is
+  # excluded from delivery audiences; re-following mints a fresh activity id.
+  STATES = %w[pending accepted rejected lapsed].freeze
 
   belongs_to :fed_actor
   belongs_to :local, polymorphic: true

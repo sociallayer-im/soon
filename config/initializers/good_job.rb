@@ -53,6 +53,11 @@ Rails.application.configure do
       cron: "*/5 * * * *",
       class: "Federation::HealthCheckJob",
       description: "Emit [fed-alert] lines when a federation threshold is crossed"
+    },
+    federation_reconciliation: {
+      cron: "41 3 * * *", # daily, off-peak
+      class: "Federation::ReconciliationJob",
+      description: "Probe stale follows, purge gone actors, re-point moved ones (INTEROP 10.3)"
     }
   }
 

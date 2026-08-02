@@ -348,6 +348,14 @@ actor id 一旦被对端缓存就实质无法更换——必须清空对端缓�
 
 ### 10.3 一个非代码发现：关注关系会单向漂移
 
+> **附记（2026-08-03）：已实现对账机制。** `FollowReconciliationService` +
+> 每日 `ReconciliationJob`：>7 天无确认的出站关注以**原 activity id** 重发
+> Follow——对端对重复 Follow 幂等地重回 Accept，这个 Accept 就是确认
+> （`last_confirmed_at`），而丢了边的对端会由这次探测直接修复；3 次探测无
+> 回应 → `lapsed`（从投递受众剔除、可重关）；探测发现 actor 404/410 →
+> 双向清边；发现 `movedTo` → 认领校验后重指（覆盖"迁移发生在我们离线时"
+> 的场景）。13 例回归测试；本节的失误从此不再是静默故障。
+
 首次发布事件时 Mastodon 回 `Rejected Create activity`。根因**不是**本轮改动，
 而是更早用 `destroy_all` 清理 Mastodon 缓存（DEVLOG §4 记为操作失误）连带删掉了
 关注关系：soon 仍认为对方在关注，Mastodon 因 `related_to_local_activity?`
