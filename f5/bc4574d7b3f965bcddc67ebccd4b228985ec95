@@ -1,0 +1,63 @@
+app/services/federation/remote_event_service.rb
+  s_e9ed806a3d225c::t_44f7ff285f32b2 25-30
+app/services/federation/actor_fetch_service.rb
+  s_e9ed806a3d225c::t_07a10c5dcd49e6 164-167
+app/services/federation/actor_serializer.rb
+  s_e9ed806a3d225c::t_4e84175e767900 41-57
+config/routes.rb
+  s_e9ed806a3d225c::t_3aa3ae3d65786a 71-72
+db/migrate/20260803100000_add_move_integrity_and_custom_domain.rb
+  s_e9ed806a3d225c::t_1da49dfec0f90b 1-25
+lib/federation/jcs.rb
+  s_e9ed806a3d225c::t_a67fbcd040fe8c 1-76
+test/integration/federation_migration_test.rb
+  s_e9ed806a3d225c::t_2abf9ee69d022e 1-300,303-324
+  s_e9ed806a3d225c::t_11801f19c3f655 301-302
+app/services/federation/inbox_service.rb
+  s_e9ed806a3d225c::t_de4b80101f4d9d 19
+  s_e9ed806a3d225c::t_1280f0342cd6cf 79-145
+lib/federation/multibase.rb
+  s_e9ed806a3d225c::t_745bd36453cc85 1-60
+app/models/group.rb
+  s_e9ed806a3d225c::t_aa771599d84f34 29-37
+app/services/federation/event_serializer.rb
+  s_e9ed806a3d225c::t_f1e298e1b6e7f9 45-48
+app/controllers/federation/well_known_controller.rb
+  s_e9ed806a3d225c::t_f7bbc4f83f1a38 88-97
+lib/federation/json_ld.rb
+  s_e9ed806a3d225c::t_5d73b00ae0c77b 48,52-57
+  s_e9ed806a3d225c::t_d0647d0a26b1fe 9-10
+app/controllers/api/v1/federation_discovery_controller.rb
+  s_e9ed806a3d225c::t_593ee2e725910f 80-110
+app/models/concerns/federation_keyable.rb
+  s_e9ed806a3d225c::t_a8b497da4e364b 15,32-49,51
+  s_e9ed806a3d225c::t_6d71e54fca8b8c 50
+app/services/federation/outbox_service.rb
+  s_e9ed806a3d225c::t_04310b8f887e61 306-307
+  s_e9ed806a3d225c::t_c79430780a54f2 123-165
+  s_e9ed806a3d225c::t_114969e7c2a436 248-250
+app/services/federation/comment_serializer.rb
+  s_e9ed806a3d225c::t_ae2426dd549cd2 32-34
+lib/federation/integrity_proof.rb
+  s_e9ed806a3d225c::t_c7c1fb7b949cd1 1-88
+lib/federation/urls.rb
+  s_e9ed806a3d225c::t_63afbbf9dfc125 21-23,25-26
+db/schema.rb
+  s_e9ed806a3d225c::t_dd6be86fbce0d6 13,218,227,541,548-551,573,821-824
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f5bc4574d7b3f965bcddc67ebccd4b228985ec95",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
