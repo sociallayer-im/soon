@@ -46,6 +46,7 @@ Rails.application.routes.draw do
     get "/groups/:group_handle/following", to: "collections#following", constraints: {group_handle: group_handle}
 
     get "/events/:id", to: "objects#event"
+    get "/comments/:id", to: "objects#comment"
 
     post "/inbox", to: "inboxes#create"
     post "/users/:user_handle/inbox", to: "inboxes#create", constraints: {user_handle: user_handle}

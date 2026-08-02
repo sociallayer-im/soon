@@ -53,20 +53,15 @@ module Federation
       return unless Federation.enabled?
       inboxes = event_audience_inboxes(event)
       return if inboxes.empty?
-      author = comment.user
-      actor_url = author&.name.present? ? Urls.actor_url(author) : Urls.actor_url(event.group)
-      note = {
-        "type" => "Note",
-        "id" => Urls.activity_url("comments/#{comment.id}"),
-        "attributedTo" => actor_url,
-        "actor" => actor_url,
-        "inReplyTo" => comment.reply_parent_id ? Urls.activity_url("comments/#{comment.reply_parent_id}") : Urls.event_url(event),
-        "content" => comment.content.to_s,
-        "mediaType" => "text/html",
-        "published" => comment.created_at.utc.iso8601,
-        "to" => [JsonLd::PUBLIC],
-        "cc" => [Urls.followers_url(event.group)]
-      }
+      # The signing key must belong to the actor the activity claims, or
+      # Mastodon drops it before ever looking at the object (it only accepts a
+      # mismatch when an LD signature re-attributes it, which we do not emit).
+      # A commenter without a handle has no actor of their own, so the group
+      # both signs and owns the note.
+      serializer = CommentSerializer.new(comment, event)
+      sender = serializer.author_actor
+      actor_url = Urls.actor_url(sender)
+      note = serializer.as_ap(context: false)
       activity = {
         "@context" => JsonLd.context,
         "id" => "#{note['id']}/activity",
@@ -76,7 +71,7 @@ module Federation
         "cc" => note["cc"],
         "object" => note
       }
-      enqueue(activity, sender: event.group, inboxes: inboxes)
+      enqueue(activity, sender: sender, inboxes: inboxes)
     end
 
     # verb: :create | :update | :delete. Serializes once, fans out to the

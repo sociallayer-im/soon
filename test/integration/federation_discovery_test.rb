@@ -203,6 +203,32 @@ class FederationDiscoveryTest < ActionDispatch::IntegrationTest
     assert_equal "CANCELLED", JSON.parse(response.body)["ical:status"]
   end
 
+  test "a comment on a public event is dereferenceable as a Note" do
+    # Peers follow inReplyTo when resolving a thread, so the id we publish has
+    # to resolve. Mastodon also drops any activity whose actor does not own the
+    # signing key, which is why the note is attributed to the signer.
+    event = create_event(group: @group, owner: @user, visibility: "public", status: "published")
+    comment = Comment.create!(item: event, user: @user, comment_type: "comment",
+                              content: "<p>hi</p><script>x()</script>", content_type: "text")
+    get "/comments/#{comment.id}", headers: AP_ACCEPT
+    assert_response :success
+    doc = JSON.parse(response.body)
+    assert_equal "Note", doc["type"]
+    assert_equal "https://app.sola.day/comments/#{comment.id}", doc["id"]
+    assert_equal "https://app.sola.day/users/#{@user.name}", doc["attributedTo"]
+    assert_equal doc["attributedTo"], doc["actor"], "signer and attribution must agree"
+    assert_equal "https://app.sola.day/events/#{event.id}", doc["inReplyTo"]
+    refute_includes doc["content"], "<script>"
+  end
+
+  test "comments on non-public events are not served" do
+    event = create_event(group: @group, owner: @user, visibility: "private", status: "published")
+    comment = Comment.create!(item: event, user: @user, comment_type: "comment",
+                              content: "secret", content_type: "text")
+    get "/comments/#{comment.id}", headers: AP_ACCEPT
+    assert_response :not_found
+  end
+
   # --- nodeinfo (NI matrix) --------------------------------------------------
 
   test "nodeinfo discovery chains to a valid 2.0 document" do
