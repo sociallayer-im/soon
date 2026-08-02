@@ -48,6 +48,11 @@ Rails.application.configure do
       cron: "* * * * *",
       class: "Federation::SweeperJob",
       description: "Drain due fed_deliveries under the rate cap; no-op while FEDERATION_ENABLED is off"
+    },
+    federation_health: {
+      cron: "*/5 * * * *",
+      class: "Federation::HealthCheckJob",
+      description: "Emit [fed-alert] lines when a federation threshold is crossed"
     }
   }
 
