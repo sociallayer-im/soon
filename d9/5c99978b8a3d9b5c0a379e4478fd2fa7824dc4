@@ -1,0 +1,45 @@
+db/migrate/20260807101500_remove_venue_name_uniqueness.rb
+  s_448695a5d036bc::t_9b35392ed843b6 1-17
+app/models/venue.rb
+  s_448695a5d036bc::t_4b77c2451e7055 10
+  s_448695a5d036bc::t_ccbf1362933f0e 8-9,11-12
+app/models/group.rb
+  s_448695a5d036bc::t_f8f8189bfb5a20 42
+  s_448695a5d036bc::t_b66fb4369a02b3 11-18
+app/controllers/api/v1/recurring_controller.rb
+  s_448695a5d036bc::t_1651509b09df88 186
+  s_448695a5d036bc::t_476dad0692ee49 104-105
+  s_448695a5d036bc::t_d03580ffa6c1fd 178-184
+app/blueprints/group_blueprint.rb
+  s_448695a5d036bc::t_2a1584c5018214 31-32
+  s_448695a5d036bc::t_b098880ac1298c 33
+test/controllers/api/v1/venues_controller_test.rb
+  s_448695a5d036bc::t_89ec95d2e905f1 218-256
+  s_448695a5d036bc::t_b5028269b5f373 284-286,289,293-294
+  s_448695a5d036bc::t_b166b9b8552ead 97,102
+  s_448695a5d036bc::t_90e83547720a5d 257-283,287-288,290-292,295-296
+  s_448695a5d036bc::t_4b55923c04782b 173-217
+app/controllers/api/v1/events_controller.rb
+  s_448695a5d036bc::t_4557692755d1c4 224-227
+  s_448695a5d036bc::t_a66d591cc641bd 228
+test/controllers/api/v1/recurring_controller_test.rb
+  s_448695a5d036bc::t_bb2e77084744f6 363-419
+db/schema.rb
+  s_448695a5d036bc::t_94c7e21e24f606 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d95c99978b8a3d9b5c0a379e4478fd2fa7824dc4",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
