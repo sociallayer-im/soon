@@ -113,16 +113,25 @@ class Api::V1::AuthController < Api::BaseController
     end
   end
 
-  # POST /api/v1/auth/bind_email — attaches an email to a wallet-first account
-  # after the owner proves control of it with a bind-context code. The email is
-  # the login identity, so it can only be set once, and never to an address
-  # that already belongs to another account.
+  # POST /api/v1/auth/bind_email — attaches an email to a wallet- or WeChat-first
+  # account after the owner proves control of it with a bind-context code. The
+  # email is the login identity, so it can only be set once.
+  #
+  # When the address already belongs to another account this MERGES rather than
+  # failing, but only in the narrow case #mergeable? allows: signing in through
+  # a second channel shouldn't strand someone with two accounts, which is the
+  # whole point of asking a WeChat user for their email. A merge changes who
+  # the caller is, so it answers with a fresh token instead of a profile.
   def bind_email
     return render_error("email is already set") if current_user.email.present?
 
     email = normalized_email
     return unless consume_code!(recipient: email, context: BIND_CONTEXT, attempt: params[:code])
-    return render_error("email is already in use") if User.exists?(email: email)
+
+    if (existing = User.find_by(email: email))
+      return render_error("email is already in use") unless mergeable?(current_user, existing)
+      return render_token(merge_wechat_account!(current_user, existing), merged: true)
+    end
 
     current_user.update!(email: email)
     GroupInvite.auto_accept_ticket_invites_for(current_user)
@@ -163,6 +172,45 @@ class Api::V1::AuthController < Api::BaseController
     value.present? && user[column].blank? && !User.exists?(column => value)
   end
 
+  # Merging DELETES `from`, so it is only allowed while that account cannot yet
+  # hold anything worth keeping.
+  #
+  # `name` is the registration marker. A WeChat account is created without one
+  # and the frontend sends the user straight to /register to pick it, so a blank
+  # name means "signed in moments ago, never finished signing up" — exactly the
+  # window this is for. Once a name is set the account is a real one and binding
+  # an in-use address goes back to being an error. (This is also why the email
+  # question has to come BEFORE the username step: picking a name closes the
+  # window.)
+  #
+  # Deliberately restricted to WeChat-first accounts. Nothing server-side
+  # requires a name before writing — EventPolicy#create? never looks at it — so
+  # a long-lived wallet account whose owner simply never registered one would
+  # otherwise qualify and be deleted along with its events and RSVPs.
+  #
+  # `into` must carry no WeChat identity of its own: overwriting one would aim
+  # a different person's next WeChat login at this account, and refusing to
+  # move ours would leave the duplicate we're here to prevent.
+  def mergeable?(from, into)
+    (from.wechat_openid.present? || from.wechat_unionid.present?) &&
+      from.name.blank? &&
+      into.wechat_openid.blank? && into.wechat_unionid.blank?
+  end
+
+  # Moves the WeChat identity onto the account that owns the email, then drops
+  # the throwaway one. Order matters: both identity columns are uniquely
+  # indexed, so `from` has to be gone before `into` can take them.
+  def merge_wechat_account!(from, into)
+    openid = from.wechat_openid
+    unionid = from.wechat_unionid
+    User.transaction do
+      from.destroy!
+      into.update!(wechat_openid: openid, wechat_unionid: unionid)
+    end
+    GroupInvite.auto_accept_ticket_invites_for(into)
+    into
+  end
+
   def normalized_email
     params[:email].to_s.strip.downcase
   end
@@ -195,9 +243,13 @@ class Api::V1::AuthController < Api::BaseController
     code
   end
 
-  def render_token(user)
+  # `merged` tells the caller its session just became a DIFFERENT account, so
+  # the client must replace its stored token rather than keep the one it sent.
+  def render_token(user, merged: false)
     user.update(last_signin_at: Time.current)
     token = JwtService.encode({ "user_id" => user.id })
-    render json: { token: token, user: { id: user.id, email: user.email, name: user.name } }
+    payload = { token: token, user: { id: user.id, email: user.email, name: user.name } }
+    payload[:merged] = true if merged
+    render json: payload
   end
 end

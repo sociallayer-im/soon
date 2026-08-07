@@ -260,6 +260,122 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
     assert_nil user.reload.email
   end
 
+  # --- binding an in-use address from a fresh WeChat account merges ---------
+  #
+  # Signing in through a second channel must not leave one person holding two
+  # accounts. The WeChat account is created empty and is deleted by the merge,
+  # so every guard below is about keeping that deletion safe.
+
+  def fresh_wechat_user(openid: "o_new", unionid: "u_new")
+    User.create!(wechat_openid: openid, wechat_unionid: unionid)
+  end
+
+  def bind_code_for(email)
+    AuthCode.create!(recipient: email, recipient_type: "email", context: "bind_email", code: "ABC123")
+  end
+
+  test "binding an in-use email from an unregistered WeChat account merges into it" do
+    existing = create_user(email: "me@test.com", name: "alice")
+    wechat = fresh_wechat_user
+    bind_code_for("me@test.com")
+
+    assert_difference "User.count", -1 do
+      post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "ABC123" },
+        headers: auth_headers(wechat)
+    end
+    assert_response :success
+
+    # The caller is now a different account, so it gets a token to replace the
+    # one it sent — a profile payload would leave it on a deleted user.
+    assert json_response["token"].present?
+    assert_equal true, json_response["merged"]
+    assert_equal existing.id, json_response["user"]["id"]
+
+    assert_not User.exists?(wechat.id), "the throwaway WeChat account is gone"
+    assert_equal "o_new", existing.reload.wechat_openid
+    assert_equal "u_new", existing.wechat_unionid
+    assert_equal "alice", existing.name, "the surviving account keeps its own profile"
+  end
+
+  # The point of the whole feature: the next WeChat login must land on the
+  # merged account instead of minting a second one.
+  test "after a merge the same WeChat identity signs back into the merged account" do
+    existing = create_user(email: "me@test.com")
+    wechat = fresh_wechat_user
+    bind_code_for("me@test.com")
+
+    post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "ABC123" },
+      headers: auth_headers(wechat)
+    assert_response :success
+
+    with_next_token("s3cret") do
+      assert_no_difference "User.count" do
+        post "/api/v1/auth/trusted_signin",
+          params: { next_token: "s3cret", wechat_openid: "o_new", wechat_unionid: "u_new" }
+      end
+      assert_response :success
+      assert_equal existing.id, json_response["user"]["id"]
+    end
+  end
+
+  # Picking a username closes the merge window — the account is a real one now,
+  # and deleting it could throw away whatever the user has already done.
+  test "a WeChat account that already registered a name will not merge" do
+    create_user(email: "me@test.com")
+    wechat = User.create!(wechat_openid: "o_new", name: "bob")
+    bind_code_for("me@test.com")
+
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "ABC123" },
+        headers: auth_headers(wechat)
+    end
+    assert_response :unprocessable_entity
+    assert_nil wechat.reload.email
+  end
+
+  # Nothing server-side requires a name before writing, so a nameless wallet
+  # account may be years old and full of data. Only WeChat accounts merge.
+  test "a nameless wallet account will not merge into an in-use email" do
+    create_user(email: "me@test.com")
+    wallet = User.create!(eth: "0x#{SecureRandom.hex(20)}")
+    bind_code_for("me@test.com")
+
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "ABC123" },
+        headers: auth_headers(wallet)
+    end
+    assert_response :unprocessable_entity
+  end
+
+  # Overwriting the target's WeChat identity would aim someone else's next
+  # login at this account; keeping ours elsewhere would recreate the duplicate.
+  test "will not merge into an account that already has a WeChat identity" do
+    create_user(email: "me@test.com").update!(wechat_openid: "o_theirs")
+    wechat = fresh_wechat_user
+    bind_code_for("me@test.com")
+
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "ABC123" },
+        headers: auth_headers(wechat)
+    end
+    assert_response :unprocessable_entity
+    assert_equal "o_theirs", User.find_by(email: "me@test.com").wechat_openid
+  end
+
+  # The code is what proves the person owns the address; without it a WeChat
+  # user could type any email and swallow that account.
+  test "a merge still requires a valid bind-context code" do
+    create_user(email: "me@test.com")
+    wechat = fresh_wechat_user
+    bind_code_for("me@test.com")
+
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/bind_email", params: { email: "me@test.com", code: "WRONG1" },
+        headers: auth_headers(wechat)
+    end
+    assert_response :unauthorized
+  end
+
   test "bind_email refuses to change an existing email" do
     user = create_user
     AuthCode.create!(recipient: "new@test.com", recipient_type: "email", context: "bind_email", code: "ABC123")
