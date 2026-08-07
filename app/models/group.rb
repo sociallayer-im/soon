@@ -8,6 +8,14 @@ class Group < ApplicationRecord
   has_many :markers, dependent: :destroy
   has_many :tracks, dependent: :destroy
   has_many :venues, dependent: :destroy
+  # Removing a venue is a soft delete (VenuesController#destroy sets archived),
+  # so `venues` still contains removed rows — it exists for dependent: :destroy
+  # and for lookups by id. Everything that LISTS a group's venues (the venues
+  # page, the event editor's venue picker, the schedule venue view — all of
+  # which read GroupBlueprint :detail) must go through this instead, or a
+  # removed venue keeps showing up.
+  has_many :active_venues, -> { where(archived: false) },
+    class_name: "Venue", inverse_of: :group
   has_many :domains, as: :item, dependent: :destroy
   has_many :group_invites, dependent: :destroy
   # The single event whose tickets grant membership in this group; its tickets
@@ -31,7 +39,7 @@ class Group < ApplicationRecord
   # between them, one group alone with 712) it turned a ~70ms page into a
   # 9-second one. Keep in step with GroupBlueprint's :detail view.
   scope :with_detail_associations, -> {
-    includes(:parent, :children, { tracks: :group }, { venues: :place }, { memberships: :user })
+    includes(:parent, :children, { tracks: :group }, { active_venues: :place }, { memberships: :user })
   }
 
   # Looks a group up by primary key OR unique slug — API paths accept either

@@ -94,13 +94,12 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "name must be unique" do
+  test "name must be present" do
     owner = create_user
     group = create_group(owner: owner)
-    create_venue(group: group, owner: owner, name: "Duplicate Venue")
 
     assert_raises(ActiveRecord::RecordInvalid) do
-      Venue.create!(name: "Duplicate Venue", group: group, owner: owner)
+      Venue.create!(name: nil, group: group, owner: owner)
     end
   end
 
@@ -169,6 +168,130 @@ class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
 
     get "/api/v1/venues", headers: auth_headers(owner)
     assert_not_includes json_response["data"].map { |v| v["id"] }, venue.id
+  end
+
+  # GroupBlueprint :detail is the single source for every venue LIST in the app:
+  # the venues page, the event editor's venue picker, and the schedule venue
+  # view all read groupDetail.venues. It rendered the unfiltered `venues`
+  # association, so a removed venue stayed on screen after Remove + reload and
+  # was still pickable when creating an event.
+  test "a removed venue drops out of the group detail venue list" do
+    owner = create_user
+    group = create_group(owner: owner)
+    kept = create_venue(group: group, owner: owner)
+    removed = create_venue(group: group, owner: owner)
+
+    delete "/api/v1/venues/#{removed.id}", headers: auth_headers(owner)
+    assert_response :no_content
+
+    get "/api/v1/groups/#{group.id}", headers: auth_headers(owner)
+    assert_response :success
+    ids = json_response["venues"].map { |v| v["id"] }
+    assert_includes ids, kept.id
+    assert_not_includes ids, removed.id
+  end
+
+  test "an event cannot be booked into a removed venue, but one already there stays editable" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+
+    event = create_event(group: group, owner: owner, venue: venue)
+    delete "/api/v1/venues/#{venue.id}", headers: auth_headers(owner)
+    assert_response :no_content
+
+    # Editing an unrelated field on the already-booked event must still work.
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "renamed" } },
+      headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "renamed", event.reload.title
+
+    # Booking something new into it must not.
+    post "/api/v1/events", params: { event: {
+      title: "new", group_id: group.id, venue_id: venue.id,
+      start_time: 2.days.from_now.iso8601, end_time: 2.days.from_now.advance(hours: 1).iso8601
+    } }, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_equal "venue not found", json_response["error"]
+  end
+
+  # The real client submits the whole form, so venue_id comes back on every edit
+  # even when the user only touched the title. That must NOT read as "booking
+  # into an archived venue" — assign_attributes leaves venue_id_changed? false
+  # when the value is identical, which is what makes the guard safe.
+  test "resubmitting the same archived venue_id on an edit is not treated as a new booking" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, venue: venue)
+
+    delete "/api/v1/venues/#{venue.id}", headers: auth_headers(owner)
+    assert_response :no_content
+
+    patch "/api/v1/events/#{event.id}", params: { event: {
+      title: "renamed", venue_id: venue.id,
+      start_time: event.start_time.iso8601, end_time: event.end_time.iso8601
+    } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "renamed", event.reload.title
+    assert_equal venue.id, event.venue_id
+  end
+
+  test "an event cannot be moved from a live venue into an archived one" do
+    owner = create_user
+    group = create_group(owner: owner)
+    live = create_venue(group: group, owner: owner)
+    archived = create_venue(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, venue: live)
+
+    delete "/api/v1/venues/#{archived.id}", headers: auth_headers(owner)
+    assert_response :no_content
+
+    patch "/api/v1/events/#{event.id}", params: { event: { venue_id: archived.id } },
+      headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+    assert_equal "venue not found", json_response["error"]
+    assert_equal live.id, event.reload.venue_id
+  end
+
+  # Venue names used to be globally unique, so a soft-deleted venue kept holding
+  # its own name against a row the user could no longer see.
+  test "a venue can be recreated with the name of one that was removed" do
+    owner = create_user
+    group = create_group(owner: owner)
+    venue = create_venue(group: group, owner: owner, name: "Main Hall")
+
+    delete "/api/v1/venues/#{venue.id}", headers: auth_headers(owner)
+    assert_response :no_content
+
+    post "/api/v1/venues", params: { venue: { name: "Main Hall", group_id: group.id } },
+      headers: auth_headers(owner)
+    assert_response :created
+    assert_not_equal venue.id, json_response["id"]
+  end
+
+  test "two groups can each have a venue with the same name" do
+    owner = create_user
+    group = create_group(owner: owner)
+    other_group = create_group(owner: owner)
+    create_venue(group: group, owner: owner, name: "Main Hall")
+
+    post "/api/v1/venues", params: { venue: { name: "Main Hall", group_id: other_group.id } },
+      headers: auth_headers(owner)
+    assert_response :created
+  end
+
+  # Venue names are labels, not identifiers — a group running a "Room A" in two
+  # buildings is ordinary, and nothing looks a venue up by name.
+  test "a group can have two venues with the same name" do
+    owner = create_user
+    group = create_group(owner: owner)
+    first = create_venue(group: group, owner: owner, name: "Main Hall")
+
+    post "/api/v1/venues", params: { venue: { name: "Main Hall", group_id: group.id } },
+      headers: auth_headers(owner)
+    assert_response :created
+    assert_not_equal first.id, json_response["id"]
   end
 
   test "set_availability replaces the venue's availability and shows it on the venue" do

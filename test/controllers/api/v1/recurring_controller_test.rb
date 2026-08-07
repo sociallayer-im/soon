@@ -360,6 +360,63 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_equal base_start.to_i, events.first.start_time.to_i
   end
 
+  # Removing a venue is a soft delete, and the client resubmits the whole form,
+  # so venue_id comes back on edits that don't touch the venue. A series whose
+  # venue was removed afterwards must stay editable.
+  test "update accepts the series' own venue_id after that venue was archived" do
+    venue = create_venue(group: @group, owner: @owner)
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: venue.id, timezone: "UTC",
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+    recurring_id = json_response["id"]
+
+    delete "/api/v1/venues/#{venue.id}", headers: auth_headers(@owner)
+    assert_response :no_content
+
+    patch "/api/v1/recurring/#{recurring_id}",
+      params: { selector: "all", venue_id: venue.id, title: "Renamed" },
+      headers: auth_headers(@owner)
+    assert_response :success
+    assert Event.where(recurring_id: recurring_id).all? { |e| e.title == "Renamed" }
+    assert Event.where(recurring_id: recurring_id).all? { |e| e.venue_id == venue.id }
+  end
+
+  test "update refuses to move a series into an archived venue" do
+    live = create_venue(group: @group, owner: @owner)
+    archived = create_venue(group: @group, owner: @owner)
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: live.id, timezone: "UTC",
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+    recurring_id = json_response["id"]
+
+    delete "/api/v1/venues/#{archived.id}", headers: auth_headers(@owner)
+    assert_response :no_content
+
+    patch "/api/v1/recurring/#{recurring_id}",
+      params: { selector: "all", venue_id: archived.id },
+      headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+    assert Event.where(recurring_id: recurring_id).all? { |e| e.venue_id == live.id }
+  end
+
+  test "create refuses to book a series into an archived venue" do
+    venue = create_venue(group: @group, owner: @owner)
+    delete "/api/v1/venues/#{venue.id}", headers: auth_headers(@owner)
+    assert_response :no_content
+
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2, venue_id: venue.id, timezone: "UTC",
+      start_time: base_start.iso8601, end_time: (base_start + 2.hours).iso8601, title: "Series"
+    }, headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "venue does not belong", json_response["error"]
+  end
+
   test "update accepts a time shift that still fits the existing venue's hours" do
     venue = create_venue(group: @group, owner: @owner)
     venue.availabilities.create!(day_of_week: base_start.strftime("%A").downcase, intervals: [["00:00", "23:59"]])

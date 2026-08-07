@@ -5,7 +5,11 @@ class Venue < ApplicationRecord
   has_many :events, dependent: :nullify
   has_many :availabilities, as: :item, dependent: :destroy
 
-  validates :name, presence: true, uniqueness: true
+  # Deliberately NOT unique. Names are labels, not identifiers — every lookup
+  # goes through the TSID. Uniqueness used to be global, which meant a
+  # soft-deleted venue (archived: true, invisible in the UI) kept blocking its
+  # own name on recreate, and two groups could never both have a "Main Hall".
+  validates :name, presence: true
   validates :capacity, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :end_date, comparison: { greater_than: :start_date }, if: -> { start_date.present? && end_date.present? }
 

@@ -28,7 +28,9 @@ class GroupBlueprint < Blueprinter::Base
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint
-    association :venues, blueprint: VenueBlueprint
+    # Source is active_venues (archived: false) but the key stays `venues` —
+    # removed venues are soft-deleted and must not appear in any list.
+    association :active_venues, blueprint: VenueBlueprint, name: :venues
     association :memberships, blueprint: MembershipBlueprint
   end
 

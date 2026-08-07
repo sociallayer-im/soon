@@ -101,7 +101,8 @@ class Api::V1::RecurringController < Api::BaseController
     start_diff = params[:start_time_diff].to_i
     end_diff   = params[:end_time_diff].to_i
 
-    new_venue = params[:venue_id].present? ? resolve_venue(events.first.group) : nil
+    new_venue = params[:venue_id].present? ?
+      resolve_venue(events.first.group, current_venue_id: events.first.venue_id) : nil
     return if performed?
     # Resolved once, up front, same as #create — so the check below and what
     # actually gets persisted (via event_attributes, which already includes
@@ -174,8 +175,15 @@ class Api::V1::RecurringController < Api::BaseController
     events
   end
 
-  def resolve_venue(group)
+  # current_venue_id is the venue the series is already sitting in. An archived
+  # venue is only acceptable as "unchanged" — the client resubmits the whole
+  # form, so venue_id comes back on a time-only edit too, and rejecting it there
+  # would make a series whose venue was later removed permanently uneditable.
+  # Moving a series INTO an archived venue is still refused. Mirrors
+  # EventsController#reference_error's venue_id_changed? guard.
+  def resolve_venue(group, current_venue_id: nil)
     venue = Venue.find_by(id: params[:venue_id], group_id: group.venue_group_ids)
+    venue = nil if venue&.archived? && venue.id != current_venue_id
     render_error("venue does not belong to this group") unless venue
     venue
   end

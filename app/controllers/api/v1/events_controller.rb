@@ -221,6 +221,11 @@ class Api::V1::EventsController < Api::BaseController
     if event.venue_id
       venue = Venue.find_by(id: event.venue_id)
       return "venue not found" unless venue
+      # An archived venue can't take a NEW booking, but an event already sitting
+      # in one must stay editable — otherwise archiving a venue would freeze
+      # every event booked there. venue_id_changed? is true on create and on a
+      # real venue change, false when the caller is editing something else.
+      return "venue not found" if venue.archived? && event.venue_id_changed?
       group = Group.find_by(id: event.group_id)
       return "venue does not belong to this group" unless group && group.venue_group_ids.include?(venue.group_id)
       if event.max_participant && venue.capacity && event.max_participant > venue.capacity
