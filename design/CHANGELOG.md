@@ -2,6 +2,52 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-08 (later) — orders remember what happened to them
+
+`ticketing_activities` / `Ticketing::Activity`: an append-only record of the
+ticketing domain, written from `TicketItem#transition!` — the one place a
+status change is guaranteed to pass through, so recording cannot be forgotten
+at a call site. Design and rationale in `design/PAYMENTS_PLAN.md` §8.
+
+The short version of why: an order kept only a current status, so its past was
+being derived from timestamps, and the derivation was wrong in ways nobody
+would notice. `updated_at` is the last write of any kind rather than the moment
+of a transition. A dispute lost at the provider runs `transition!(:refunded)`
+with no Refund row, making it identical to a voluntary refund afterwards —
+opposite facts, same evidence. Retries changed no status and so left nothing.
+
+The action vocabulary is deliberately wider than the status machine, because
+the events most needing explanation later are not transitions at all
+(`payment_retried`, `callback_rejected`, `prepay_created`).
+
+**Fixed while designing it**: `add_group_ticket_item` wrote
+`update(status: "succeeded")` directly — the only bypass of `transition!` in
+the codebase. Re-granting to an email whose order had expired silently
+reopened a closed order whose seat and coupon were already handed back.
+
+**Also fixed, found by a real refund**: `WechatPayGateway` asked for gzip
+(Net::HTTP's default) and the refund endpoint answered with something it could
+not inflate, raising `Zlib::DataError` *after* WeChat had accepted the refund —
+a 500 for an operation that succeeded.
+
+The dangerous part was the near-miss in the fix: catching it as a plain
+`Error` would have recorded a successful refund as `failed`, and the organizer
+retrying would refund a partial amount twice (only a duplicate *full* refund is
+caught by the unique index). So an unreadable answer is now
+`WechatPayGateway::Unreachable`, distinct from a refusal: it leaves the refund
+pending and waits for the callback. Same principle `query_order` already used
+for "could not ask" vs "not paid".
+
+The gateway moved to `httpx`, which was already a dependency and unused. Two
+Net::HTTP defaults had cost something here: the gzip one above, and
+`Net::HTTP.start` defaulting its proxy argument to `:ENV`, which silently
+routes payment traffic through `http_proxy` — set on the dev machine.
+
+**Organizer-facing**: `GET /tickets/list` gains an `:order_detail` view for
+managers (refunds, timestamps, ticket title, activities), and refunds accept an
+`amount` so a partial refund no longer needs curl. The manager who ordered a
+refund is named in the payload, not left as an id.
+
 ## 2026-08-08 — WeChat Pay, and the currency that should always have been there
 
 CN's second payment rail, built on branch `wechat-pay` and not yet deployed.

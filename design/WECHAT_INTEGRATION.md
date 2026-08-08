@@ -594,16 +594,23 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
   微信的参数校验顺序没有文档，所以这只是**强证据而非证明**——唯一的结论性验证
   是拿一个真实 openid 下一次单。
 
-**真机验证：已通过**（2026-08-08，微信内置浏览器，真实付款）。JSAPI 调起支付、
-支付回调确认、订单转 succeeded 全链路跑通。
+**真机验证：核心链路已全部跑通**（2026-08-08，微信内置浏览器，真实收款与退款）：
 
-仍未真机验证的分支：
+| 环节 | 状态 |
+|---|---|
+| JSAPI 下单 → 调起支付 → 真实付款 | ✅ |
+| 支付回调确认，订单转 succeeded | ✅ |
+| sweeper 超时**关单**并释放库存 | ✅（那笔 timeout 订单） |
+| 退款 → 退款回调 → 释放座位、取消参与者 | ✅ |
+| 与微信侧对账（`query_order` 返回 `REFUND`） | ✅ |
 
-- **退款**与**关单**接口的字段级行为（代码路径有测试，但没对过真实接口）。
-- **`snsapi_base` 静默授权**补 openid ——首笔是用已有 openid 的账号付的，
-  邮箱注册账号那条路还没跑过。
-- 参照 Stripe 那次的经验（PAYMENTS_PLAN §7.4），剩下的接口仍可能有字段出入。
-  上面那个 `ORDER_NOT_EXIST` 就是一例，而它只用一次只读查询就暴露了。
+仍未真机验证的一条：**`snsapi_base` 静默授权补 openid**。几次付款都是用已有
+openid 的账号做的，邮箱注册账号那条路还没跑过——它也是这次唯一全新写、且完全
+没被真实流量走过的链路。
+
+> 参照 Stripe 那次的经验（PAYMENTS_PLAN §7.4），真实接口总会有字段级出入。这次
+> 一共撞到两处，都不是靠读文档能预见的：`ORDER_NOT_EXIST` 的拼写（§5.3 上文），
+> 和退款接口的响应压缩（§5.7）。前者一次只读查询就暴露了，后者要等到真的退一笔钱。
 
 ### 5.4 部署前必须完成
 
@@ -737,3 +744,78 @@ CN 在微信支付之前**从来没有过可购买的票**（crypto 与 Stripe �
    > （`invokeWechatPay` → `WeixinJSBridge.invoke('getBrandWCPayRequest')`，
    > 全前端仅此一处）。排查「没有调起微信支付」时，先确认流程是否真的走到了
    > 那一步，而不是先怀疑签名或配置。
+
+### 5.7 退款 500：一个只有真实退款才会暴露的坑
+
+第一次真实退款返回了 **500**,但**钱退成功了**——回调把订单、座位、参与者全部
+正确收尾了。异常发生在**读响应**这一步,发生在微信已经受理退款之后。
+
+```
+Zlib::DataError (incorrect header check)
+  app/services/wechat_pay_gateway.rb:in 'request'
+```
+
+`Net::HTTP` 默认发 `Accept-Encoding: gzip…` 并自动解压回包。查单和下单的响应
+没有被压缩,所以一路正常;退款接口回的东西它解不开,于是抛异常。
+
+关键在于**这个默认值关不掉**——除非在**构造函数的 initheader 里**传
+accept-encoding:
+
+```ruby
+Net::HTTP::Post.new(uri)                      # 之后再 req["Accept-Encoding"]= 无效
+Net::HTTP::Post.new(uri, {"Accept-Encoding" => "identity"})   # 只有这样才行
+```
+
+`@decode_content` 在构造时就定死了。「事后赋值来不及」这件事不可发现,也正是它
+躲过 review 的原因。
+
+#### 比 500 更危险的那一半
+
+修的时候差点犯一个更严重的错误:把 `Zlib::DataError` 直接归进
+`WechatPayGateway::Error`。那样控制器会走这条分支——
+
+```ruby
+rescue Stripe::StripeError, WechatPayGateway::Error => e
+  refund.update!(status: "failed", ...)
+```
+
+——把一笔**已经成功**的退款记成 `failed`。组织者看到失败会再点一次,**部分退款
+就会退两次**(全额退有 `index_refunds_one_live_full_refund_per_item` 唯一索引挡
+着,部分退没有)。
+
+所以现在分成两个类:
+
+| 类 | 含义 | 处理 |
+|---|---|---|
+| `WechatPayGateway::Error` | 微信答复了,并且拒绝 | 记 `failed`,释放索引,可重试 |
+| `WechatPayGateway::Unreachable` | 请求发出去了,**读不到答复** | 保持 `pending`,返回 `awaiting_confirmation`,交给回调/对账,**绝不暗示重试** |
+
+`Unreachable < Error`,所以 `query_order` / `close_order` 里既有的 `rescue Error`
+仍然把它读成「问不到」,行为不变。这和文档里早就在用的
+**「问不到 ≠ 没付」**是同一条原则,只是这次施加到了退款上。
+
+#### 换成 httpx
+
+`Net::HTTP` 还有第二个静默默认值:
+
+```ruby
+Net::HTTP.start(host, port, use_ssl: true)   # p_addr 默认 :ENV
+```
+
+它**读 `http_proxy`**。开发机上三个代理变量都设着(见根 CLAUDE.md 的「本地环境
+陷阱」),也就是说本地每一次调微信的请求都在走 SOCKS 代理。生产没设所以没出事,
+但这是随时会咬人的。
+
+`httpx` 本来就在 `Gemfile` 里且**无人使用**,而这个文件是全项目最后一个
+`Net::HTTP` 调用者,所以换掉的成本是零。它:
+
+- 不读代理环境变量,除非显式要;
+- 把传输故障作为 `HTTPX::ErrorResponse` **返回**而不是抛异常——正好对上上面
+  那个 `Unreachable` 划分,它覆盖的一切(连接失败、超时、TLS、body 截断)含义
+  都是「说不准」;
+- `Accept-Encoding: identity` 仍然显式发送。不要钱,而且写出意图比赌某个库的
+  默认值不变要好。
+
+上线后对真实接口复验:空 body(不存在的订单号)和有内容的 body(真实已付订单)
+都读得回来——退款那个 500 是读**非空**响应时炸的,只测空响应证明不了什么。
+随后的真实退款返回 200,微信侧 `query_order` 返回 `REFUND`,两边对上。
