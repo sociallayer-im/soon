@@ -481,6 +481,17 @@ class Api::V1::TicketsController < Api::BaseController
       items = TicketItem.where(event_id: params[:event_id])
     end
     items = items.where(status: params[:status]) if params[:status].present?
+
+    # Managers get the fuller shape — refunds and the timestamps their order
+    # list reconstructs a history from. A buyer looking at their own orders
+    # gets the plain view: the refund rows carry who requested them and why,
+    # which is organizer-facing.
+    if event_manager?(params[:event_id])
+      return render json: TicketItemBlueprint.render(
+        items.includes(:user, :ticket, :refunds).order(created_at: :desc), view: :order_detail
+      )
+    end
+
     render json: TicketItemBlueprint.render(items.includes(:user), view: :with_profile)
   end
 

@@ -199,6 +199,51 @@ class Api::V1::TicketsWechatFlowTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  # ---------------------------------------------------------------- order list
+
+  # What the organizer's Orders tab renders. Without the refunds and the
+  # timestamps there is nothing to show a history from — the order model keeps
+  # only a current status.
+  test "the manager order list carries refunds and the timestamps a history needs" do
+    item = create_order(status: "succeeded", txhash: "4200001", paid_at: 2.hours.ago)
+    refund = item.refunds.create!(requested_by: @owner, amount: 40, currency: "cny",
+      full_refund: false, reason: "partial")
+
+    get "/api/v1/tickets/list", params: { event_id: @event.id }, headers: auth_headers(@owner)
+    assert_response :success
+
+    row = json_response.sole
+    assert_equal item.id, row["id"]
+    assert_equal "wechat", row["payment_provider"]
+    assert_not_nil row["paid_at"]
+    assert_equal @ticket.title, row.dig("ticket", "title")
+
+    assert_equal 1, row["refunds"].length
+    assert_equal refund.id, row["refunds"][0]["id"]
+    assert_equal 40, row["refunds"][0]["amount"]
+    # Pending, not succeeded — a refund is asynchronous, and hiding it until
+    # settled would blank it out during exactly the window someone is
+    # watching for it.
+    assert_equal "pending", row["refunds"][0]["status"]
+    assert_equal false, row["refunds"][0]["full_refund"]
+  end
+
+  test "a buyer sees their own orders without the organizer-facing refund detail" do
+    create_order(status: "succeeded", txhash: "4200001")
+
+    get "/api/v1/tickets/list",
+      params: { event_id: @event.id, profile_handle: @buyer.name }, headers: auth_headers(@buyer)
+    assert_response :success
+    assert_nil json_response.sole["refunds"]
+  end
+
+  test "the whole-event order list stays manager-only" do
+    create_order(status: "succeeded")
+
+    get "/api/v1/tickets/list", params: { event_id: @event.id }, headers: auth_headers(create_user)
+    assert_response :forbidden
+  end
+
   # ---------------------------------------------------------------- set_payment_status
 
   # This endpoint is authenticated by a shared secret and does no payment
