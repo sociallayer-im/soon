@@ -1,0 +1,23 @@
+test/models/coupon_test.rb
+  s_448695a5d036bc::t_10224d0a0b5eb0 37-51
+app/models/coupon.rb
+  s_448695a5d036bc::t_8066f21c97bab0 59-62
+  s_448695a5d036bc::t_7aeb310f0577c7 41-47
+  s_448695a5d036bc::t_63842d9b4700a5 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "73ed462edd720cf4c11d3cd0bae2ddff971d1709",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
