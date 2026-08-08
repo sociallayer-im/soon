@@ -1,3 +1,23 @@
+# A PEM carried through a single .env line, restored.
+#
+# The value must be SINGLE-QUOTED in the env file. Unquoted, dotenv treats the
+# backslash in \n as an escape character and drops it without inserting
+# anything — so every line break arrives as a bare letter "n" and the key is
+# quietly garbage. That is checked for by name here, because the model's own
+# error ("use apiclient_key.pem, not apiclient_cert.pem") would send whoever
+# hits it looking at entirely the wrong thing.
+def pem(value, var)
+  restored = value.to_s.gsub("\\n", "\n")
+  return restored if restored.include?("\n")
+
+  if restored.match?(/-----BEGIN [A-Z ]+-----n/)
+    abort "#{var} lost its newlines: they arrived as the letter 'n'.\n" \
+          "Single-quote the value in .env.cn.production — unquoted, dotenv eats the backslash:\n" \
+          "  #{var}='-----BEGIN …-----\\nMIIE…'"
+  end
+  abort "#{var} has no line breaks at all — it is not a PEM."
+end
+
 namespace :wechat_pay do
   # Installs (or updates) the platform WeChat Pay merchant from the
   # environment. Idempotent — safe to re-run after a credential rotation,
@@ -27,11 +47,10 @@ namespace :wechat_pay do
       name: ENV.fetch("WECHAT_PAY_MERCHANT_NAME", "Platform merchant"),
       app_id: ENV["WECHAT_PAY_APP_ID"],
       cert_serial: ENV["WECHAT_PAY_CERT_SERIAL"],
-      # Escaped newlines survive a single-line .env far better than real ones.
-      private_key: ENV["WECHAT_PAY_PRIVATE_KEY"].gsub("\\n", "\n"),
+      private_key: pem(ENV["WECHAT_PAY_PRIVATE_KEY"], "WECHAT_PAY_PRIVATE_KEY"),
       apiv3_key: ENV["WECHAT_PAY_APIV3_KEY"],
       public_key_id: ENV["WECHAT_PAY_PUBLIC_KEY_ID"].presence,
-      public_key: ENV["WECHAT_PAY_PUBLIC_KEY"]&.gsub("\\n", "\n"),
+      public_key: ENV["WECHAT_PAY_PUBLIC_KEY"] && pem(ENV["WECHAT_PAY_PUBLIC_KEY"], "WECHAT_PAY_PUBLIC_KEY"),
       status: "active"
     )
     setting.save!
