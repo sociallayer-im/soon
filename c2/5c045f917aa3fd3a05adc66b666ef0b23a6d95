@@ -1,0 +1,33 @@
+test/controllers/api/v1/auth_controller_test.rb
+  s_448695a5d036bc::t_d291be467fcc47 27
+  s_448695a5d036bc::t_d56bfc49a28fac 17-18,23,30
+  s_448695a5d036bc::t_7550f04c7a4324 104-106
+  s_448695a5d036bc::t_059263873572bb 14-16,19-22,24-26,28-29,31-42
+app/models/auth_code.rb
+  s_448695a5d036bc::t_a96ae5a9368cdd 2-10,17
+test/mailers/auth_mailer_test.rb
+  s_448695a5d036bc::t_d56bfc49a28fac 13-15
+app/controllers/api/v1/auth_controller.rb
+  s_448695a5d036bc::t_3155705acb6bcc 215-217,219-226,228
+  s_448695a5d036bc::t_9c105634a4c749 83-84
+  s_448695a5d036bc::t_2d1305bf6b5158 41
+  s_448695a5d036bc::t_1499f59efb9457 76
+  s_448695a5d036bc::t_ae4c02e2ba4b23 218,227
+  s_448695a5d036bc::t_2f40bef3156f7c 229-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c25c045f917aa3fd3a05adc66b666ef0b23a6d95",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
