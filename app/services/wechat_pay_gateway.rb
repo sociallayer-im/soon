@@ -83,6 +83,15 @@ class WechatPayGateway
     }
   end
 
+  # "This order was never placed" — a definite answer, not a failure.
+  #
+  # Both spellings are accepted because the documentation and the wire disagree:
+  # a live query against api.mch.weixin.qq.com answers ORDER_NOT_EXIST, while
+  # ORDERNOTEXIST appears in the v2-era docs. Matching only the documented one
+  # meant every unpaid order looked unreachable instead of unpaid, so the
+  # sweeper skipped it forever and the seat was never released.
+  ORDER_MISSING_CODES = %w[ORDER_NOT_EXIST ORDERNOTEXIST].freeze
+
   # The authoritative answer on whether an order was paid. Callbacks are an
   # optimization; this is what the sweeper and the confirm path trust.
   # Returns nil when WeChat could not be asked — which is NOT the same as
@@ -92,9 +101,9 @@ class WechatPayGateway
 
     request(:get, "/v3/pay/transactions/out-trade-no/#{out_trade_no}?mchid=#{setting.mchid}", setting: setting)
   rescue Error => e
-    # ORDERNOTEXIST is a real answer: no order was ever placed, so nothing was
-    # paid. Anything else (network, 5xx, auth) is an absence of information.
-    return { "trade_state" => "NOTPAY", "out_trade_no" => out_trade_no } if e.code == "ORDERNOTEXIST"
+    # No order was ever placed, so nothing was paid. Anything else (network,
+    # 5xx, auth) is an absence of information rather than an answer.
+    return { "trade_state" => "NOTPAY", "out_trade_no" => out_trade_no } if ORDER_MISSING_CODES.include?(e.code)
 
     Rails.logger.warn("[wechat_pay] query_order #{out_trade_no} failed: #{e.message}")
     nil

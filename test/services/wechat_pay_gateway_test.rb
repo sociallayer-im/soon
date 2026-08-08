@@ -168,10 +168,34 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
     end
   end
 
-  test "query_order treats ORDERNOTEXIST as a definite not-paid" do
-    WechatPayGateway.stub :request, ->(*, **) { raise WechatPayGateway::Error.new("no order", code: "ORDERNOTEXIST") } do
-      assert_equal "NOTPAY", WechatPayGateway.query_order(@setting, @item.id)["trade_state"]
+  # The spelling here is not cosmetic and not guessable from the docs: a live
+  # query answers ORDER_NOT_EXIST, the v2-era documentation says ORDERNOTEXIST.
+  # Matching only one turns "unpaid" into "unreachable", which makes the sweeper
+  # skip the order forever and never release the seat.
+  test "query_order treats every order-missing code as a definite not-paid" do
+    WechatPayGateway::ORDER_MISSING_CODES.each do |code|
+      WechatPayGateway.stub :request, ->(*, **) { raise WechatPayGateway::Error.new("no order", code: code) } do
+        result = WechatPayGateway.query_order(@setting, @item.id)
+        assert_equal "NOTPAY", result["trade_state"], "#{code} must read as not-paid, not as unreachable"
+      end
     end
+    assert_includes WechatPayGateway::ORDER_MISSING_CODES, "ORDER_NOT_EXIST",
+      "this is what the live API actually returns — verified 2026-08-08"
+  end
+
+  # An unpaid order must reach item.timeout, and it only does so if the
+  # not-exist code is recognised. This is the sweeper-level consequence of the
+  # test above, which is where the bug would actually have bitten.
+  test "the sweeper expires an order WeChat says was never placed" do
+    @item.update!(reserved_until: 5.minutes.ago)
+
+    WechatPayGateway.stub :request, ->(*, **) { raise WechatPayGateway::Error.new("订单不存在", code: "ORDER_NOT_EXIST") } do
+      WechatPayGateway.stub :close_order, true do
+        TicketingSweeperJob.perform_now
+      end
+    end
+
+    assert_equal "timeout", @item.reload.status
   end
 
   test "close_order reports failure instead of raising into the sweeper" do

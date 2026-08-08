@@ -576,13 +576,30 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
 - `wechat_pay:install` 首次创建、二次更新不重复建行、单行 PEM 的 `\n` 转义能
   还原并真正签名成功；把**证书**误填成私钥会被拒绝并给出改法。
 
-未验证（需要真实微信环境）：
+**对真实商户 API 的只读探测**（2026-08-08，凭据齐备后补做，未产生任何订单）：
 
-- **从未调用过真实的微信商户 API**。下单/查单/关单/退款的字段级行为、错误码、
-  以及真实回调的报文形状都可能有出入——参照 Stripe 那次的经验（§7.4 of
-  PAYMENTS_PLAN），第一次真实联调一定会发现字段问题。
-- **JSAPI 调起支付**只能在微信内置浏览器里跑，本地无法验证。
-- **`snsapi_base` 静默授权**同上。
+- `GET /v3/pay/transactions/out-trade-no/<不存在的订单号>` →
+  `404 {"code":"ORDER_NOT_EXIST","message":"订单不存在"}`。
+  **签名被接受**——这是本地测试永远证明不了的一件事：本地签名与验签用的是同一
+  套代码，规范化串（canonical string）的布局写错了也会自洽通过。
+- **这次探测抓到一个真 bug**：`query_order` 里判断的是 `ORDERNOTEXIST`（v2 时代
+  文档里的拼写），真实接口返回的是 **`ORDER_NOT_EXIST`**。不匹配的话，未支付
+  订单会被当成「问不到」而不是「没付」，sweeper 于是**永远跳过它、库存永不释放**，
+  并且每 5 分钟打一条警告。已改为同时接受两种拼写，并补了 sweeper 层的断言。
+- `POST /v3/pay/transactions/jsapi` 用一个伪造 openid（真实与畸形两种都试过）→
+  `400 {"code":"PARAM_ERROR","message":"无效的openid"}`，**没有**
+  `APPID_MCHID_NOT_MATCH`、**没有** `NOAUTH`。
+  可以确定的是：签名通过、商户号被识别。至于 appid 关联与 JSAPI 权限，
+  微信的参数校验顺序没有文档，所以这只是**强证据而非证明**——唯一的结论性验证
+  是拿一个真实 openid 下一次单。
+
+仍未验证（必须在微信内置浏览器里用真人跑）：
+
+- **JSAPI 调起支付**（`WeixinJSBridge`）。
+- **`snsapi_base` 静默授权**补 openid 的整条链路。
+- **真实回调的报文形状**、退款接口、关单接口的字段级行为。参照 Stripe 那次的
+  经验（PAYMENTS_PLAN §7.4），第一次真实联调仍有可能再发现字段问题——上面那个
+  `ORDER_NOT_EXIST` 就是一例，而它只用一次只读查询就暴露了。
 
 ### 5.4 部署前必须完成
 
@@ -595,32 +612,32 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
    | 证书序列号 | ✅ 与证书内 serial 实测一致 |
    | APIv3 密钥 | ✅ 32 字节 |
    | 微信支付公钥 `wxpay_pub_key.pem` + `PUB_KEY_ID_…` | ✅ 2048-bit RSA，已实测能经转义 env 往返并被 `notify_public_key` 加载 |
-   | **商户 API 证书私钥 `apiclient_key.pem`** | ❌ **仍然缺失** |
+   | 商户 API 证书私钥 `apiclient_key.pem` | ✅ 位于 `cert/1115981704_20260808_cert/`，已实测 |
 
-   缺的那一项，`wechat_credentials.md` 里贴过两种都不对的东西：
+   私钥核对结果（`openssl`，2026-08-08）：未加密的 PKCS#8、2048-bit、modulus 与
+   `apiclient_cert.pem` **及**文档里那张证书三者完全一致，签名能被证书公钥验证
+   通过（`Verified OK`），证书 serial 与 `WECHAT_PAY_CERT_SERIAL` 一致。
+   随后用它对真实商户 API 发起的只读查询被微信接受（见 §5.3）。
 
-   - `-----BEGIN CERTIFICATE-----` 是 **`apiclient_cert.pem`**（证书）。它装的是
-     **公钥**那一半——`openssl rsa -check` 对它的回答就是 "Could not find private
-     key"。证书是给对方验签用的，签不了任何东西。
-   - `-----BEGIN CERTIFICATE REQUEST-----` 是 **CSR**（证书请求）。它是「公钥 +
-     主体信息，再用私钥签个名」，交给 CA 去换证书用的。**同样不是私钥**，同样
-     签不了 API 请求。CSR 的存在只说明私钥当时确实生成过。
-
-   需要的是 `-----BEGIN PRIVATE KEY-----` 开头的 `apiclient_key.pem`。它由商户
-   平台的**证书工具在本地生成**，`apiclient_cert.pem` 和 CSR 是同一次操作的产物
-   ——**三个文件在同一个目录里**。有 CSR 基本就意味着私钥当时落过盘，先去那个
-   目录找，而不是重新申请。
-
-   找到后可以直接核对是不是配套的那一把（两条 modulus 必须完全相同）：
-
-   ```bash
-   openssl rsa  -in apiclient_key.pem  -noout -modulus
-   openssl x509 -in apiclient_cert.pem -noout -modulus
-   # 本证书的是 Modulus=B120FE340DFDCD8A66FCD911ADEE5E2D99EB578EA12442209103…
-   ```
-
-   实在找不到就在商户平台重新申请一次 API 证书——**旧证书会失效**，序列号随之
-   改变，`WECHAT_PAY_CERT_SERIAL` 要一起更新。
+   > 留档，因为这个坑很容易再踩一次：同一个目录里的三个文件只有一个能签名，
+   > `wechat_credentials.md` 先后贴过的两种都不行。
+   >
+   > - `-----BEGIN CERTIFICATE-----` 是 **`apiclient_cert.pem`**（证书），装的是
+   >   **公钥**那一半——`openssl rsa -check` 对它的回答就是 "Could not find
+   >   private key"。证书是给对方验签用的，签不了任何东西。
+   > - `-----BEGIN CERTIFICATE REQUEST-----` 是 **CSR**（证书请求），是「公钥 +
+   >   主体信息，再用私钥签个名」，交给 CA 换证书用的。**同样不是私钥。**
+   >   CSR 的存在只说明私钥当时确实生成过。
+   >
+   > 能签名的是 `-----BEGIN PRIVATE KEY-----` 开头的 `apiclient_key.pem`。三个
+   > 文件都由商户平台的证书工具**一次性在本地生成**，所以手上有 CSR 或证书，
+   > 私钥基本就在同一个目录里——先去那里找，不要急着重新申请（重新申请会让旧
+   > 证书失效，`WECHAT_PAY_CERT_SERIAL` 得跟着换）。核对是否配套：
+   >
+   > ```bash
+   > openssl rsa  -in apiclient_key.pem  -noout -modulus
+   > openssl x509 -in apiclient_cert.pem -noout -modulus   # 两条必须完全相同
+   > ```
 
    写入 `.env.cn.production` 时 PEM 要压成单行（`\n` 转义），已实测可还原：
 
@@ -631,6 +648,10 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
 2. **商户平台配置** —— APPID 关联服务号 `wxdf1ef2c65db36224`（支付 appid 必须
    与签发 openid 的 appid 一致）、开通 JSAPI 支付、支付授权目录填
    `https://www.juluo.xyz/`。
+   §5.3 的下单探测**没有**报 `APPID_MCHID_NOT_MATCH` 或 `NOAUTH`，说明前两项
+   很可能已经配好了；但微信的参数校验顺序无文档，所以**仍需在商户平台上目视
+   确认一遍**，尤其是支付授权目录——那一项在下单阶段根本不会被校验，只在浏览器
+   调起支付时才生效，探测不到。
 3. **`api.juluo.xyz` 的 ICP 备案确认** —— notify_url 域名要求备案（§4.3 至今未核实）。
 4. **`rails wechat_pay:install`** —— 部署后手动执行一次；`ginger.cn.yml` 已注入
    所需的 `WECHAT_PAY_*`。凭据轮换时重跑同一条命令。
