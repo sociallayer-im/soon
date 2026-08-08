@@ -204,42 +204,63 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
   # there is nothing to decode, and any remaining read failure is Unreachable
   # rather than Error, because "we could not read the answer" and "it was
   # refused" must not be handled the same way.
+  # httpx reports transport trouble as a response object rather than by
+  # raising. Everything it covers means the request may have been carried out
+  # and we cannot say — which is not a rejection and must not be reported as
+  # one, because the caller records a rejection as `failed` and invites a retry.
   test "a response we cannot read is Unreachable, not a refusal" do
-    [ Zlib::DataError.new("incorrect header check"), Net::ReadTimeout.new, EOFError.new ].each do |boom|
-      Net::HTTP.stub :start, ->(*, **) { raise boom } do
-        error = assert_raises(WechatPayGateway::Unreachable) do
-          WechatPayGateway.request(:post, "/v3/refund/domestic/refunds", setting: @setting, body: { a: 1 })
-        end
-        assert_match "could not read", error.message
+    [ Zlib::DataError.new("incorrect header check"), Errno::ECONNRESET.new, EOFError.new ].each do |boom|
+      error = assert_raises(WechatPayGateway::Unreachable) do
+        WechatPayGateway.handle_response(error_response(boom))
       end
+      assert_match "could not read", error.message
     end
   end
 
   test "Unreachable is still an Error, so query_order keeps reading it as cannot-ask" do
     assert_operator WechatPayGateway::Unreachable, :<, WechatPayGateway::Error
 
-    Net::HTTP.stub :start, ->(*, **) { raise Zlib::DataError, "incorrect header check" } do
+    WechatPayGateway.stub :request, ->(*, **) { raise WechatPayGateway::Unreachable, "boom" } do
       assert_nil WechatPayGateway.query_order(@setting, @item.id)
     end
   end
 
-  # Net::HTTP decides whether to auto-decompress at CONSTRUCTION time, and only
-  # skips it when accept-encoding was supplied in the initheader — setting the
-  # header afterwards is too late, which is exactly how the bug survived.
-  test "the request asks for identity encoding at construction time" do
+  # The gzip default is what produced a 500 for a refund that had already been
+  # accepted, so the request states its encoding rather than trusting a
+  # library default to stay put.
+  test "the request asks for identity encoding and signs the exact body sent" do
     seen = nil
-    Net::HTTP.stub :start, ->(*, **, &block) {
-      fake = Object.new
-      fake.define_singleton_method(:request) { |req| seen = req; raise Net::ReadTimeout }
-      block.call(fake)
-    } do
+    # Captured outside the block: inside define_singleton_method, self is the
+    # session double rather than the test case.
+    boom = error_response(Errno::ECONNRESET.new)
+    session = Object.new
+    session.define_singleton_method(:request) do |verb, url, **opts|
+      seen = { verb: verb, url: url, body: opts[:body] }
+      boom
+    end
+
+    captured_options = nil
+    HTTPX.stub :with, ->(**opts) { captured_options = opts; session } do
       assert_raises(WechatPayGateway::Unreachable) do
         WechatPayGateway.request(:post, "/v3/pay/transactions/jsapi", setting: @setting, body: { a: 1 })
       end
     end
 
-    assert_equal "identity", seen["accept-encoding"]
-    assert_not seen.decode_content, "Net::HTTP must not try to inflate the reply"
+    assert_equal "identity", captured_options[:headers]["Accept-Encoding"]
+    assert_equal "POST", seen[:verb]
+    assert_equal "https://api.mch.weixin.qq.com/v3/pay/transactions/jsapi", seen[:url]
+    # The signature covers the byte-for-byte body; sending a differently
+    # serialized one is SIGN_ERROR, with no hint which half was wrong.
+    assert_equal '{"a":1}', seen[:body]
+  end
+
+  test "a non-2xx answer is a refusal, carrying WeChat's own code" do
+    response = Struct.new(:status, :body).new(403, '{"code":"NOTENOUGH","message":"余额不足"}')
+
+    error = assert_raises(WechatPayGateway::Error) { WechatPayGateway.handle_response(response) }
+    assert_equal "NOTENOUGH", error.code
+    assert_equal 403, error.status
+    assert_not_kind_of WechatPayGateway::Unreachable, error, "a refusal is not an unknown outcome"
   end
 
   test "close_order reports failure instead of raising into the sweeper" do
@@ -257,6 +278,13 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
   end
 
   private
+
+  # httpx's ErrorResponse takes a real request — it reads options and the
+  # response off it — so a bare double will not do.
+  def error_response(error)
+    request = HTTPX::Request.new("POST", "https://#{WechatPayGateway::API_HOST}/v3/probe", HTTPX::Options.new)
+    HTTPX::ErrorResponse.new(request, error)
+  end
 
   def with_env(vars)
     previous = vars.keys.index_with { |k| ENV[k] }

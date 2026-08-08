@@ -3,7 +3,7 @@
 # acts on, and nothing reads credentials from the environment at call time
 # (design/WECHAT_INTEGRATION.md §2.3–2.4).
 #
-# Written directly against OpenSSL and Net::HTTP rather than through a gem.
+# Written directly against OpenSSL and httpx rather than through a WeChat gem.
 # The whole protocol is three primitives — sign an outgoing request, verify an
 # incoming signature, AES-GCM-decrypt a callback resource — and each is a
 # handful of lines whose exact byte layout has to be right; a dependency here
@@ -244,17 +244,21 @@ class WechatPayGateway
                            "and sp_appid/sp_mchid/sub_mchid fields, which have never been exercised here"
   end
 
+  # httpx rather than Net::HTTP, for two defaults that bit this integration:
+  #
+  #   - Net::HTTP asks for gzip and inflates the reply unless the caller set
+  #     accept-encoding IN THE CONSTRUCTOR (setting it afterwards is too late,
+  #     which is not discoverable). The refund endpoint answered with something
+  #     it could not inflate, raising Zlib::DataError *after* WeChat had
+  #     accepted the refund — a 500 for an operation that succeeded.
+  #   - Net::HTTP.start defaults its proxy argument to :ENV, so http_proxy
+  #     silently reroutes payment traffic. This machine has one set.
+  #
+  # Accept-Encoding: identity is still sent explicitly. It costs nothing and
+  # states the intent rather than relying on a library's defaults staying put.
   def self.request(method, path_with_query, setting:, body: nil)
     payload = body ? JSON.generate(body) : ""
-    uri = URI("https://#{API_HOST}#{path_with_query}")
 
-    # Accept-Encoding must be set HERE, in the constructor's initheader, not
-    # afterwards: Net::HTTP decides whether to auto-decompress at construction
-    # time, and only skips it when the caller supplied one of accept-encoding
-    # or range. Left to itself it asks for gzip and then inflates the reply —
-    # and the refund endpoint answers with something it cannot inflate, which
-    # raised Zlib::DataError ("incorrect header check") AFTER the refund had
-    # already been accepted. Asking for identity avoids the decode entirely.
     headers = {
       "Authorization" => authorization(setting, method, path_with_query, payload),
       "Accept" => "application/json",
@@ -263,24 +267,25 @@ class WechatPayGateway
     }
     headers["Content-Type"] = "application/json" if body
 
-    req = (method == :get ? Net::HTTP::Get : Net::HTTP::Post).new(uri, headers)
-    req.body = payload if body
-
-    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true,
-      open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) { |http| http.request(req) }
+    response = HTTPX
+      .with(headers: headers, timeout: { connect_timeout: OPEN_TIMEOUT, request_timeout: READ_TIMEOUT })
+      .request(method.to_s.upcase, "https://#{API_HOST}#{path_with_query}", body: body ? payload : nil)
 
     handle_response(response)
-  rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, OpenSSL::SSL::SSLError,
-         Errno::ECONNRESET, EOFError, Zlib::Error, JSON::ParserError => e
-    # The request may well have been carried out — we simply could not read
-    # the answer. That is a different fact from a rejection and callers must
-    # treat it differently, hence a distinct class.
-    raise Unreachable, "could not read WeChat Pay's response: #{e.class}"
   end
 
   def self.handle_response(response)
-    code = response.code.to_i
-    parsed = response.body.presence ? (JSON.parse(response.body) rescue {}) : {}
+    # httpx returns an error object instead of raising. Everything it covers —
+    # connect failures, timeouts, TLS, a truncated body — means the request may
+    # have been carried out and we simply cannot say. That is not a rejection,
+    # so it must not be reported as one.
+    if response.is_a?(HTTPX::ErrorResponse)
+      raise Unreachable, "could not read WeChat Pay's response: #{response.error.class}"
+    end
+
+    code = response.status
+    raw = response.body.to_s
+    parsed = raw.presence ? (JSON.parse(raw) rescue {}) : {}
 
     return parsed if code.between?(200, 299)
 
