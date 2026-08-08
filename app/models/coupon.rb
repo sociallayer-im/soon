@@ -22,7 +22,7 @@ class Coupon < ApplicationRecord
 
   # Discount math, preserved exactly from sails/:
   # - ratio discount is basis points of 10000 (discount: 500 == 5%), not 0-100
-  # - amount discount is scaled x10000 for non-stripe chains vs used as-is for stripe
+  # - amount discount is scaled x10000 for token amounts vs used as-is for fiat
   #
   # `chain` is the chain actually selected for this order (for multi-chain payment
   # methods paymethod.chain is blank, so the amount-scaling must key off the
@@ -38,9 +38,13 @@ class Coupon < ApplicationRecord
       return [amount, nil, nil] if discount > 10_000 || discount < 0
       amount = amount * discount / 10_000
     elsif discount_type == "amount"
-      # stripe amounts are already in the smallest unit (cents); crypto amounts
-      # are scaled x10000. Unknown chain (no payment context) → use as-is.
-      discount_value = (chain == "stripe" || chain.nil?) ? discount : discount * 10_000
+      # Fiat amounts are already in the smallest unit (cents, 分); crypto
+      # amounts are scaled x10000. Unknown chain (no payment context) → as-is.
+      #
+      # Keyed off the fiat SET, not a literal "stripe". Written as an equality
+      # test, a second fiat rail falls into the crypto branch by default and a
+      # ¥1 coupon silently becomes a ¥10,000 one — i.e. the order goes free.
+      discount_value = fiat_amount?(chain) ? discount : discount * 10_000
       discount_value = amount if discount_value > amount
       amount -= discount_value
     end
@@ -51,6 +55,10 @@ class Coupon < ApplicationRecord
   end
 
   private
+
+  def fiat_amount?(chain)
+    chain.nil? || PaymentMethod::FIAT_CHAINS.include?(chain)
+  end
 
   # No expires_at default — a blank expiry means the coupon never expires
   # (before 2026-07-30 it was silently forced to 30 days, making non-expiring

@@ -34,6 +34,21 @@ class CouponTest < ActiveSupport::TestCase
     assert_equal 300, discount_value
   end
 
+  # The guard the x10000 scaling actually needs. It used to read
+  # `chain == "stripe"`, so every fiat rail added afterwards would land in the
+  # crypto branch and blow a fixed-amount coupon up by 10000x — which, being
+  # clamped to the price, discounts the order to zero. Asserted against the SET
+  # so the next rail is covered by construction rather than by remembering.
+  test "every fiat rail takes the amount discount as-is, not x10000" do
+    PaymentMethod::FIAT_CHAINS.each do |rail|
+      coupon = create_coupon(event: @event, discount_type: "amount", discount: 300, max_allowed_usages: 10)
+      amount, discount_value, = coupon.get_discounted_price(1000, nil, chain: rail)
+
+      assert_equal 700, amount, "#{rail}: fiat amounts are already minor units"
+      assert_equal 300, discount_value, "#{rail}: a 300 coupon must discount 300"
+    end
+  end
+
   test "amount discount is scaled x10000 for a non-stripe (crypto) payment method" do
     ticket = create_ticket(event: @event)
     crypto_pm = create_payment_method(item: ticket, chain: "base", price: 1_000_000)
