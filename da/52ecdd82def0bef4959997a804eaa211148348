@@ -1,0 +1,27 @@
+app/blueprints/ticket_ref_blueprint.rb
+  s_448695a5d036bc::t_af3ce34790a015 1-11
+app/blueprints/ticket_item_blueprint.rb
+  s_448695a5d036bc::t_6adce6f12ca43b 15-38
+app/controllers/api/v1/tickets_controller.rb
+  s_448695a5d036bc::t_001f800caa56d8 484-494
+app/blueprints/refund_blueprint.rb
+  s_448695a5d036bc::t_9338d737706020 1-17
+test/controllers/api/v1/tickets_wechat_flow_test.rb
+  s_448695a5d036bc::t_aca45d86d28368 202-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "da52ecdd82def0bef4959997a804eaa211148348",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
