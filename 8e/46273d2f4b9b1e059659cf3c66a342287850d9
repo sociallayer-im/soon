@@ -1,0 +1,48 @@
+db/migrate/20260808120000_create_wechat_pay_settings.rb
+  s_448695a5d036bc::t_2d75cb9baf4aac 1-45
+test/models/payment_method_test.rb
+  s_448695a5d036bc::t_ab3a07b7702e29 62-87
+  s_448695a5d036bc::t_87e9473cc47250 110-125
+lib/tasks/wechat_pay.rake
+  s_448695a5d036bc::t_93c52fb06e363f 1-58
+app/models/payment_method.rb
+  s_448695a5d036bc::t_d5f5d46fc3c112 9
+  s_448695a5d036bc::t_0c87f17fba1d4c 43-46,49
+  s_448695a5d036bc::t_bf7b507c5313dc 135-146
+  s_448695a5d036bc::t_258ee34273818b 65
+  s_448695a5d036bc::t_1af0f5e805befc 2
+  s_448695a5d036bc::t_cf153e6619abd4 97-106
+  s_448695a5d036bc::t_fd29a715500520 21
+  s_448695a5d036bc::t_667a9b132cf7c4 33-37
+test/models/wechat_pay_setting_test.rb
+  s_448695a5d036bc::t_095226daa9dd36 1-56
+app/models/wechat_pay_event.rb
+  s_448695a5d036bc::t_20c4bfe1a7364d 1-18
+test/support/factory_helpers.rb
+  s_448695a5d036bc::t_05cd867b8c9bea 2-9
+  s_448695a5d036bc::t_b4f81aa05362a4 128-144
+app/controllers/api/base_controller.rb
+  s_448695a5d036bc::t_de877461e3a001 34-43
+app/models/wechat_pay_setting.rb
+  s_448695a5d036bc::t_9082577aefd210 1-71
+db/migrate/20260808120001_create_wechat_pay_events.rb
+  s_448695a5d036bc::t_9862e442d6965d 1-22
+db/schema.rb
+  s_448695a5d036bc::t_8167a08599525e 13,493,594,607,739-769
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8e46273d2f4b9b1e059659cf3c66a342287850d9",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
