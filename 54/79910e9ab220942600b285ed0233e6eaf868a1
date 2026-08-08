@@ -1,0 +1,21 @@
+design/WECHAT_INTEGRATION.md
+  s_448695a5d036bc::t_373eec8555e873 178-198
+design/CHANGELOG.md
+  s_448695a5d036bc::t_e5a3904caa3d9b 5-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5479910e9ab220942600b285ed0233e6eaf868a1",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
