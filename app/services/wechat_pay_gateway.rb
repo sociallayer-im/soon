@@ -128,7 +128,7 @@ class WechatPayGateway
     body = {
       transaction_id: ticket_item.txhash,
       out_refund_no: refund.id,
-      notify_url: refund_notify_url(setting),
+      notify_url: notify_url(setting),
       amount: {
         refund: refund.amount.to_i,
         total: ticket_item.amount.to_i,
@@ -191,13 +191,6 @@ class WechatPayGateway
     "#{ENV.fetch('API_URL', 'http://localhost:3000')}/api/v1/webhooks/wechat/#{setting.id}"
   end
 
-  # Refund callbacks carry a different event_type but nothing else
-  # distinguishes them, so they get their own path rather than being told
-  # apart by payload shape.
-  def self.refund_notify_url(setting)
-    "#{ENV.fetch('API_URL', 'http://localhost:3000')}/api/v1/webhooks/wechat/#{setting.id}/refund"
-  end
-
   # ---- internals ----
 
   def self.description_for(event, ticket_item)
@@ -220,7 +213,7 @@ class WechatPayGateway
     nonce = SecureRandom.hex(16)
     signature = sign(setting, "#{method.to_s.upcase}\n#{path_with_query}\n#{timestamp}\n#{nonce}\n#{body}\n")
 
-    'WECHATPAY2-SHA256-RSA2048 ' \
+    "WECHATPAY2-SHA256-RSA2048 " \
       "mchid=\"#{setting.mchid}\",nonce_str=\"#{nonce}\",signature=\"#{signature}\"," \
       "timestamp=\"#{timestamp}\",serial_no=\"#{setting.cert_serial}\""
   end

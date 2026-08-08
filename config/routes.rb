@@ -176,6 +176,11 @@ Rails.application.routes.draw do
       post "tickets/:ticket_item_id/refund",  to: "tickets#refund"
       # Signed per-setting webhook receiver (provisioned by StripeGateway).
       post "webhooks/stripe/:stripe_setting_id", to: "stripe_webhooks#create"
+      post "tickets/wechat_prepay",           to: "tickets#wechat_prepay"
+      # WeChat Pay callbacks — payment and refund both land here and are told
+      # apart by event_type. The URL is what we send as notify_url, so it must
+      # stay stable: WeChat retries against it for 24 hours.
+      post "webhooks/wechat/:wechat_pay_setting_id", to: "wechat_pay_webhooks#create"
       post "tickets/add_group_ticket_item",   to: "tickets#add_group_ticket_item"
       get  "tickets/list_group_ticket_types", to: "tickets#list_group_ticket_types"
       post "tickets/set_coupon",              to: "tickets#set_coupon"

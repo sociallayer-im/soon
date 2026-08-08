@@ -202,11 +202,14 @@ class Api::V1::TicketsController < Api::BaseController
     return render json: { result: "ok", message: "skip verify succeeded ticket_item" } if ticket_item.status == "succeeded"
     return render_error("amount invalid") if params[:amount].to_i < ticket_item.amount.to_i
 
-    # Stripe orders confirm exclusively through the signature-verified webhook
-    # or the sweeper's server-side retrieve — never through this shared-secret
-    # endpoint, which skipped real verification for stripe and let any
-    # NEXT_TOKEN holder mint paid tickets (PAYMENTS_PLAN §3.5).
-    return render_error("stripe orders are confirmed via webhook only", status: :forbidden) if ticket_item.chain == "stripe"
+    # Fiat orders confirm exclusively through a signature-verified callback or
+    # the sweeper's server-side query — never through this shared-secret
+    # endpoint, which skipped real verification and let any NEXT_TOKEN holder
+    # mint paid tickets (PAYMENTS_PLAN §3.5). Written against the rail set so
+    # a new rail is closed by default rather than open until someone notices.
+    if PaymentMethod::FIAT_CHAINS.include?(ticket_item.chain)
+      return render_error("#{ticket_item.chain} orders are confirmed via webhook only", status: :forbidden)
+    end
 
     if ticket_item.amount.to_i > 0
       return unless payment_proof_ok?(ticket_item, chain: params[:chain].presence || ticket_item.chain, txhash: params[:txhash])
@@ -270,48 +273,102 @@ class Api::V1::TicketsController < Api::BaseController
     render_error("stripe error: #{e.message}")
   end
 
-  # POST /api/v1/tickets/:ticket_item_id/refund  {amount?, reason?}
+  # POST /api/v1/tickets/wechat_prepay  {ticket_item_id}
   #
-  # Organizer-initiated only (decision #12). Writes a pending Refund and asks
-  # Stripe; the charge.refunded webhook (or sweeper) finalizes it and applies
-  # the side effects — never synchronously, refunds can fail async.
-  def refund
-    return render_not_found unless stripe_enabled?
+  # Places the JSAPI order and returns the parameters WeixinJSBridge needs.
+  # Unlike Stripe there is no reuse-the-open-session dance: WeChat keys an
+  # order by out_trade_no (our ticket_item id) and only one payment can ever
+  # succeed against it, so re-placing simply supersedes the previous
+  # prepay_id. The row lock is still needed for the writes below and to
+  # re-check the status that the pre-lock check may have read stale.
+  def wechat_prepay
+    return render_not_found unless wechat_pay_enabled?
 
     ticket_item = TicketItem.find_by(id: params[:ticket_item_id])
     return render_error("ticket_item not found") unless ticket_item
+    return render_error("not authorized", status: :forbidden) unless ticket_item.user_id == current_user.id
+    return render_error("ticket_item is not for wechat") unless ticket_item.payment_provider == "wechat"
+    return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
+
+    setting = WechatPaySetting.find_by(id: ticket_item.wechat_pay_setting_id)
+    return render_error("wechat pay is not configured for this ticket") unless setting&.status == "active"
+
+    # JSAPI cannot place an order without the payer's openid, and it must be
+    # one issued by THIS merchant's appid. Buyers who signed in by email have
+    # none, so answer with a code the frontend can act on — a silent
+    # snsapi_base authorize — rather than a dead end.
+    if current_user.wechat_openid.blank?
+      return render json: { error: "wechat openid required", code: "OPENID_REQUIRED" }, status: :unprocessable_entity
+    end
+
+    prepay_id = nil
+    stale = false
+    ticket_item.with_lock do
+      if ticket_item.status != "pending"
+        stale = true
+        next
+      end
+
+      prepay_id = WechatPayGateway.create_jsapi_order(setting, ticket_item, payer_openid: current_user.wechat_openid)
+      # Hold the seat until just past the point WeChat will still accept
+      # payment, so the sweeper is never the thing that expires a payable order.
+      ticket_item.update!(provider_ref: prepay_id,
+        reserved_until: WechatPayGateway::ORDER_TTL.from_now + 2.minutes)
+    end
+    return render_error("ticket_item is not pending") if stale
+
+    render json: { result: "ok", pay_params: WechatPayGateway.pay_params(setting, prepay_id) }
+  rescue WechatPayGateway::Error => e
+    render_error("wechat pay error: #{e.message}")
+  end
+
+  # POST /api/v1/tickets/:ticket_item_id/refund  {amount?, reason?}
+  #
+  # Organizer-initiated only (decision #12). Writes a pending Refund and asks
+  # the provider; the provider's own callback (or reconciliation) finalizes it
+  # and applies the side effects — never synchronously, refunds fail async on
+  # both rails.
+  def refund
+    ticket_item = TicketItem.find_by(id: params[:ticket_item_id])
+    return render_error("ticket_item not found") unless ticket_item
+
+    # The rail decides which deployment gate applies. Checked before authorize
+    # so a disabled rail is indistinguishable from a missing route, which is
+    # the point of gating it.
+    case ticket_item.payment_provider
+    when "stripe" then return render_not_found unless stripe_enabled?
+    when "wechat" then return render_not_found unless wechat_pay_enabled?
+    else return render_error("only card and WeChat orders can be refunded here")
+    end
+
     authorize ticket_item, :refund?
-    return render_error("only stripe orders can be refunded here") unless ticket_item.payment_provider == "stripe"
     unless %w[succeeded partially_refunded].include?(ticket_item.status)
       return render_error("ticket_item is not refundable (status: #{ticket_item.status})")
     end
     return render_error("order has no captured payment reference") if ticket_item.txhash.blank?
 
-    setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
-    return render_error("the collecting stripe key is no longer available") unless setting
+    setting = refund_setting(ticket_item)
+    return render_error("the collecting account is no longer available") unless setting
 
-    # Pending refunds count against the balance too — Stripe would ultimately
-    # reject an over-refund, but two in-flight partials must not both claim
-    # the same remainder (and full/partial labeling depends on this number).
+    # Pending refunds count against the balance too — the provider would
+    # ultimately reject an over-refund, but two in-flight partials must not
+    # both claim the same remainder (and full/partial labeling depends on it).
     refunded_so_far = ticket_item.refunds.where(status: %w[pending succeeded]).sum(:amount)
     remaining = ticket_item.amount.to_i - refunded_so_far
     amount = params[:amount].present? ? params[:amount].to_i : remaining
     return render_error("invalid refund amount") unless amount.positive? && amount <= remaining
 
     refund = ticket_item.refunds.create!(
-      requested_by: current_user, amount: amount, currency: ticket_item.currency || "usd",
+      requested_by: current_user, amount: amount,
+      currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
       full_refund: amount == remaining, reason: params[:reason].presence
     )
     begin
-      stripe_refund = StripeGateway.create_refund(
-        setting, payment_intent: ticket_item.txhash, amount: amount,
-        idempotency_key: "refund-#{refund.id}"
-      )
-      refund.update!(provider_ref: stripe_refund.id)
+      refund.update!(provider_ref: send_refund(ticket_item, setting, refund))
       render json: { result: "ok", refund_id: refund.id, status: refund.status }
-    rescue Stripe::StripeError => e
+    rescue Stripe::StripeError, WechatPayGateway::Error => e
       refund.update!(status: "failed", error: e.message)
-      render_error("stripe refund failed: #{e.message}")
+      render_error("refund failed: #{e.message}")
     end
   rescue ActiveRecord::RecordNotUnique
     render_error("a refund for this order is already in progress")
@@ -511,9 +568,16 @@ class Api::V1::TicketsController < Api::BaseController
   # when confirmed; on a hard failure it renders the error itself and returns
   # false, so callers just `return unless payment_proof_ok?(...)`.
   def payment_proof_ok?(ticket_item, chain:, txhash:)
-    if ticket_item.chain == "stripe"
+    case ticket_item.chain
+    when "stripe"
       return true if stripe_payment_confirmed?(ticket_item)
       render_error("stripe payment not confirmed")
+      return false
+    when "wechat"
+      # Without this branch a WeChat order falls through to the crypto path
+      # below and is asked for a txhash it will never have.
+      return true if wechat_payment_confirmed?(ticket_item)
+      render_error("wechat payment not confirmed")
       return false
     end
 
@@ -559,6 +623,43 @@ class Api::V1::TicketsController < Api::BaseController
     intent.status == "succeeded" && intent.amount.to_i >= ticket_item.amount.to_i
   rescue Stripe::StripeError
     false
+  end
+
+  # Always the account SNAPSHOTTED on the order, never the one currently
+  # configured: a rotated key or a re-installed merchant must not silently
+  # redirect a refund to somewhere the money never went (§2.1).
+  def refund_setting(ticket_item)
+    if ticket_item.payment_provider == "wechat"
+      WechatPaySetting.find_by(id: ticket_item.wechat_pay_setting_id)
+    else
+      StripeSetting.find_by(id: ticket_item.stripe_setting_id)
+    end
+  end
+
+  # Returns the provider's own refund reference.
+  def send_refund(ticket_item, setting, refund)
+    if ticket_item.payment_provider == "wechat"
+      # out_refund_no is refund.id, so WeChat's own dedupe on it plays the
+      # role Stripe's idempotency_key does.
+      WechatPayGateway.create_refund(setting, ticket_item, refund)["refund_id"]
+    else
+      StripeGateway.create_refund(
+        setting, payment_intent: ticket_item.txhash, amount: refund.amount,
+        idempotency_key: "refund-#{refund.id}"
+      ).id
+    end
+  end
+
+  # Asks WeChat directly, keyed by our own order id. A nil answer means the
+  # merchant API could not be reached, which is not evidence of payment.
+  def wechat_payment_confirmed?(ticket_item)
+    setting = WechatPaySetting.find_by(id: ticket_item.wechat_pay_setting_id)
+    return false unless setting
+
+    order = WechatPayGateway.query_order(setting, ticket_item.id)
+    return false unless order
+
+    order["trade_state"] == "SUCCESS" && order.dig("amount", "total").to_i >= ticket_item.amount.to_i
   end
 
   def build_paid_ticket_item(participant)
