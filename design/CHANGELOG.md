@@ -2,6 +2,70 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-08 — a second sign-in channel no longer means a second account
+
+WeChat sign-in creates an account with no email. Binding one that already
+belonged to an email account failed with `email is already in use`, which left
+the person holding two accounts and no way to reconcile them — the exact
+duplicate the WeChat work was supposed to avoid.
+
+**`bind_email` now merges** instead of failing: the WeChat identity moves onto
+the account that owns the address and the throwaway one is deleted, so the next
+WeChat login lands on the merged account rather than minting another. Order
+matters inside the transaction — both identity columns are uniquely indexed, so
+`from` has to be destroyed before `into` can take them.
+
+Merging deletes an account, so it is allowed only in a narrow window, guarded
+three ways (`AuthController#mergeable?`):
+
+- **The account must be WeChat-first.** A blank `name` is the window marker,
+  but nothing server-side requires a name before writing — `EventPolicy#create?`
+  never looks at it — so a long-lived *wallet* account whose owner simply never
+  registered one would otherwise qualify and be deleted along with its data.
+- **`name` must still be blank**, i.e. registration never finished. This is why
+  `seastar-app` now asks for the email *before* the username: picking a name
+  closes the window. That reordering is not cosmetic — without it this path is
+  unreachable.
+- **The target must carry no WeChat identity of its own.** Overwriting one
+  would aim a different person's next login at this account; refusing to move
+  ours would recreate the duplicate.
+
+The bind-context code is unchanged and still required — it is what proves the
+caller owns the address. Without it any WeChat user could type someone else's
+address and swallow their account.
+
+A merge changes *who the caller is*, so the response is a fresh token marked
+`merged: true` rather than a profile; the token that was sent authenticates a
+row that no longer exists. Frontend detail is in
+`seastar-app/design/AUTH_INTEGRATION.md`.
+
+## 2026-08-07 — removed venues stayed in every list
+
+Removing a venue is a soft delete (`archived: true`), but `GroupBlueprint`'s
+`:detail` view rendered the unfiltered `venues` association. Every venue LIST in
+the product reads `groupDetail.venues` — the venues page, the event editor's
+venue picker, the schedule venue view, the settings count — so a removed venue
+stayed on screen after Remove + reload and was still bookable. `VenuesController#index`
+had the `archived: false` filter all along, but nothing calls `index`.
+
+`Group` gained an `active_venues` association and the blueprint sources from it
+while keeping the `venues` key, so no frontend change was needed;
+`with_detail_associations` preloads it instead, keeping the N+1 guard intact.
+
+Booking an event or a recurring series *into* an archived venue is now refused
+too — the API allowed it directly. Both guards distinguish a new booking from an
+untouched one, because the client resubmits the whole form and `venue_id` comes
+back on every edit: `EventsController` checks `venue_id_changed?`, and
+`RecurringController#resolve_venue` compares against the series' current venue.
+Treating a resubmitted value as a booking would have made an event — or a whole
+series — permanently uneditable once its venue was removed.
+
+**Venue names are no longer unique** (`index_venues_on_name` dropped, no
+replacement). The constraint was global, so a soft-deleted venue kept blocking
+its own name and recreating it failed with "Name has already been taken"
+against a row invisible in the UI. Names are labels, not identifiers — every
+lookup goes through the TSID and the schedule filter matches on `venue.id`.
+
 ## 2026-07-30 — public reads that 401'd, cancelled events, SIWE domains
 
 Four fixes, all surfaced while moving sign-in into `seastar-app` (the full
