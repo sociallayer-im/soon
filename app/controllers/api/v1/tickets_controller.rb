@@ -137,6 +137,9 @@ class Api::V1::TicketsController < Api::BaseController
       # pending (unapproved) buyer holds no seat until approval.
       @event.increment!(:participant_count) if participant.seated? && !was_seated
       ticket_item.save!
+      ticket_item.record_activity!("order_placed", source: "api", actor: current_user,
+        amount: ticket_item.amount, currency: ticket_item.currency,
+        provider: ticket_item.payment_provider, ticket_id: ticket_item.ticket_id)
       consume_coupon!(ticket_item)
       save_form_submission! if params[:answers].present? && @event.form_id
       # payment_status is a summary of the orders, never set by hand:
@@ -312,6 +315,13 @@ class Api::V1::TicketsController < Api::BaseController
       prepay_id = WechatPayGateway.create_jsapi_order(setting, ticket_item, payer_openid: current_user.wechat_openid)
       # Hold the seat until just past the point WeChat will still accept
       # payment, so the sweeper is never the thing that expires a payable order.
+      # A second prepay on the same order is a retry — the buyer closed the
+      # sheet and came back. It changes no status, so this row is the only
+      # place it is ever visible.
+      ticket_item.record_activity!(
+        ticket_item.provider_ref.present? ? "payment_retried" : "prepay_created",
+        source: "api", actor: current_user, prepay_id: prepay_id, previous_ref: ticket_item.provider_ref
+      )
       ticket_item.update!(provider_ref: prepay_id,
         reserved_until: WechatPayGateway::ORDER_TTL.from_now + 2.minutes)
     end
@@ -363,11 +373,16 @@ class Api::V1::TicketsController < Api::BaseController
       currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
       full_refund: amount == remaining, reason: params[:reason].presence
     )
+    ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
+      reason: refund.reason, refund_id: refund.id, amount: refund.amount,
+      currency: refund.currency, full_refund: refund.full_refund)
     begin
       refund.update!(provider_ref: send_refund(ticket_item, setting, refund))
       render json: { result: "ok", refund_id: refund.id, status: refund.status }
     rescue Stripe::StripeError, WechatPayGateway::Error => e
       refund.update!(status: "failed", error: e.message)
+      ticket_item.record_activity!("refund_failed", source: "api", actor: current_user,
+        reason: e.message, refund_id: refund.id)
       render_error("refund failed: #{e.message}")
     end
   rescue ActiveRecord::RecordNotUnique
@@ -392,12 +407,31 @@ class Api::V1::TicketsController < Api::BaseController
 
     user = User.find_by(email: email)
     if user
-      ticket_item = TicketItem.create_with(status: "succeeded", user_id: user.id).find_or_create_by(
+      ticket_item = TicketItem.create_with(status: "succeeded", user_id: user.id, paid_at: Time.current).find_or_create_by(
         event_id: group.group_ticket_event_id, ticket_id: ticket.id,
         selector_type: "email", selector_address: email, ticket_type: "group",
         group_id: group.id, auth_type: "invite"
       )
-      ticket_item.update(status: "succeeded", user_id: user.id) unless ticket_item.status == "succeeded"
+      if ticket_item.previously_new_record?
+        ticket_item.record_activity!("ticket_granted", source: "api", actor: current_user,
+          reason: "granted to #{email}")
+      elsif ticket_item.status != "succeeded"
+        # Was `update(status: "succeeded")` — a direct write that skipped the
+        # transition table, its paid-order guard and (once this existed) the
+        # audit row. It is the only place that ever bypassed transition!, so a
+        # grant to an expired or cancelled order silently resurrected it: the
+        # seat and coupon had already been handed back, and now two people
+        # hold one unit.
+        begin
+          ticket_item.update!(user_id: user.id)
+          ticket_item.transition!(:succeeded, source: "api", actor: current_user,
+            action: "ticket_granted", reason: "granted to #{email}", paid_at: Time.current)
+        rescue TicketItem::InvalidTransition
+          # Terminal orders stay terminal. Granting again means issuing a new
+          # order, which is a decision for whoever is granting.
+          return render_error("this email already has a #{ticket_item.status} order for that ticket — it cannot be reopened")
+        end
+      end
       group.add_member(user.id, "member")
     else
       GroupInvite.find_or_create_by!(
@@ -560,6 +594,12 @@ class Api::V1::TicketsController < Api::BaseController
       raise CouponUnavailable unless coupon.available?
       coupon.increment!(:order_usage_count)
     end
+    # A redemption otherwise leaves only a counter, which a refund decrements
+    # back — so afterwards there is no way to say WHICH orders used a coupon,
+    # or that a given order used one at all once it has been refunded.
+    ticket_item.record_activity!("coupon_redeemed", source: "api", actor: current_user,
+      coupon_id: coupon.id, code: coupon.code,
+      discount_value: ticket_item.discount_value)
   end
 
   def save_form_submission!

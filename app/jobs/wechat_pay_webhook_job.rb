@@ -42,14 +42,23 @@ class WechatPayWebhookJob < ApplicationJob
       # Already settled. Only worth flagging when a DIFFERENT transaction paid
       # it — that is money taken twice for one seat.
       if resource["transaction_id"].present? && item.txhash.present? && resource["transaction_id"] != item.txhash
+        item.record_activity!("callback_rejected", source: "webhook",
+          reason: "duplicate payment — money may have been taken twice",
+          transaction_id: resource["transaction_id"], settled_via: item.txhash, event_id: record.id)
         record.update!(error: "duplicate payment: #{resource['transaction_id']} paid order #{item.id}, already settled via #{item.txhash}")
       end
       return
     end
 
-    return record.update!(error: "amount/currency mismatch for ticket_item #{item.id}") unless amounts_match?(resource, item)
+    unless amounts_match?(resource, item)
+      item.record_activity!("callback_rejected", source: "webhook",
+        reason: "amount/currency mismatch",
+        expected_amount: item.amount, expected_currency: item.currency,
+        received: resource["amount"], event_id: record.id)
+      return record.update!(error: "amount/currency mismatch for ticket_item #{item.id}")
+    end
 
-    item.confirm_payment!(txhash: resource["transaction_id"])
+    item.confirm_payment!(txhash: resource["transaction_id"], source: "webhook")
   end
 
   def finalize_refund(record, resource)
@@ -73,7 +82,7 @@ class WechatPayWebhookJob < ApplicationJob
     refund.update!(provider_ref: resource["refund_id"]) if resource["refund_id"].present?
     return if refund.status == "succeeded"
 
-    item.apply_refund_success!(refund)
+    item.apply_refund_success!(refund, source: "webhook")
   end
 
   # A refund that WeChat could not complete. The money did not move, so the
@@ -85,6 +94,8 @@ class WechatPayWebhookJob < ApplicationJob
     return unless refund && refund.status == "pending"
 
     refund.update!(status: "failed", error: "WeChat reported #{record.event_type} (#{resource['refund_status']})")
+    item.record_activity!("refund_failed", source: "webhook",
+      reason: "WeChat reported #{record.event_type}", refund_id: refund.id, event_id: record.id)
   end
 
   # out_trade_no is our own order id — unlike Stripe's metadata it was never

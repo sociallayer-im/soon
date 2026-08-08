@@ -46,7 +46,7 @@ class StripeReconciliationJob < ApplicationJob
     return false unless charge
 
     if charge.respond_to?(:dispute) && charge.dispute.present? && item.status != "disputed"
-      item.transition!(:disputed)
+      item.transition!(:disputed, source: "reconciliation")
       return true
     end
 
@@ -73,6 +73,6 @@ class StripeReconciliationJob < ApplicationJob
       reason: "found by reconciliation",
       requested_by_user_id: setting.user_id
     )
-    item.apply_refund_success!(refund)
+    item.apply_refund_success!(refund, source: "reconciliation")
   end
 end

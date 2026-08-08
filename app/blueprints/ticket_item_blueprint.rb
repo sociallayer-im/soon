@@ -35,5 +35,12 @@ class TicketItemBlueprint < Blueprinter::Base
     association :refunds, blueprint: RefundBlueprint do |item, _options|
       item.refunds.order(:created_at)
     end
+
+    # The recorded history. Supersedes deriving one from the timestamps above,
+    # which could not see a retry, a rejected callback, or the difference
+    # between a voluntary refund and a lost dispute.
+    association :activities, blueprint: TicketingActivityBlueprint do |item, _options|
+      item.ticketing_activities.oldest_first
+    end
   end
 end

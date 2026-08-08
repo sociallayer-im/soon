@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -605,6 +605,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_120001) do
     t.index ["user_id", "status"], name: "index_ticket_items_on_user_id_and_status"
     t.index ["user_id"], name: "index_ticket_items_on_user_id"
     t.index ["wechat_pay_setting_id"], name: "index_ticket_items_on_wechat_pay_setting_id"
+  end
+
+  create_table "ticketing_activities", id: :string, force: :cascade do |t|
+    t.string "action", null: false, comment: "see Ticketing::Activity::ACTIONS"
+    t.string "actor_user_id", comment: "only when a person caused it"
+    t.datetime "created_at", null: false
+    t.string "from_status"
+    t.jsonb "metadata", default: {}, null: false
+    t.string "reason"
+    t.string "source", null: false, comment: "api | webhook | sweeper | reconciliation | system | backfill"
+    t.string "subject_id", null: false
+    t.string "subject_type", null: false
+    t.string "to_status"
+    t.index ["action", "created_at"], name: "index_ticketing_activities_on_action_and_created_at"
+    t.index ["actor_user_id"], name: "index_ticketing_activities_on_actor_user_id"
+    t.index ["subject_type", "subject_id", "created_at"], name: "idx_on_subject_type_subject_id_created_at_cf5a9e860e"
   end
 
   create_table "tickets", id: :string, force: :cascade do |t|

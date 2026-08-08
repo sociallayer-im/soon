@@ -31,7 +31,7 @@ class TicketingSweeperJob < ApplicationJob
         return
       end
       if session.payment_status == "paid"
-        item.confirm_payment!(txhash: session.payment_intent)
+        item.confirm_payment!(txhash: session.payment_intent, source: "sweeper")
         return
       end
       # Still-open session (clock skew, extended session): give it one more
@@ -68,7 +68,7 @@ class TicketingSweeperJob < ApplicationJob
 
     case order["trade_state"]
     when "SUCCESS"
-      item.confirm_payment!(txhash: order["transaction_id"])
+      item.confirm_payment!(txhash: order["transaction_id"], source: "sweeper")
     when "USERPAYING"
       # The buyer is mid-payment (WeChat is awaiting their PIN). Expiring here
       # would release a seat that is about to be paid for.
