@@ -11,6 +11,35 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Code sent", json_response["message"]
   end
 
+  # The frontend's CODE_LENGTH and input maxLength are derived from this, so the
+  # format is a contract, not an implementation detail. Zero-padding matters:
+  # random_number can return 42, and an unpadded "42" would be a 2-digit code
+  # that the 6-character input never lets the user finish typing.
+  test "request_code mints a 6-digit numeric code, zero-padded" do
+    100.times do
+      AuthCode.delete_all
+      post "/api/v1/auth/request_code", params: { email: "codeformat@test.com" }
+      assert_response :success
+      assert_match(/\A\d{6}\z/, AuthCode.last.code)
+    end
+  end
+
+  test "a 6-digit code still dies after MAX_ATTEMPTS wrong guesses" do
+    post "/api/v1/auth/request_code", params: { email: "guessme@test.com" }
+    code = AuthCode.last
+    wrong = code.code == "000000" ? "111111" : "000000"
+
+    AuthCode::MAX_ATTEMPTS.times do
+      post "/api/v1/auth/verify_code", params: { email: "guessme@test.com", code: wrong }
+      assert_response :unauthorized
+    end
+
+    # Burned — even the correct code no longer works.
+    assert code.reload.used?
+    post "/api/v1/auth/verify_code", params: { email: "guessme@test.com", code: code.code }
+    assert_response :unauthorized
+  end
+
   test "request_code mints a code for an unknown email too — first login is signup" do
     assert_difference "AuthCode.count", 1 do
       post "/api/v1/auth/request_code", params: { email: "newcomer@test.com" }
@@ -72,7 +101,9 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
   test "verify_code rejects an expired code" do
     user = create_user
     code = AuthCode.create!(recipient: user.email, recipient_type: "email", context: "login", code: "ABC123")
-    code.update_column(:created_at, 20.minutes.ago)
+    # Derived, not restated: a hardcoded 20.minutes quietly stopped meaning
+    # "expired" the moment EXPIRY moved from 15 to 30.
+    code.update_column(:created_at, AuthCode::EXPIRY.ago - 1.minute)
 
     post "/api/v1/auth/verify_code", params: { email: user.email, code: "ABC123" }
     assert_response :unauthorized

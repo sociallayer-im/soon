@@ -1,11 +1,20 @@
 class AuthCode < ApplicationRecord
-  EXPIRY = 15.minutes
+  # Emailed codes are read by a human who usually has to leave the page to
+  # fetch them — inside the WeChat browser that means switching apps and coming
+  # back, which routinely outlasted the old 15 minutes.
+  # AuthMailer derives the "expires in N minutes" line from this.
+  EXPIRY = 30.minutes
+  # A SIWE nonce is redeemed by a wallet signature in the same sitting, so it
+  # keeps the tighter window deliberately: it is single-use and server-minted,
+  # and widening it would only enlarge the replay surface for no user benefit.
+  NONCE_EXPIRY = 15.minutes
   MAX_ATTEMPTS = 5
 
   validates :code, presence: true
   validates :recipient, :recipient_type, :context, presence: true
 
   scope :active, -> { where(used_at: nil).where("created_at > ?", EXPIRY.ago) }
+  scope :active_nonce, -> { where(used_at: nil).where("created_at > ?", NONCE_EXPIRY.ago) }
   scope :for_recipient, ->(recipient) { where(recipient: recipient) }
   scope :for_context, ->(context) { where(context: context) }
 

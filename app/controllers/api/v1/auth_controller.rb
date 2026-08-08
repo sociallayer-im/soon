@@ -38,7 +38,7 @@ class Api::V1::AuthController < Api::BaseController
     AuthCode.active.for_recipient(email).for_context(context).update_all(used_at: Time.current)
     code = AuthCode.create!(
       recipient: email, recipient_type: "email", context: context,
-      code: SecureRandom.alphanumeric(6).upcase
+      code: generated_code
     )
     # Sent synchronously so a delivery failure surfaces on this request.
     AuthMailer.login_code(email: email, code: code.code).deliver_now
@@ -73,14 +73,15 @@ class Api::V1::AuthController < Api::BaseController
       return render json: { error: "Invalid or expired nonce" }, status: :unauthorized
     end
 
-    nonce_code = AuthCode.active.for_context(SIWE_CONTEXT).find_by(code: message.nonce)
+    nonce_code = AuthCode.active_nonce.for_context(SIWE_CONTEXT).find_by(code: message.nonce)
     return render json: { error: "Invalid or expired nonce" }, status: :unauthorized unless nonce_code
 
     # domain/nonce are passed through as the "expected" values here purely to
     # satisfy the gem's required kwargs — they're the message's own fields, so
     # those two checks are trivially self-matching. The real protection is
     # above (domain allowlist) and in the nonce_code lookup (single-use,
-    # server-minted, 15-minute TTL) — not in anything siwe-rb's verify! itself
+    # server-minted, AuthCode::NONCE_EXPIRY TTL — deliberately shorter than the
+    # emailed-code EXPIRY) — not in anything siwe-rb's verify! itself
     # checks (it has no knowledge of our allowlist or minted nonces).
     message.verify!(signature: params[:signature].to_s, domain: message.domain, nonce: message.nonce)
     nonce_code.mark_used!
@@ -209,6 +210,22 @@ class Api::V1::AuthController < Api::BaseController
     end
     GroupInvite.auto_accept_ticket_invites_for(into)
     into
+  end
+
+  # Six digits, zero-padded so every code is the same length. rjust is not
+  # cosmetic: random_number can return 42, and an unpadded "42" would be a
+  # 2-digit code the fixed-length input never lets the user finish typing.
+  #
+  # Digits only — the codes are read off a phone and typed back, mostly inside
+  # the WeChat browser. That drops the keyspace from 36^6 (~2.2e9) for the old
+  # alphanumeric to 10^6, so the guardrails around it carry more weight and must
+  # not be relaxed: a code dies after MAX_ATTEMPTS (5) wrong guesses, expires
+  # after AuthCode::EXPIRY, and requesting a new one invalidates every earlier
+  # unused code. An attacker therefore gets 5 tries per code (1-in-200,000) and
+  # each retry costs the victim a visible email. Rate-limiting #request_code
+  # itself is the obvious next step and does not exist yet.
+  def generated_code
+    SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")
   end
 
   def normalized_email

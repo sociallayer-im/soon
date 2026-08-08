@@ -10,7 +10,8 @@ class AuthMailerTest < ActionMailer::TestCase
 
     assert_match "ABC123", mail.html_part.body.to_s
     assert_match "ABC123", mail.text_part.body.to_s
-    # Expiry is derived from AuthCode::EXPIRY (15 minutes).
-    assert_match "15 minutes", mail.html_part.body.to_s
+    # Derived from AuthCode::EXPIRY, not restated — the mailer computes the
+    # number, so hardcoding one here would let the two drift apart silently.
+    assert_match "#{(AuthCode::EXPIRY / 60).to_i} minutes", mail.html_part.body.to_s
   end
 end
