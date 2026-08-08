@@ -1,0 +1,21 @@
+lib/tasks/wechat_pay.rake
+  s_448695a5d036bc::t_bbe19441bd4400 1-20
+  s_448695a5d036bc::t_6b8e48531c4087 50
+  s_448695a5d036bc::t_88ce39b88c6f3f 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "09e178ddcf6e9c5ae1997791e8e0bc709f19f567",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
