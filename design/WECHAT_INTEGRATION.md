@@ -111,6 +111,51 @@ GET https://api.weixin.qq.com/sns/userinfo?access_token=&openid=&lang=zh_CN
   无法合并（没有共同标识）。这需要注册微信开放平台账号并把服务号绑上去
   （开放平台认证 300 元/年）。
 
+#### 1.3.1 生产现状：**尚未绑定开放平台**（2026-08-08 实测）
+
+CN 生产库里唯一的真实微信账号 `wechat_unionid = nil`，`wechat_openid` 正常。
+两次独立观察（7-31 与 8-08 的同一个微信号）结果一致，所以这不是偶发——**服务号
+还没有绑定到微信开放平台账号**。
+
+现在**没有**任何功能受影响：只有服务号一个 appid 时，openid 足以唯一识别一个人，
+登录、合并、去重都正常。
+
+风险全在扩展的那一刻。openid 按 appid 隔离，一旦新增小程序 / PC 扫码登录 / 第二个
+公众号，同一个人在新入口会拿到**不同的 openid**，而没有 unionid 可以关联，于是
+又是一个重复账号——正是 `bind_email` 合并要消除的问题换了个形态，而且这次连自动
+识别的依据都没有（靠邮箱验证码的人工合并路径仍在，但不会自动发生）。
+
+**所以绑定要趁早。** `AuthController#wechat_user` 已经写好了 back-fill：某次登录
+一旦带回 unionid，它会补写到已有账号上（`claimable?` 只填空、绝不覆盖别人的标识），
+不会另建账号。也就是说——
+
+- **现在绑定**：存量账号在各自下次登录时自动补齐 unionid，零人工。
+- **加了第二个入口之后再绑**：那之前产生的重复账号已经存在，只能手工合并。
+
+##### 绑定步骤
+
+1. **注册微信开放平台账号** — <https://open.weixin.qq.com>（与公众平台是两套账号
+   体系，不能复用公众号的登录态）。
+2. **完成开发者资质认证** — 「账号中心」→「开发者资质认证」。这是**绑定的前置
+   条件**，不是可选项，费用 300 元/年。
+3. **绑定公众号** — 「管理中心」→「公众账号」→「绑定公众号」，填入**服务号的
+   登录邮箱与密码**，再用**服务号管理员的微信**扫码确认。
+
+需要留意的约束：
+
+- **主体**：相同或关联主体可直接绑定；不同主体也允许，但整个开放平台账号只能绑
+  5 个不同主体的公众号（同主体/关联主体上限 50 个）。
+- **一个公众号只能绑定一个开放平台账号**，绑错了要先解绑，所以第 1 步注册时就要
+  确认主体选对。
+- 绑定生效后，`snsapi_userinfo` 网页授权的返回里就会带 `unionid`；**已经授权过的
+  存量用户也会返回**，无需重新授权，这正是 back-fill 能生效的原因。
+- 我们用的 scope 已经是 `snsapi_userinfo`（见 `wechat.ts`），无需改代码——绑定
+  完成后什么都不用动，unionid 会自己出现。
+
+出处：[开放平台绑定应用账号](https://developers.weixin.qq.com/doc/oplatform/developers/product/open/bind.html)、
+[UnionID 机制说明](https://developers.weixin.qq.com/miniprogram/dev/framework/open-ability/union-id.html)、
+[微信开放平台如何绑定公众号](https://developers.weixin.qq.com/community/develop/doc/000accd60a86384de8e1db10761809)
+
 ### 1.4 全局 access_token 与 jsapi_ticket 的缓存问题
 
 网页授权的 access_token 与**全局 access_token** 是两回事。后者

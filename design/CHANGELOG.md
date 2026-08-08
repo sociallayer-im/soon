@@ -39,6 +39,20 @@ A merge changes *who the caller is*, so the response is a fresh token marked
 row that no longer exists. Frontend detail is in
 `seastar-app/design/AUTH_INTEGRATION.md`.
 
+**Confirmed on CN production the same day** — the first exercise of this path
+against real data rather than tests. An email account and a WeChat account
+merged into one: `User.count` went 2 → 1, the survivor kept the email account's
+`created_at` and username (so the direction was right) and gained the WeChat
+account's `openid`. Signing in with that WeChat identity now lands on the merged
+account instead of minting another.
+
+That same check surfaced an unrelated finding worth acting on: the account's
+`wechat_unionid` is nil, i.e. **the 服务号 is not bound to a 微信开放平台
+account**. Harmless today with a single appid, but it removes the only automatic
+way to recognise the same person across a future mini program or desktop QR
+login. See `WECHAT_INTEGRATION.md` §1.3.1 for why binding early is much cheaper
+than binding later, and for the steps.
+
 ## 2026-08-07 — removed venues stayed in every list
 
 Removing a venue is a soft delete (`archived: true`), but `GroupBlueprint`'s
