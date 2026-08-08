@@ -14,4 +14,10 @@ class RefundBlueprint < Blueprinter::Base
   field :error
 
   field :requested_by_user_id
+
+  # The second, independent record of who ordered the refund — the first being
+  # the refund_requested activity. Kept deliberately: a refund is the one
+  # organizer action that moves money out, and one place to look is one place
+  # to lose.
+  association :requested_by, blueprint: UserBlueprint
 end

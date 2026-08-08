@@ -539,7 +539,9 @@ class Api::V1::TicketsController < Api::BaseController
     # which is organizer-facing.
     if event_manager?(params[:event_id])
       return render json: TicketItemBlueprint.render(
-        items.includes(:user, :ticket, :refunds).order(created_at: :desc), view: :order_detail
+        items.includes(:user, :ticket, refunds: :requested_by, ticketing_activities: :actor)
+             .order(created_at: :desc),
+        view: :order_detail
       )
     end
 

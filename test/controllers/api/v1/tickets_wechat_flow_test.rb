@@ -271,6 +271,43 @@ class Api::V1::TicketsWechatFlowTest < ActionDispatch::IntegrationTest
     # watching for it.
     assert_equal "pending", row["refunds"][0]["status"]
     assert_equal false, row["refunds"][0]["full_refund"]
+    # Who ordered it, by name — an audit trail nobody can read is not one.
+    assert_equal @owner.name, row["refunds"][0].dig("requested_by", "name")
+    assert_nil row["refunds"][0].dig("requested_by", "email"), "the actor's email is not the organizer's business"
+  end
+
+  # Accountability: a refund is the one organizer action that moves money out,
+  # so the manager who ordered it is named — and the steps a person did NOT
+  # take are just as clearly unattributed.
+  test "the timeline names the manager who refunded, and nobody for the callback" do
+    item = create_order(status: "succeeded", txhash: "4200001")
+    # A co-host, not a group manager: refund rights are deliberately narrower
+    # than edit rights (PAYMENTS_PLAN decision #6), so the actor has to be
+    # someone the policy actually allows.
+    cohost = create_user
+    create_event_role(event: @event, item: cohost, role: "co_host")
+
+    WechatPayGateway.stub :create_refund, ->(*) { { "refund_id" => "50000_who" } } do
+      post "/api/v1/tickets/#{item.id}/refund", headers: auth_headers(cohost)
+    end
+    assert_response :success
+
+    perform_enqueued_jobs do
+      post_callback(encrypted_envelope({
+        "out_trade_no" => item.id, "out_refund_no" => item.refunds.sole.id,
+        "refund_id" => "50000_who", "refund_status" => "SUCCESS",
+        "amount" => { "total" => 100, "refund" => 100 }
+      }, event_type: "REFUND.SUCCESS"))
+    end
+
+    get "/api/v1/tickets/list", params: { event_id: @event.id }, headers: auth_headers(@owner)
+    activities = json_response.sole["activities"].index_by { |a| a["action"] }
+
+    assert_equal cohost.name, activities["refund_requested"].dig("actor", "name")
+    assert_equal "api", activities["refund_requested"]["source"]
+    # WeChat settled it, not a person. The absent actor is the record of that.
+    assert_nil activities["refund_succeeded"]["actor"]
+    assert_equal "webhook", activities["refund_succeeded"]["source"]
   end
 
   test "a buyer sees their own orders without the organizer-facing refund detail" do
