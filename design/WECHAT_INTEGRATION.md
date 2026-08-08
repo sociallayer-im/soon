@@ -586,13 +586,48 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
 
 ### 5.4 部署前必须完成
 
-1. **凭据补齐** —— `wechat_credentials.md` 目前缺两样东西（2026-08-08）：
-   - 「商户API证书私钥」一栏贴的是**证书**（`-----BEGIN CERTIFICATE-----`），
-     不是私钥。私钥是申请证书时在本地生成的 `apiclient_key.pem`，以
-     `-----BEGIN PRIVATE KEY-----` 开头，**只有那一次能拿到**，丢了只能在商户
-     平台重新申请证书。没有它无法对任何请求签名。
-   - **微信支付公钥的 PEM 内容**只有 ID (`PUB_KEY_ID_…`) 没有正文。没有它无法
-     验证回调签名，`verify_notification` 会一律拒绝（这是故意 fail closed 的）。
+1. **凭据补齐** —— 状态（2026-08-08 复核）：
+
+   | 凭据 | 状态 |
+   |---|---|
+   | 商户号 `1115981704` | ✅ |
+   | appid `wxdf1ef2c65db36224` | ✅ |
+   | 证书序列号 | ✅ 与证书内 serial 实测一致 |
+   | APIv3 密钥 | ✅ 32 字节 |
+   | 微信支付公钥 `wxpay_pub_key.pem` + `PUB_KEY_ID_…` | ✅ 2048-bit RSA，已实测能经转义 env 往返并被 `notify_public_key` 加载 |
+   | **商户 API 证书私钥 `apiclient_key.pem`** | ❌ **仍然缺失** |
+
+   缺的那一项，`wechat_credentials.md` 里贴过两种都不对的东西：
+
+   - `-----BEGIN CERTIFICATE-----` 是 **`apiclient_cert.pem`**（证书）。它装的是
+     **公钥**那一半——`openssl rsa -check` 对它的回答就是 "Could not find private
+     key"。证书是给对方验签用的，签不了任何东西。
+   - `-----BEGIN CERTIFICATE REQUEST-----` 是 **CSR**（证书请求）。它是「公钥 +
+     主体信息，再用私钥签个名」，交给 CA 去换证书用的。**同样不是私钥**，同样
+     签不了 API 请求。CSR 的存在只说明私钥当时确实生成过。
+
+   需要的是 `-----BEGIN PRIVATE KEY-----` 开头的 `apiclient_key.pem`。它由商户
+   平台的**证书工具在本地生成**，`apiclient_cert.pem` 和 CSR 是同一次操作的产物
+   ——**三个文件在同一个目录里**。有 CSR 基本就意味着私钥当时落过盘，先去那个
+   目录找，而不是重新申请。
+
+   找到后可以直接核对是不是配套的那一把（两条 modulus 必须完全相同）：
+
+   ```bash
+   openssl rsa  -in apiclient_key.pem  -noout -modulus
+   openssl x509 -in apiclient_cert.pem -noout -modulus
+   # 本证书的是 Modulus=B120FE340DFDCD8A66FCD911ADEE5E2D99EB578EA12442209103…
+   ```
+
+   实在找不到就在商户平台重新申请一次 API 证书——**旧证书会失效**，序列号随之
+   改变，`WECHAT_PAY_CERT_SERIAL` 要一起更新。
+
+   写入 `.env.cn.production` 时 PEM 要压成单行（`\n` 转义），已实测可还原：
+
+   ```bash
+   echo "WECHAT_PAY_PRIVATE_KEY=$(awk '{printf "%s\\n", $0}' apiclient_key.pem)"
+   echo "WECHAT_PAY_PUBLIC_KEY=$(awk '{printf "%s\\n", $0}' wxpay_pub_key.pem)"
+   ```
 2. **商户平台配置** —— APPID 关联服务号 `wxdf1ef2c65db36224`（支付 appid 必须
    与签发 openid 的 appid 一致）、开通 JSAPI 支付、支付授权目录填
    `https://www.juluo.xyz/`。
@@ -603,6 +638,7 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
    （gitignored，不在本仓库里）。SG 的 `.env.production` **不加**。
 6. **二清合规确认**（§4.2）。
 
-> ⚠️ `wechat_credentials.md` 是仓库根目录下的明文凭据文件，未被 gitignore。
-> 里面的 APIv3 密钥与证书序列号一旦提交就等同泄漏。正确位置是
-> `.env.cn.production`（已 gitignore）。
+> `wechat_credentials.md` / `wxpay_pub_key.pem` 都在工作区根目录下。根目录本身
+> 是个 git 仓库，此前**没有 .gitignore**，`git add .` 会把 APIv3 密钥直接提交
+> 进去。已补上（`soma/.gitignore`：凭据、`*.pem`、`.env*`、数据库 dump）。
+> 长期正确的位置仍是 `.env.cn.production`。
