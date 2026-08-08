@@ -26,6 +26,8 @@ Rails.application.routes.draw do
       post "auth/verify_wallet",  to: "auth#verify_wallet"
       post "auth/trusted_signin", to: "auth#trusted_signin"
       post "auth/bind_email",     to: "auth#bind_email"
+      # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.
+      post "auth/bind_wechat",    to: "auth#bind_wechat"
 
       # Image upload (Cloudflare Images)
       post "upload/image", to: "uploads#image"
