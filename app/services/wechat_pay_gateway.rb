@@ -34,6 +34,16 @@ class WechatPayGateway
     end
   end
 
+  # The request went out but its outcome could not be read — a timeout, a
+  # reset, a body we could not decode.
+  #
+  # Deliberately NOT the same thing as an Error, which means WeChat answered
+  # and said no. The two demand opposite responses: a rejection is safe to
+  # record as failed, an unreadable answer is not. Recording "failed" for a
+  # refund that actually went through invites the organizer to click again,
+  # and the second one refunds the buyer twice.
+  class Unreachable < Error; end
+
   # 服务商 mode uses a different endpoint family (/v3/pay/partner/…) and
   # different field names (sp_appid/sp_mchid/sub_mchid). Nothing here has ever
   # run against it, so it refuses loudly rather than sending a request whose
@@ -238,21 +248,34 @@ class WechatPayGateway
     payload = body ? JSON.generate(body) : ""
     uri = URI("https://#{API_HOST}#{path_with_query}")
 
-    req = (method == :get ? Net::HTTP::Get : Net::HTTP::Post).new(uri)
-    req["Authorization"] = authorization(setting, method, path_with_query, payload)
-    req["Accept"] = "application/json"
-    req["User-Agent"] = USER_AGENT
-    if body
-      req["Content-Type"] = "application/json"
-      req.body = payload
-    end
+    # Accept-Encoding must be set HERE, in the constructor's initheader, not
+    # afterwards: Net::HTTP decides whether to auto-decompress at construction
+    # time, and only skips it when the caller supplied one of accept-encoding
+    # or range. Left to itself it asks for gzip and then inflates the reply —
+    # and the refund endpoint answers with something it cannot inflate, which
+    # raised Zlib::DataError ("incorrect header check") AFTER the refund had
+    # already been accepted. Asking for identity avoids the decode entirely.
+    headers = {
+      "Authorization" => authorization(setting, method, path_with_query, payload),
+      "Accept" => "application/json",
+      "Accept-Encoding" => "identity",
+      "User-Agent" => USER_AGENT
+    }
+    headers["Content-Type"] = "application/json" if body
+
+    req = (method == :get ? Net::HTTP::Get : Net::HTTP::Post).new(uri, headers)
+    req.body = payload if body
 
     response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true,
       open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) { |http| http.request(req) }
 
     handle_response(response)
-  rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, OpenSSL::SSL::SSLError, Errno::ECONNRESET => e
-    raise Error, "could not reach WeChat Pay: #{e.class}"
+  rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, OpenSSL::SSL::SSLError,
+         Errno::ECONNRESET, EOFError, Zlib::Error, JSON::ParserError => e
+    # The request may well have been carried out — we simply could not read
+    # the answer. That is a different fact from a rejection and callers must
+    # treat it differently, hence a distinct class.
+    raise Unreachable, "could not read WeChat Pay's response: #{e.class}"
   end
 
   def self.handle_response(response)

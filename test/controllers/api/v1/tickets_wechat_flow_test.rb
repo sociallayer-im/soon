@@ -192,6 +192,51 @@ class Api::V1::TicketsWechatFlowTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", item.reload.status
   end
 
+  # The 500 seen in production: the refund was accepted by WeChat and only the
+  # response could not be read. Answering "failed" would be a lie in the
+  # dangerous direction — the organizer clicks again and a partial refund goes
+  # out twice (the unique index only catches a duplicate FULL refund).
+  test "an unreadable response leaves the refund pending, never failed" do
+    item = create_order(status: "succeeded", txhash: "4200001")
+
+    WechatPayGateway.stub :create_refund, ->(*) { raise WechatPayGateway::Unreachable, "could not read WeChat Pay's response: Zlib::DataError" } do
+      post "/api/v1/tickets/#{item.id}/refund", headers: auth_headers(@owner)
+    end
+
+    assert_response :success
+    assert json_response["awaiting_confirmation"]
+
+    refund = item.refunds.sole
+    assert_equal "pending", refund.status, "a sent refund must not be recorded as failed"
+    assert_nil refund.error
+    # And the callback still settles it, because out_refund_no is the row id.
+    assert_equal "succeeded", item.reload.status
+
+    perform_enqueued_jobs do
+      post_callback(encrypted_envelope({
+        "out_trade_no" => item.id, "out_refund_no" => refund.id, "refund_id" => "50000_late",
+        "refund_status" => "SUCCESS", "amount" => { "total" => 100, "refund" => 100 }
+      }, event_type: "REFUND.SUCCESS"))
+    end
+
+    assert_equal "succeeded", refund.reload.status
+    assert_equal "refunded", item.reload.status
+  end
+
+  # A refusal is different: nothing moved, so recording it failed is correct
+  # and frees the index for a retry.
+  test "a refusal from WeChat is recorded as failed" do
+    item = create_order(status: "succeeded", txhash: "4200001")
+
+    WechatPayGateway.stub :create_refund, ->(*) { raise WechatPayGateway::Error.new("余额不足", code: "NOTENOUGH", status: 403) } do
+      post "/api/v1/tickets/#{item.id}/refund", headers: auth_headers(@owner)
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "failed", item.refunds.sole.status
+    assert_includes item.ticketing_activities.map(&:action), "refund_failed"
+  end
+
   test "a wechat refund is refused to someone who does not manage the event" do
     item = create_order(status: "succeeded", txhash: "4200001")
 

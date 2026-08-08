@@ -379,7 +379,24 @@ class Api::V1::TicketsController < Api::BaseController
     begin
       refund.update!(provider_ref: send_refund(ticket_item, setting, refund))
       render json: { result: "ok", refund_id: refund.id, status: refund.status }
+    rescue WechatPayGateway::Unreachable, Stripe::APIConnectionError => e
+      # The refund was SENT; we just could not read the answer. Leaving the row
+      # pending is the only safe state: the provider's callback settles it by
+      # out_refund_no, and the reconciliation job catches it otherwise.
+      #
+      # Marking it failed here — which is what happened before this branch
+      # existed — would be a lie in the dangerous direction. The organizer
+      # sees a failure, clicks again, and a partial refund goes out twice.
+      # (A full one is caught by the one-live-full-refund index; a partial one
+      # is not.)
+      ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
+        reason: "provider response unreadable — awaiting callback", refund_id: refund.id)
+      Rails.logger.warn("[refund] #{refund.id} sent but unconfirmed: #{e.message}")
+      render json: { result: "ok", refund_id: refund.id, status: refund.status, awaiting_confirmation: true }
     rescue Stripe::StripeError, WechatPayGateway::Error => e
+      # The provider answered and refused. Nothing moved, so this is safe to
+      # record as failed — which also frees the one-live-full-refund index for
+      # a retry.
       refund.update!(status: "failed", error: e.message)
       ticket_item.record_activity!("refund_failed", source: "api", actor: current_user,
         reason: e.message, refund_id: refund.id)

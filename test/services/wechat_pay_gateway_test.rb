@@ -198,6 +198,50 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
     assert_equal "timeout", @item.reload.status
   end
 
+  # The refund endpoint answered with a body Net::HTTP could not inflate,
+  # raising Zlib::DataError AFTER the refund had already been accepted — a 500
+  # for an operation that succeeded. The request now asks for identity so
+  # there is nothing to decode, and any remaining read failure is Unreachable
+  # rather than Error, because "we could not read the answer" and "it was
+  # refused" must not be handled the same way.
+  test "a response we cannot read is Unreachable, not a refusal" do
+    [ Zlib::DataError.new("incorrect header check"), Net::ReadTimeout.new, EOFError.new ].each do |boom|
+      Net::HTTP.stub :start, ->(*, **) { raise boom } do
+        error = assert_raises(WechatPayGateway::Unreachable) do
+          WechatPayGateway.request(:post, "/v3/refund/domestic/refunds", setting: @setting, body: { a: 1 })
+        end
+        assert_match "could not read", error.message
+      end
+    end
+  end
+
+  test "Unreachable is still an Error, so query_order keeps reading it as cannot-ask" do
+    assert_operator WechatPayGateway::Unreachable, :<, WechatPayGateway::Error
+
+    Net::HTTP.stub :start, ->(*, **) { raise Zlib::DataError, "incorrect header check" } do
+      assert_nil WechatPayGateway.query_order(@setting, @item.id)
+    end
+  end
+
+  # Net::HTTP decides whether to auto-decompress at CONSTRUCTION time, and only
+  # skips it when accept-encoding was supplied in the initheader — setting the
+  # header afterwards is too late, which is exactly how the bug survived.
+  test "the request asks for identity encoding at construction time" do
+    seen = nil
+    Net::HTTP.stub :start, ->(*, **, &block) {
+      fake = Object.new
+      fake.define_singleton_method(:request) { |req| seen = req; raise Net::ReadTimeout }
+      block.call(fake)
+    } do
+      assert_raises(WechatPayGateway::Unreachable) do
+        WechatPayGateway.request(:post, "/v3/pay/transactions/jsapi", setting: @setting, body: { a: 1 })
+      end
+    end
+
+    assert_equal "identity", seen["accept-encoding"]
+    assert_not seen.decode_content, "Net::HTTP must not try to inflate the reply"
+  end
+
   test "close_order reports failure instead of raising into the sweeper" do
     WechatPayGateway.stub :request, ->(*, **) { raise WechatPayGateway::Error.new("already closed") } do
       assert_not WechatPayGateway.close_order(@setting, @item.id)
