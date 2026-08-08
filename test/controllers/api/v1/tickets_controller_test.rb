@@ -80,6 +80,26 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "pending", json_response["ticket_item"]["status"]
     assert_equal 1000, json_response["ticket_item"]["amount"]
+    # The order snapshots what it is priced in. Nothing downstream — refunds,
+    # the webhook's amount/currency check, the price the buyer is shown — may
+    # have to re-derive this from the rail's current default.
+    assert_equal "usd", json_response["ticket_item"]["currency"]
+    assert_equal "stripe", TicketItem.find(json_response["ticket_item"]["id"]).payment_provider
+  end
+
+  test "a crypto order carries no currency — its amount is denominated in the token" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "ethereum", kind: "crypto",
+      token_name: "USDT", price: 10_000, receiver_address: "0xabc")
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "ethereum" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_nil item.currency
+    assert_equal "evm", item.payment_provider
   end
 
   test "rsvp rejects a legacy sub-minimum stripe amount instead of waiving it to free" do

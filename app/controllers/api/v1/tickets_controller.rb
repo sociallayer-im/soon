@@ -579,6 +579,11 @@ class Api::V1::TicketsController < Api::BaseController
     end
 
     status = quote.amount.zero? ? "succeeded" : "pending"
+    # The fiat rail this order is priced on, or nil for crypto. It decides the
+    # provider, the currency and which collecting account gets snapshotted, so
+    # all three stay consistent by construction instead of by three separate
+    # `== "stripe"` tests that a new rail could each be added to separately.
+    rail = Ticketing::Quote.fiat_rail(paymethod, quote.chain)
 
     TicketItem.new(
       status: status, ticket_type: @ticket.ticket_type, user: current_user, ticket: @ticket, event: @event,
@@ -588,11 +593,14 @@ class Api::V1::TicketsController < Api::BaseController
       # Record the coupon on the item; usage is consumed only once the item
       # actually persists (see consume_coupon!), never on an aborted request.
       coupon_id: quote.discount_value ? quote.coupon&.id : nil,
-      payment_provider: quote.chain == "stripe" ? "stripe" : "evm",
-      currency: quote.chain == "stripe" ? "usd" : nil,
+      payment_provider: rail || "evm",
+      # Snapshot the currency as charged. Re-deriving it later from the rail
+      # would rewrite the history of any order taken before a rail's default
+      # changed — and refunds must be issued in the currency that was paid.
+      currency: rail ? paymethod.currency : nil,
       # Snapshot the collecting account: refunds/verification use the key
       # that took the money, never "current event owner" (§2.1).
-      stripe_setting_id: quote.chain == "stripe" ? paymethod.stripe_setting_id : nil,
+      stripe_setting_id: rail == "stripe" ? paymethod.stripe_setting_id : nil,
       paid_at: status == "succeeded" ? Time.current : nil,
       reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )
@@ -618,7 +626,7 @@ class Api::V1::TicketsController < Api::BaseController
     params.require(:ticket).permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
       :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
       days_allowed: [], tracks_allowed: [],
-      payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :stripe_setting_id, :_destroy, chains: []])
+      payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :currency, :stripe_setting_id, :_destroy, chains: []])
   end
 
   def coupon_params

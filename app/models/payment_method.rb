@@ -1,23 +1,52 @@
 class PaymentMethod < ApplicationRecord
   SUPPORTED_CHAINS = %w[ethereum optimism arbitrum polygon base stripe].freeze
 
+  # The rails whose `price` is an integer of a fiat minor unit (cents, 分)
+  # rather than a token amount scaled by the token's decimals. Every place
+  # that has to tell "is this money or is this a token" keys off this set —
+  # most importantly Coupon's fixed-amount scaling, which multiplies by 10000
+  # for token amounts and would otherwise turn a ¥1 coupon into ¥10,000.
+  FIAT_CHAINS = %w[stripe].freeze
+
+  CURRENCIES = %w[usd cny].freeze
+
+  # Each fiat rail settles in exactly one currency: Stripe here is the SG
+  # deployment (USD); WeChat Pay, when it lands, is domestic CNY only.
+  #
+  # The currency is nonetheless a stored column rather than something derived
+  # on read, because ticket_items and refunds have to remember what was
+  # actually charged — an order taken in USD stays a USD order even if the
+  # rail's default later changes — and because relaxing this map (Stripe
+  # presentment in CNY, say) then costs a data change instead of a migration.
+  RAIL_CURRENCY = { "stripe" => "usd" }.freeze
+
   # Product floor for card payments (cents). Stripe's own hard minimum is 50¢;
   # $4 is deliberate — smaller charges are mostly eaten by the $0.30 + 2.9% fee.
   # The same constant gates ticket creation (here) and the after-coupon amount
   # at checkout (TicketsController) — see design/PAYMENTS_PLAN.md decision #8/#9.
   STRIPE_MIN_CENTS = 400
 
+  # Per-rail floor, in that rail's minor unit. It is a map rather than one
+  # constant because the reason for the $4 card floor is Stripe's fixed $0.30
+  # per charge — a rail without a fixed fee has no such reason, and copying
+  # 400 across would silently ban every small ticket on it.
+  MIN_PRICE = { "stripe" => STRIPE_MIN_CENTS }.freeze
+
   belongs_to :item, polymorphic: true, optional: true
   # Which of the event owner's Stripe keys this method charges to (nil for
   # crypto methods and for stripe methods created before stripe_settings).
   belongs_to :stripe_setting, optional: true
 
+  before_validation :assign_currency
+
   validates :item_type, inclusion: { in: %w(Ticket User) }
   validates :chain, inclusion: { in: SUPPORTED_CHAINS }, allow_blank: true
   validate :chains_must_be_supported
+  validates :currency, inclusion: { in: CURRENCIES }, allow_blank: true
+  validate :currency_matches_rail
   # Guarded so pre-existing rows saved for unrelated reasons don't suddenly
   # fail validation — only new methods and price changes are held to the floor.
-  validate :stripe_price_meets_minimum, if: -> { new_record? || will_save_change_to_price? }
+  validate :price_meets_rail_minimum, if: -> { new_record? || will_save_change_to_price? }
   # A card method with no key cannot be charged at all — the buyer would only
   # find out at checkout, which PAYMENTS_PLAN decision #5 rules out. Applies
   # to every save, including edits of keyless sails-era rows: those were
@@ -35,11 +64,45 @@ class PaymentMethod < ApplicationRecord
     chains.present? ? chains : [chain].compact
   end
 
+  # The fiat rail this method charges on, or nil for a crypto method. Single
+  # value by construction: a fiat chain is always its own payment method
+  # (a card price in cents can't share a row with a token price), so the
+  # multi-chain `chains` array only ever holds crypto entries.
+  def fiat_chain
+    (effective_chains & FIAT_CHAINS).first
+  end
+
+  def fiat? = fiat_chain.present?
+
   private
+
+  # Fills the rail's only currency so callers never have to send it, while
+  # still allowing an explicit value that #currency_matches_rail then checks.
+  # Also repairs rows created before the column was used.
+  def assign_currency
+    rail = fiat_chain
+    self.currency = RAIL_CURRENCY[rail] if rail && currency.blank?
+  end
 
   def chains_must_be_supported
     invalid = Array(chains) - SUPPORTED_CHAINS
     errors.add(:chains, "contains unsupported chains: #{invalid.join(', ')}") if invalid.any?
+  end
+
+  def currency_matches_rail
+    rail = fiat_chain
+    if rail.nil?
+      # A crypto price is denominated in its token, whose name lives in
+      # token_name; a fiat currency here would describe the amount wrongly and
+      # would make Coupon's scaling look settled when it isn't.
+      errors.add(:currency, "does not apply to crypto payment methods") if currency.present?
+      return
+    end
+
+    expected = RAIL_CURRENCY[rail]
+    return if currency == expected
+
+    errors.add(:currency, "must be #{expected.upcase} for #{rail} payments")
   end
 
   def stripe_method_has_a_key
@@ -49,10 +112,20 @@ class PaymentMethod < ApplicationRecord
     errors.add(:stripe_setting_id, "is required for card payments — pick which Stripe key collects the money")
   end
 
-  def stripe_price_meets_minimum
-    return unless effective_chains.include?("stripe")
-    return if price.to_i >= STRIPE_MIN_CENTS
+  def price_meets_rail_minimum
+    rail = fiat_chain
+    return unless rail
+    minimum = MIN_PRICE.fetch(rail)
+    return if price.to_i >= minimum
 
-    errors.add(:price, "must be at least $#{STRIPE_MIN_CENTS / 100} (#{STRIPE_MIN_CENTS} cents) for card payments — use a crypto payment method for smaller amounts")
+    errors.add(:price, minimum_error_message(rail, minimum))
+  end
+
+  def minimum_error_message(rail, minimum)
+    if rail == "stripe"
+      "must be at least $#{minimum / 100} (#{minimum} cents) for card payments — use a crypto payment method for smaller amounts"
+    else
+      "must be at least #{minimum} (minor units) for #{rail} payments"
+    end
   end
 end
