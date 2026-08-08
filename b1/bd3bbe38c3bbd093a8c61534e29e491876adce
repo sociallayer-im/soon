@@ -1,0 +1,57 @@
+app/models/ticket_item.rb
+  s_448695a5d036bc::t_fbce7a96fbeccf 68
+  s_448695a5d036bc::t_4876dcd4ae134e 11-13
+  s_448695a5d036bc::t_5e2b082f56ea0f 101-102,105-106,113,125,153,156,184,220-221
+  s_448695a5d036bc::t_1eccdfc7068590 47-50,56,64-67,69,72-76
+  s_448695a5d036bc::t_2ae74c8ff9307e 51-54
+  s_448695a5d036bc::t_0fbc1cde141be8 41-43
+  s_448695a5d036bc::t_1011199348550e 189,194
+  s_448695a5d036bc::t_fc5a87c0ab9c62 77
+test/models/ticketing_activity_test.rb
+  s_448695a5d036bc::t_2b8db87e6dbafd 1-115
+app/blueprints/ticket_item_blueprint.rb
+  s_448695a5d036bc::t_30cfe3dd1f8083 38-44
+lib/tasks/ticketing_activities.rake
+  s_448695a5d036bc::t_910f44159b5fdf 1-84
+app/models/ticketing/activity.rb
+  s_448695a5d036bc::t_ee1c1db2bc45ac 1-90
+app/jobs/stripe_webhook_job.rb
+  s_448695a5d036bc::t_b2a1b81c992b45 45,49,59,66,69,128
+test/controllers/api/v1/tickets_controller_test.rb
+  s_448695a5d036bc::t_e8052f877333e0 707-728
+db/migrate/20260808180000_create_ticketing_activities.rb
+  s_448695a5d036bc::t_671de5a7459f8a 1-53
+app/models/ticketing.rb
+  s_448695a5d036bc::t_95075e3724d779 1-8
+app/jobs/wechat_pay_webhook_job.rb
+  s_448695a5d036bc::t_b2a1b81c992b45 45-47,53-59,61,85,97-98
+app/jobs/ticketing_sweeper_job.rb
+  s_448695a5d036bc::t_b2a1b81c992b45 34,71
+app/controllers/api/v1/tickets_controller.rb
+  s_448695a5d036bc::t_ab7a9a35479477 318-324,376-378,384-385,410,415-421,434
+  s_448695a5d036bc::t_146c9c1266eb0e 140-142
+  s_448695a5d036bc::t_09ca6c0993bc79 597-602
+  s_448695a5d036bc::t_b4277844e8bfa3 422-433
+app/jobs/stripe_reconciliation_job.rb
+  s_448695a5d036bc::t_b2a1b81c992b45 49,76
+app/blueprints/ticketing_activity_blueprint.rb
+  s_448695a5d036bc::t_85830a2232fca2 1-14
+db/schema.rb
+  s_448695a5d036bc::t_a4302969f077e1 13,609-624
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b1bd3bbe38c3bbd093a8c61534e29e491876adce",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
