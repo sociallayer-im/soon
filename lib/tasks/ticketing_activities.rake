@@ -21,10 +21,12 @@ namespace :ticketing do
   desc "Backfill ticketing_activities for orders created before it existed"
   task backfill: :environment do
     dry_run = ENV["DRY_RUN"] == "true"
+    # No .order here: find_each batches by primary key and ignores one
+    # (Rails 8 warns about it). Ordering would not matter anyway — each order's
+    # rows are derived independently and carry their own timestamps.
     scope = TicketItem.left_joins(:ticketing_activities)
                       .where(ticketing_activities: { id: nil })
                       .includes(:refunds)
-                      .order(:created_at)
 
     total = scope.count
     puts "#{total} order(s) without history#{' (dry run)' if dry_run}"
