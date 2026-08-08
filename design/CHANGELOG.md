@@ -2,6 +2,51 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-08 — WeChat Pay, and the currency that should always have been there
+
+CN's second payment rail, built on branch `wechat-pay` and not yet deployed.
+Full write-up in `design/WECHAT_INTEGRATION.md` §5; what follows is what
+changed for everything that is *not* WeChat.
+
+**Payment methods now carry a currency.** `payment_methods.currency` had been a
+column nobody wrote or read: orders were stamped `currency: "usd"` from a
+literal. It is now assigned from the rail, validated against it, and
+**snapshotted onto the order as charged** — a refund has to go out in the
+currency that came in, and an order taken before a rail's default moved must
+keep its own.
+
+**Three places stopped asking `chain == "stripe"`.** Each was correct with one
+fiat rail and wrong with two:
+
+- `Coupon#get_discounted_price` multiplied a fixed-amount discount by 10000
+  for anything that was not literally `"stripe"`. A ¥1 coupon on a WeChat order
+  would have become ¥10,000, clamped to the price — **the order goes free**.
+  Now keyed off `PaymentMethod::FIAT_CHAINS`, and the test asserts the property
+  over the whole set so the next rail is covered without anyone remembering.
+- `set_payment_status` refused to confirm stripe orders by name. It is
+  authenticated by a shared secret and verifies no payment, so any rail left
+  open there mints paid tickets for whoever holds `NEXT_TOKEN`. It now refuses
+  every fiat rail.
+- `payment_proof_ok?` split stripe from crypto, so a third rail fell through to
+  the crypto branch and was asked for a txhash it can never have.
+
+**The $4 card floor became `MIN_PRICE`, a per-rail map.** It exists to cover
+Stripe's fixed $0.30 per charge; a rail without a fixed fee has no reason for
+it, and one global constant imposes it anyway.
+
+**`AuthController#bind_wechat`** attaches a WeChat identity to an existing
+account — JSAPI cannot place an order without the payer's openid and
+email-registered buyers have none. It requires *both* a session and
+`NEXT_TOKEN`: the JWT says which account, the shared secret says the openid
+came from the server that just redeemed the code. On user auth alone anyone
+could claim a stranger's openid and receive their next WeChat sign-in. Unlike
+`bind_email` it refuses rather than merges when the identity already has an
+account — that direction would delete an account with real data on it.
+
+`ginger.cn.yml` gains `API_URL`. `WechatPayGateway.notify_url` is one default
+away from `localhost`, and a localhost notify_url is invisible: WeChat reports
+nothing, and payments would confirm solely through the 5-minute sweeper.
+
 ## 2026-08-08 — a second sign-in channel no longer means a second account
 
 WeChat sign-in creates an account with no email. Binding one that already
