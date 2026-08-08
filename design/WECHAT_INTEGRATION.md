@@ -2,8 +2,9 @@
 
 调研日期：2026-07-31
 状态：**§1 微信登录已实现并已上线**（2026-07-31，方案 A）；
-**§2 微信支付已实现，未部署**（2026-08-08，分支 `wechat-pay`，见 §5）。
+**§2 微信支付已上线 CN 并完成真机验证**（2026-08-08，分支 `wechat-pay`，见 §5）。
 §2.2 的商户模式按 **(a) 平台单一商户号** 落地，但代码形状按 (b) 服务商模式预留。
+**分支未合入 main** —— 功能成熟前刻意保持分离，生产跑的就是分支镜像。
 
 已实现部分与本文的差异：仅一处——用户信息不再单独调 `/sns/userinfo`，因为
 `unionid` 已经在 code 换 token 的响应里返回，省掉一次请求。落地文件：
@@ -593,13 +594,16 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
   微信的参数校验顺序没有文档，所以这只是**强证据而非证明**——唯一的结论性验证
   是拿一个真实 openid 下一次单。
 
-仍未验证（必须在微信内置浏览器里用真人跑）：
+**真机验证：已通过**（2026-08-08，微信内置浏览器，真实付款）。JSAPI 调起支付、
+支付回调确认、订单转 succeeded 全链路跑通。
 
-- **JSAPI 调起支付**（`WeixinJSBridge`）。
-- **`snsapi_base` 静默授权**补 openid 的整条链路。
-- **真实回调的报文形状**、退款接口、关单接口的字段级行为。参照 Stripe 那次的
-  经验（PAYMENTS_PLAN §7.4），第一次真实联调仍有可能再发现字段问题——上面那个
-  `ORDER_NOT_EXIST` 就是一例，而它只用一次只读查询就暴露了。
+仍未真机验证的分支：
+
+- **退款**与**关单**接口的字段级行为（代码路径有测试，但没对过真实接口）。
+- **`snsapi_base` 静默授权**补 openid ——首笔是用已有 openid 的账号付的，
+  邮箱注册账号那条路还没跑过。
+- 参照 Stripe 那次的经验（PAYMENTS_PLAN §7.4），剩下的接口仍可能有字段出入。
+  上面那个 `ORDER_NOT_EXIST` 就是一例，而它只用一次只读查询就暴露了。
 
 ### 5.4 部署前必须完成
 
@@ -663,3 +667,73 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
 > 是个 git 仓库，此前**没有 .gitignore**，`git add .` 会把 APIv3 密钥直接提交
 > 进去。已补上（`soma/.gitignore`：凭据、`*.pem`、`.env*`、数据库 dump）。
 > 长期正确的位置仍是 `.env.cn.production`。
+
+### 5.5 CN 上线记录（2026-08-08）
+
+**分支未合并。** 生产跑的是 `wechat-pay` 分支的镜像，`main` 保持在
+`soon 9aeb803` / `seastar-app 38b31d5`。功能成熟前不并入 main，是刻意的。
+
+```
+soon         09e178d → registry.juluo.xyz/soon:09e178d          Nomad healthy
+seastar-app  c528229 → registry.juluo.xyz/seastar-app:c528229   Nomad healthy
+商户          1115981704 → wechat_pay_settings 3mskt7jn6gi63
+```
+
+部署命令（两个仓库各自根目录，**必须带 `-c ginger.cn.yml`**，不带就部到 SG 了）：
+
+```bash
+cd soon        && ginger deploy -c ginger.cn.yml
+ssh root@juluo.xyz 'docker exec <soon 容器> bin/rails wechat_pay:install'
+cd seastar-app && ginger deploy -c ginger.cn.yml
+```
+
+顺序有意义：先后端、装商户、再前端。反过来的话组织者能看到「添加微信支付」
+按钮但保存会失败（没有商户可挂）。
+
+上线后的生产实测：
+
+- 容器内 `query_order` → `{"trade_state"=>"NOTPAY"}`，即生产环境的签名被微信接受。
+- `notify_url` = `https://api.juluo.xyz/api/v1/webhooks/wechat/3mskt7jn6gi63`，
+  公网 POST 无签名报文 → `401 {"code":"FAIL",...}`，未知商户 id → `unknown merchant`。
+- 前端镜像内 `.env.production` 含 `NEXT_PUBLIC_WECHAT_PAY_ENABLED="true"`；
+  客户端 bundle 里 inline 了 `api.juluo.xyz`，证明构建确实读的是 CN 那份 env
+  （即微信渠道没有被开关过滤掉——编译产物里是 `"wechat"===a&&!z.UQ`）。
+
+#### 一个会静默毁掉私钥的坑：.env 里的 PEM 必须**单引号**
+
+写成不带引号的 `WECHAT_PAY_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIE…`，
+dotenv 会把 `\n` 的**反斜杠当转义符吃掉、又不插入换行**：
+
+```
+写进去:  -----BEGIN PRIVATE KEY-----\nMIIEvQIBADA…
+读出来:  -----BEGIN PRIVATE KEY-----nMIIEvQIBADA…      ← 每个换行变成字母 n
+```
+
+私钥直接报废。单引号的值 dotenv 不做任何转义处理，字面 `\n` 原样送到
+install 任务再还原。`wechat_pay.rake` 里的 `pem()` 会专门认出这种「换行变成
+字母 n」的形态并指名道姓地报错——否则模型层给出的是「请用 apiclient_key.pem
+而不是证书」，会把人引到完全错误的方向。
+
+### 5.6 上线后立刻暴露的两个老问题
+
+CN 在微信支付之前**从来没有过可购买的票**（crypto 与 Stripe 都关着），所以这
+两个 main 上早就存在的问题今天才第一次被撞到。都已修复并部署
+（`seastar-app c528229`）。
+
+1. **票价单位写死成 USD** —— `displayTicketPrice`（`utils/index.ts`）直接在返回
+   字符串里拼 `USD`。¥1 的票渲染成 `1 USD`，在买家做决定的那块屏幕上把价格说
+   错了近 7 倍。现在单位取自 `payment_method.currency`，加密货币回落到 token
+   名；**不同币种不合并成区间**（可用 ¥1 或 5 USDT 支付是两个报价，合并等于
+   凭空发明汇率）。单位读 `currency` 而非 token 表，是因为那才是实际扣款/退款
+   的币种，而且后端从不强制 `token_name`。
+
+2. **「加入活动(RSVP)」按钮根本没连到支付** —— 它是个
+   `<a href="?tab=tickets">`，同一个页面加个查询参数，按下去看着就是刷新，而
+   它展开的票列表在首屏之下。买家读到的信息是「按钮坏了」。
+   现在是客户端按钮：只有一种票时直接打开购票弹窗，多种票才跳 tab。未登录也
+   放行——弹窗里有登录按钮，比一个点了没反应的按钮更能说明下一步。
+
+   > 教训留档：**微信 JSAPI 只在弹窗的「支付」按钮之后调用**
+   > （`invokeWechatPay` → `WeixinJSBridge.invoke('getBrandWCPayRequest')`，
+   > 全前端仅此一处）。排查「没有调起微信支付」时，先确认流程是否真的走到了
+   > 那一步，而不是先怀疑签名或配置。
