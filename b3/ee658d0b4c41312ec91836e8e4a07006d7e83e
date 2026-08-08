@@ -1,0 +1,26 @@
+app/controllers/api/v1/tickets_controller.rb
+  s_448695a5d036bc::t_8d92689a0bfb69 382-395,397-399
+app/services/wechat_pay_gateway.rb
+  s_448695a5d036bc::t_b159fd4b4629a7 37-46
+  s_448695a5d036bc::t_50491c5aff2db8 251-267,273-278
+test/services/wechat_pay_gateway_test.rb
+  s_448695a5d036bc::t_1fb49eceb57e79 201-244
+test/controllers/api/v1/tickets_wechat_flow_test.rb
+  s_448695a5d036bc::t_faa6da6aca37aa 195-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b3ee658d0b4c41312ec91836e8e4a07006d7e83e",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
