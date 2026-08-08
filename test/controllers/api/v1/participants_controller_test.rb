@@ -105,6 +105,65 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, json_response["data"].size
   end
 
+  test "index serves an anonymous visitor for a public event" do
+    owner = create_user
+    attendee = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_participant(event: event, user: attendee)
+
+    # The detail page can now ask for the event without the embedded attendee
+    # array, so a signed-out visitor has to be able to fetch the list here —
+    # they could always read it off GET /events/:id.
+    get "/api/v1/events/#{event.id}/participants"
+    assert_response :success
+    assert_equal 1, json_response["data"].size
+  end
+
+  test "index hides a private event's attendees from a non-member" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "private")
+    create_participant(event: event, user: owner)
+
+    # This action used to require a token but never check it against the event,
+    # so any signed-in user could enumerate a private event's attendees.
+    get "/api/v1/events/#{event.id}/participants", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/events/#{event.id}/participants"
+    assert_response :forbidden
+  end
+
+  test "index hides a draft event's attendees from everyone but its managers" do
+    owner = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "draft")
+    create_participant(event: event, user: owner)
+
+    get "/api/v1/events/#{event.id}/participants", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    get "/api/v1/events/#{event.id}/participants", headers: auth_headers(owner)
+    assert_response :success
+  end
+
+  test "index excludes withdrawn participants" do
+    owner = create_user
+    attendee = create_user
+    withdrawn = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_participant(event: event, user: attendee)
+    create_participant(event: event, user: withdrawn, status: "cancelled")
+
+    get "/api/v1/events/#{event.id}/participants"
+    assert_response :success
+    assert_equal [attendee.id], json_response["data"].map { |p| p.dig("user", "id") }
+  end
+
   test "update is self-only" do
     owner = create_user
     attendee = create_user

@@ -1,4 +1,11 @@
 class Api::V1::ParticipantsController < Api::BaseController
+  # Reading the attendee list is as public as reading the event: the same list
+  # has always been embedded in GET /events/:id, which anonymous visitors may
+  # call. Now that the detail page can ask for the event without it, that page
+  # has to be able to fetch it separately — including for a signed-out visitor,
+  # who could see it before.
+  skip_before_action :authenticate!, only: %i[index]
+  before_action :authenticate_optional!, only: %i[index]
   before_action :set_event
 
   # GET /api/v1/events/:event_id/participants
@@ -7,6 +14,11 @@ class Api::V1::ParticipantsController < Api::BaseController
   # appear in the attendee list — before the soft delete they were removed
   # outright, so nothing downstream expects to see them.
   def index
+    # Gate on the EVENT, which this action never did: a token was required but
+    # nothing checked it against the event, so any signed-in user could list
+    # the attendees of a draft or private one. Matching EventPolicy#show? ties
+    # the list to the same visibility rule as the event that owns it.
+    authorize @event, :show?
     render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
   end
 
