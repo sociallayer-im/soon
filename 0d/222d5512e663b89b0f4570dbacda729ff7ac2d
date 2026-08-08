@@ -1,0 +1,48 @@
+app/services/wechat_pay_gateway.rb
+  s_448695a5d036bc::t_4b2f62be70778c 216
+  s_448695a5d036bc::t_044cd6fe6d0f05 131
+test/jobs/wechat_pay_webhook_job_test.rb
+  s_448695a5d036bc::t_42992f4748affb 1-159
+app/controllers/api/v1/wechat_pay_webhooks_controller.rb
+  s_448695a5d036bc::t_6b986d46cfb2c3 1-65
+app/controllers/api/v1/tickets_controller.rb
+  s_448695a5d036bc::t_b6f3a266a05dca 276-324
+  s_448695a5d036bc::t_b3538a3ea512b8 653-664
+  s_448695a5d036bc::t_c554a55c1c8a15 205-212
+  s_448695a5d036bc::t_f9697cb84e595d 328-330,334-343,350-351,353-355,362-363,367,369,371
+  s_448695a5d036bc::t_85d0d456745c77 571-572,576-580
+  s_448695a5d036bc::t_b8fac2f2403985 628-652
+  s_448695a5d036bc::t_a369145f8cd716 581
+ginger.cn.yml
+  s_448695a5d036bc::t_6a31a22b110db5 54-62
+  s_448695a5d036bc::t_6eb5e41086b567 84-93
+test/controllers/api/v1/tickets_wechat_flow_test.rb
+  s_448695a5d036bc::t_33bb5cd238e8a1 1-211,213-219
+  s_448695a5d036bc::t_80eb7498ba2a7f 212
+config/routes.rb
+  s_448695a5d036bc::t_77b9a39114e575 179-183
+app/jobs/ticketing_sweeper_job.rb
+  s_448695a5d036bc::t_60beb9a613e4e3 20-21
+  s_448695a5d036bc::t_79346332e0bbf5 52-82
+  s_448695a5d036bc::t_a51601313a733b 83
+app/jobs/wechat_pay_webhook_job.rb
+  s_448695a5d036bc::t_c97f6afc470888 1-118
+test/jobs/ticketing_sweeper_job_test.rb
+  s_448695a5d036bc::t_709805242b0e34 74-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0d222d5512e663b89b0f4570dbacda729ff7ac2d",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
