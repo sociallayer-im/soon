@@ -59,6 +59,32 @@ class PaymentMethodTest < ActiveSupport::TestCase
     assert_equal "usd", pm.reload.currency
   end
 
+  test "a WeChat method takes CNY and the installed platform merchant" do
+    merchant = create_wechat_pay_setting
+    pm = PaymentMethod.create!(item: @ticket, chain: "wechat", kind: "fiat", price: 100)
+
+    assert_equal "cny", pm.currency
+    assert_equal merchant.id, pm.wechat_pay_setting_id
+  end
+
+  # The organizer never picks a merchant, so "no merchant installed" can only
+  # surface as a validation. Without it the method saves and the failure moves
+  # to a buyer standing at checkout.
+  test "a WeChat method is refused when no merchant is installed" do
+    pm = PaymentMethod.new(item: @ticket, chain: "wechat", kind: "fiat", price: 100)
+
+    assert_not pm.valid?
+    assert_match "no WeChat Pay merchant is configured", pm.errors[:wechat_pay_setting_id].first
+  end
+
+  test "a WeChat method cannot be priced in USD" do
+    create_wechat_pay_setting
+    pm = PaymentMethod.new(item: @ticket, chain: "wechat", kind: "fiat", price: 100, currency: "usd")
+
+    assert_not pm.valid?
+    assert_match "must be CNY", pm.errors[:currency].first
+  end
+
   # --- price floor ---
 
   test "the card floor still applies at $4" do
@@ -79,6 +105,22 @@ class PaymentMethodTest < ActiveSupport::TestCase
       token_name: "USDT", price: 1)
 
     assert pm.valid?
+  end
+
+  # ¥0.01. Legitimate on a rail with no fixed per-charge fee, and the exact
+  # case a copied 400 would have banned.
+  test "WeChat accepts a one-fen ticket" do
+    create_wechat_pay_setting
+    pm = PaymentMethod.new(item: @ticket, chain: "wechat", kind: "fiat", price: 1)
+
+    assert pm.valid?, pm.errors.full_messages.join(", ")
+  end
+
+  test "a free WeChat price is still refused — zero is the free path, not a price" do
+    create_wechat_pay_setting
+    pm = PaymentMethod.new(item: @ticket, chain: "wechat", kind: "fiat", price: 0)
+
+    assert_not pm.valid?
   end
 
   test "fiat_chain names the rail, and is nil for crypto" do

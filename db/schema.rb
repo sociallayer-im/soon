@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_101500) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -490,6 +490,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_101500) do
     t.string "token_address"
     t.string "token_name"
     t.datetime "updated_at", null: false
+    t.string "wechat_pay_setting_id", comment: "which merchant collects this method's WeChat payments"
     t.index ["item_type", "item_id"], name: "index_payment_methods_on_item_type_and_item_id"
     t.index ["stripe_setting_id"], name: "index_payment_methods_on_stripe_setting_id"
   end
@@ -590,6 +591,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_101500) do
     t.string "txhash"
     t.datetime "updated_at", null: false
     t.string "user_id"
+    t.string "wechat_pay_setting_id", comment: "the merchant that took the money; refunds go back through it"
     t.index ["coupon_id"], name: "index_ticket_items_on_coupon_id"
     t.index ["event_id", "status"], name: "index_ticket_items_on_event_id_and_status"
     t.index ["event_id"], name: "index_ticket_items_on_event_id"
@@ -602,6 +604,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_101500) do
     t.index ["txhash"], name: "index_ticket_items_on_txhash_unique", unique: true, where: "(txhash IS NOT NULL)"
     t.index ["user_id", "status"], name: "index_ticket_items_on_user_id_and_status"
     t.index ["user_id"], name: "index_ticket_items_on_user_id"
+    t.index ["wechat_pay_setting_id"], name: "index_ticket_items_on_wechat_pay_setting_id"
   end
 
   create_table "tickets", id: :string, force: :cascade do |t|
@@ -731,6 +734,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_101500) do
     t.index ["receiver_id"], name: "index_vouchers_on_receiver_id"
     t.index ["ref_id"], name: "index_vouchers_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["sender_id"], name: "index_vouchers_on_sender_id"
+  end
+
+  create_table "wechat_pay_events", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "error"
+    t.string "event_type", null: false, comment: "TRANSACTION.SUCCESS | REFUND.SUCCESS | REFUND.ABNORMAL | REFUND.CLOSED"
+    t.jsonb "payload", default: {}, null: false, comment: "envelope with resource replaced by its decrypted contents"
+    t.datetime "processed_at"
+    t.datetime "updated_at", null: false
+    t.string "wechat_pay_setting_id", null: false, comment: "which merchant's endpoint received it"
+    t.index ["event_type", "created_at"], name: "index_wechat_pay_events_on_event_type_and_created_at"
+    t.index ["wechat_pay_setting_id"], name: "index_wechat_pay_events_on_wechat_pay_setting_id"
+  end
+
+  create_table "wechat_pay_settings", id: :string, force: :cascade do |t|
+    t.text "apiv3_key", null: false, comment: "32-byte APIv3 key; AES-256-GCM-decrypts callback resources"
+    t.string "app_id", null: false, comment: "the 公众号 appid; MUST be the one that issued payer.openid"
+    t.string "cert_serial", null: false, comment: "商户API证书序列号, sent as the signature's serial_no"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "cny", null: false
+    t.string "mchid", null: false, comment: "商户号"
+    t.string "name", null: false, comment: "label, e.g. the registered merchant name"
+    t.text "private_key", null: false, comment: "apiclient_key.pem contents; signs every outbound request"
+    t.text "public_key", comment: "微信支付公钥 PEM; verifies callback signatures"
+    t.string "public_key_id", comment: "微信支付公钥 ID (PUB_KEY_ID_…), sent as Wechatpay-Serial on callbacks"
+    t.string "status", default: "active", null: false, comment: "active | invalid"
+    t.string "sub_mchid", comment: "特约商户号 — 服务商 mode only, null in single-merchant mode"
+    t.datetime "updated_at", null: false
+    t.string "user_id", comment: "null = platform-owned (single-merchant mode); set = per-organizer sub-merchant"
+    t.index ["mchid", "sub_mchid"], name: "index_wechat_pay_settings_on_mchid_and_sub_mchid", unique: true
+    t.index ["user_id"], name: "index_wechat_pay_settings_on_user_id"
   end
 
   add_foreign_key "activities", "users", column: "initiator_id"

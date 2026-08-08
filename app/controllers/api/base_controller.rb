@@ -31,6 +31,16 @@ class Api::BaseController < ActionController::API
     render_not_found unless stripe_enabled?
   end
 
+  # The mirror-image gate for WeChat Pay: CN sets WECHAT_PAY_ENABLED=true, SG
+  # leaves it unset (design/WECHAT_INTEGRATION.md §3.1). Note this is only the
+  # deployment switch — a deployment can have it on and still have no merchant
+  # installed, which WechatPaySetting.platform_default is what answers.
+  def wechat_pay_enabled? = ENV["WECHAT_PAY_ENABLED"] == "true"
+
+  def require_wechat_pay_enabled!
+    render_not_found unless wechat_pay_enabled?
+  end
+
   def authenticate!
     payload = JwtService.decode(bearer_token)
     @current_user = user_from_payload(payload) or raise ActiveRecord::RecordNotFound

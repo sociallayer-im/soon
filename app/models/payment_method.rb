@@ -1,12 +1,12 @@
 class PaymentMethod < ApplicationRecord
-  SUPPORTED_CHAINS = %w[ethereum optimism arbitrum polygon base stripe].freeze
+  SUPPORTED_CHAINS = %w[ethereum optimism arbitrum polygon base stripe wechat].freeze
 
   # The rails whose `price` is an integer of a fiat minor unit (cents, 分)
   # rather than a token amount scaled by the token's decimals. Every place
   # that has to tell "is this money or is this a token" keys off this set —
   # most importantly Coupon's fixed-amount scaling, which multiplies by 10000
   # for token amounts and would otherwise turn a ¥1 coupon into ¥10,000.
-  FIAT_CHAINS = %w[stripe].freeze
+  FIAT_CHAINS = %w[stripe wechat].freeze
 
   CURRENCIES = %w[usd cny].freeze
 
@@ -18,7 +18,7 @@ class PaymentMethod < ApplicationRecord
   # actually charged — an order taken in USD stays a USD order even if the
   # rail's default later changes — and because relaxing this map (Stripe
   # presentment in CNY, say) then costs a data change instead of a migration.
-  RAIL_CURRENCY = { "stripe" => "usd" }.freeze
+  RAIL_CURRENCY = { "stripe" => "usd", "wechat" => "cny" }.freeze
 
   # Product floor for card payments (cents). Stripe's own hard minimum is 50¢;
   # $4 is deliberate — smaller charges are mostly eaten by the $0.30 + 2.9% fee.
@@ -30,14 +30,23 @@ class PaymentMethod < ApplicationRecord
   # constant because the reason for the $4 card floor is Stripe's fixed $0.30
   # per charge — a rail without a fixed fee has no such reason, and copying
   # 400 across would silently ban every small ticket on it.
-  MIN_PRICE = { "stripe" => STRIPE_MIN_CENTS }.freeze
+  # WeChat Pay charges ≈0.6% and no fixed fee, and accepts amounts down to 1分,
+  # so it gets the real floor rather than an inherited $4 that would ban every
+  # ticket under ¥4 for a reason that does not apply to it
+  # (design/WECHAT_INTEGRATION.md §2.5).
+  MIN_PRICE = { "stripe" => STRIPE_MIN_CENTS, "wechat" => 1 }.freeze
 
   belongs_to :item, polymorphic: true, optional: true
   # Which of the event owner's Stripe keys this method charges to (nil for
   # crypto methods and for stripe methods created before stripe_settings).
   belongs_to :stripe_setting, optional: true
+  # Which merchant collects this method's WeChat payments. Not organizer-chosen
+  # — there is one platform merchant — but stored per method so an order's
+  # snapshot is a fact about the order, not a lookup of current config.
+  belongs_to :wechat_pay_setting, optional: true
 
   before_validation :assign_currency
+  before_validation :assign_wechat_pay_setting
 
   validates :item_type, inclusion: { in: %w(Ticket User) }
   validates :chain, inclusion: { in: SUPPORTED_CHAINS }, allow_blank: true
@@ -53,6 +62,7 @@ class PaymentMethod < ApplicationRecord
   # never chargeable (Stripe was non-functional before this work), so the
   # organizer picking a key is the repair, not a regression.
   validate :stripe_method_has_a_key
+  validate :wechat_method_has_a_setting
 
   enum :kind, { crypto: "crypto", fiat: "fiat", credit: "credit" }
 
@@ -84,6 +94,16 @@ class PaymentMethod < ApplicationRecord
     self.currency = RAIL_CURRENCY[rail] if rail && currency.blank?
   end
 
+  # Unlike Stripe, nothing asks the organizer which merchant collects: CN has
+  # exactly one. Resolving it here (rather than in the controller) means every
+  # creation path gets it, including the group-ticket and recurring ones.
+  def assign_wechat_pay_setting
+    return unless fiat_chain == "wechat"
+    return if wechat_pay_setting_id.present?
+
+    self.wechat_pay_setting_id = WechatPaySetting.platform_default&.id
+  end
+
   def chains_must_be_supported
     invalid = Array(chains) - SUPPORTED_CHAINS
     errors.add(:chains, "contains unsupported chains: #{invalid.join(', ')}") if invalid.any?
@@ -110,6 +130,18 @@ class PaymentMethod < ApplicationRecord
     return if stripe_setting_id.present?
 
     errors.add(:stripe_setting_id, "is required for card payments — pick which Stripe key collects the money")
+  end
+
+  # Same reasoning as the Stripe key check: an uncollectable method must fail
+  # for the organizer at creation, not for a buyer at checkout. Reached only
+  # when no merchant is installed at all — assign_wechat_pay_setting fills it
+  # otherwise.
+  def wechat_method_has_a_setting
+    return unless effective_chains.include?("wechat")
+    return if wechat_pay_setting_id.present?
+
+    errors.add(:wechat_pay_setting_id,
+      "is required for WeChat payments — no WeChat Pay merchant is configured on this deployment")
   end
 
   def price_meets_rail_minimum
