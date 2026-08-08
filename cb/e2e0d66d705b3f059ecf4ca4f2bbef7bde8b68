@@ -1,0 +1,21 @@
+test/services/wechat_pay_gateway_test.rb
+  s_448695a5d036bc::t_aae6803c4b4a3d 1-200
+app/services/wechat_pay_gateway.rb
+  s_448695a5d036bc::t_043540f17ed9a4 1-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cbe2e0d66d705b3f059ecf4ca4f2bbef7bde8b68",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
