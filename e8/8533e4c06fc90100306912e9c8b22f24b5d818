@@ -1,0 +1,34 @@
+app/models/payment_method.rb
+  s_448695a5d036bc::t_afc7d6debebd20 4-22,29-34,40-41,45-46,49,67-76,79-86,92-107,115-122,124-129
+app/controllers/api/v1/tickets_controller.rb
+  s_448695a5d036bc::t_5e6a65c22b3109 582-586
+  s_448695a5d036bc::t_e91bfb13c11c3a 596-600,603
+  s_448695a5d036bc::t_e366f3d1db0f8f 629
+test/models/payment_method_test.rb
+  s_448695a5d036bc::t_5e6286732fc918 1-105
+app/blueprints/ticket_item_blueprint.rb
+  s_448695a5d036bc::t_6c1d0a656a6aa2 7-10
+app/blueprints/payment_method_blueprint.rb
+  s_448695a5d036bc::t_ec8b43717c9448 6-9
+test/controllers/api/v1/tickets_controller_test.rb
+  s_448695a5d036bc::t_750434660e6e5f 83-102
+app/services/ticketing/quote.rb
+  s_448695a5d036bc::t_9de85d284d7e08 54-61
+  s_448695a5d036bc::t_3712a5709fd3cc 70-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e88533e4c06fc90100306912e9c8b22f24b5d818",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
