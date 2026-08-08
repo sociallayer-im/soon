@@ -699,9 +699,11 @@ class Api::V1::TicketsController < Api::BaseController
       # would rewrite the history of any order taken before a rail's default
       # changed — and refunds must be issued in the currency that was paid.
       currency: rail ? paymethod.currency : nil,
-      # Snapshot the collecting account: refunds/verification use the key
-      # that took the money, never "current event owner" (§2.1).
+      # Snapshot the collecting account: refunds/verification use the account
+      # that took the money, never "current event owner" (§2.1). One of these
+      # per rail — neither is set for a crypto order.
       stripe_setting_id: rail == "stripe" ? paymethod.stripe_setting_id : nil,
+      wechat_pay_setting_id: rail == "wechat" ? paymethod.wechat_pay_setting_id : nil,
       paid_at: status == "succeeded" ? Time.current : nil,
       reserved_until: status == "pending" ? RESERVATION_TTL.from_now : nil
     )
