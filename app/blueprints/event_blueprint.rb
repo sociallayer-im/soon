@@ -33,8 +33,23 @@ class EventBlueprint < Blueprinter::Base
     association :event_roles, blueprint: EventRoleBlueprint
     # Withdrawn (soft-deleted) participants are not attendees — reject in Ruby
     # so a preloaded association isn't re-queried.
-    association :participants, blueprint: ParticipantBlueprint do |event|
+    #
+    # This array is the part of the response that grows without bound — one
+    # embedded user per RSVP — and the detail page shows it behind a tab most
+    # visitors never open. `include_participants: false` leaves it out; the
+    # list then comes from GET /events/:id/participants when it's actually
+    # wanted. Opt-out rather than opt-in so already-deployed clients, which
+    # index into this array, keep working.
+    association :participants, blueprint: ParticipantBlueprint,
+                if: ->(_n, _o, options) { options[:include_participants] != false } do |event|
       event.participants.reject(&:cancelled?)
+    end
+    # The viewer's own RSVP. Without it, dropping the array above would also
+    # drop the answer to "have I joined, did my payment go through, was I
+    # checked in" — which is what the page's primary button is made of.
+    association :current_participant, blueprint: ParticipantBlueprint,
+                if: ->(_n, _o, options) { options.key?(:current_participant) } do |_event, options|
+      options[:current_participant]
     end
     association :tickets, blueprint: TicketBlueprint, view: :extended
   end

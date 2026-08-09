@@ -1,4 +1,12 @@
 module FactoryHelpers
+  # One throwaway keypair per process. 2048-bit generation costs ~100ms and
+  # every WeChat Pay test needs a key that actually signs and verifies, so a
+  # fixed PEM constant would be the alternative — and a real RSA key in the
+  # repo is exactly the thing we tell people not to commit.
+  def self.rsa_key
+    @rsa_key ||= OpenSSL::PKey::RSA.generate(2048)
+  end
+
   def unique_suffix
     @unique_counter = (@unique_counter || 0) + 1
     "#{Process.pid}#{@unique_counter}#{rand(1000)}"
@@ -115,6 +123,23 @@ module FactoryHelpers
     user_id ||= create_user.id
     StripeSetting.find_by(user_id: user_id) ||
       StripeSetting.create!(user_id: user_id, name: "Factory key", secret_key: "sk_test_factory")
+  end
+
+  # The platform merchant. Signs and verifies for real (same keypair on both
+  # sides), so gateway tests exercise the actual OpenSSL path rather than a
+  # stub of it.
+  def create_wechat_pay_setting(**attrs)
+    n = unique_suffix
+    WechatPaySetting.create!({
+      name: "Merchant #{n}",
+      mchid: "16#{n}"[0, 10],
+      app_id: "wxtestappid#{n}"[0, 18],
+      cert_serial: SecureRandom.hex(20).upcase,
+      private_key: FactoryHelpers.rsa_key.to_pem,
+      apiv3_key: SecureRandom.alphanumeric(32),
+      public_key_id: "PUB_KEY_ID_#{n}",
+      public_key: FactoryHelpers.rsa_key.public_key.to_pem
+    }.merge(attrs))
   end
 
   def create_coupon(event:, **attrs)

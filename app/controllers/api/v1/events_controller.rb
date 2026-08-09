@@ -22,9 +22,14 @@ class Api::V1::EventsController < Api::BaseController
     render_collection scope, blueprint: EventBlueprint, **personalization_options
   end
 
+  # GET /api/v1/events/:id
+  #
+  # `include_participants=false` omits the attendee array (see EventBlueprint);
+  # the viewer's own participant row is emitted either way, so the RSVP state
+  # doesn't depend on it.
   def show
     authorize @event
-    render json: EventBlueprint.render(@event, view: :extended, **personalization_options)
+    render json: EventBlueprint.render(@event, view: :extended, **show_options)
   end
 
   # Optionally accepts `event_roles: [...]` and `tickets: [...]` alongside the
@@ -179,6 +184,16 @@ class Api::V1::EventsController < Api::BaseController
 
   # With a token, the listing carries per-event viewer flags. Two plucks total —
   # the blueprint checks set membership per event (no N+1).
+  # Options for #show. `current_participant` is looked up rather than searched
+  # for in the (possibly absent) array, and uses `active` so a withdrawn RSVP
+  # reads as "not joined" — the same rule the array itself applies.
+  def show_options
+    options = personalization_options
+    options[:include_participants] = false if params[:include_participants].to_s == "false"
+    options[:current_participant] = @event.participants.active.find_by(user_id: current_user.id) if current_user
+    options
+  end
+
   def personalization_options
     return {} unless current_user
     {

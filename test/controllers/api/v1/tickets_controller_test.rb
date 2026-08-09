@@ -80,6 +80,26 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "pending", json_response["ticket_item"]["status"]
     assert_equal 1000, json_response["ticket_item"]["amount"]
+    # The order snapshots what it is priced in. Nothing downstream — refunds,
+    # the webhook's amount/currency check, the price the buyer is shown — may
+    # have to re-derive this from the rail's current default.
+    assert_equal "usd", json_response["ticket_item"]["currency"]
+    assert_equal "stripe", TicketItem.find(json_response["ticket_item"]["id"]).payment_provider
+  end
+
+  test "a crypto order carries no currency — its amount is denominated in the token" do
+    ticket = create_ticket(event: @event)
+    pm = create_payment_method(item: ticket, chain: "ethereum", kind: "crypto",
+      token_name: "USDT", price: 10_000, receiver_address: "0xabc")
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id, chain: "ethereum" }, headers: auth_headers(buyer)
+    assert_response :success
+
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_nil item.currency
+    assert_equal "evm", item.payment_provider
   end
 
   test "rsvp rejects a legacy sub-minimum stripe amount instead of waiving it to free" do
@@ -684,6 +704,28 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", ti.status
     assert_equal known_user.id, ti.user_id
     assert @group.memberships.exists?(user: known_user)
+    assert_equal %w[ticket_granted], ti.ticketing_activities.map(&:action)
+  end
+
+  # This path used to do `update(status: "succeeded")` directly — the only
+  # place in the codebase that bypassed transition!. It therefore skipped the
+  # allowed-transition table entirely, so re-granting to an email whose order
+  # had expired silently resurrected a closed order whose seat and coupon had
+  # already been handed back.
+  test "granting a group ticket cannot resurrect a closed order" do
+    @group.update!(group_ticket_event_id: @event.id)
+    ticket = create_ticket(event: @event, content: "Yearly Pass", group_id: @group.id, ticket_type: "group")
+    user = create_user(email: "expired@test.com")
+    closed = TicketItem.create!(ticket: ticket, event: @event, user: user, ticket_type: "group",
+      group_id: @group.id, status: "timeout", selector_type: "email", selector_address: "expired@test.com",
+      auth_type: "invite")
+
+    post "/api/v1/tickets/add_group_ticket_item",
+      params: { group_id: @group.nickname, email: "expired@test.com", title: "Yearly Pass" },
+      headers: auth_headers(@owner)
+
+    assert_response :unprocessable_entity
+    assert_equal "timeout", closed.reload.status, "a terminal order must stay terminal"
   end
 
   test "add_group_ticket_item creates a pending ticket-carrying GroupInvite for an unknown email" do

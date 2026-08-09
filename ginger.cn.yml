@@ -51,6 +51,15 @@ env:
   GOOD_JOB_MAX_THREADS: "1"
   THRUSTER_HTTP_PORT: "8080"
   THRUSTER_TARGET_PORT: "3000"
+  # WeChat Pay is the CN rail, the mirror image of STRIPE_ENABLED being set
+  # only on SG. The flag alone does nothing until `rails wechat_pay:install`
+  # has stored the merchant.
+  WECHAT_PAY_ENABLED: "true"
+  # The backend's OWN public origin, used to build notify_url. Unset it
+  # defaults to localhost, which WeChat cannot reach and never reports —
+  # payments would then only ever confirm through the 5-minute sweeper.
+  # WEB_URL (the frontend) is a different thing and would 404 the callback.
+  API_URL: "https://api.juluo.xyz"
 
 secrets:
   load: [.env.cn.production]
@@ -72,5 +81,15 @@ secrets:
     - WEB_URL
     - APP_HOST
     - ALLOWED_SIWE_DOMAINS
+    # Read by `rails wechat_pay:install`, which stores them on the merchant
+    # row. Nothing reads them at request time — see WechatPaySetting.
+    - WECHAT_PAY_MCHID
+    - WECHAT_PAY_APP_ID
+    - WECHAT_PAY_CERT_SERIAL
+    - WECHAT_PAY_PRIVATE_KEY
+    - WECHAT_PAY_APIV3_KEY
+    - WECHAT_PAY_PUBLIC_KEY_ID
+    - WECHAT_PAY_PUBLIC_KEY
+    - WECHAT_PAY_MERCHANT_NAME
 
 retain_containers: 5

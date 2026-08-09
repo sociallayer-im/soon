@@ -1,6 +1,7 @@
 class Api::V1::AuthController < Api::BaseController
-  # Everything here IS the login flow — only bind_email runs with a session.
-  skip_before_action :authenticate!, except: :bind_email
+  # Everything here IS the login flow — only the bind_* actions run with a
+  # session already in hand.
+  skip_before_action :authenticate!, except: %i[bind_email bind_wechat]
 
   LOGIN_CONTEXT = "login".freeze
   # Binding an email to a wallet-first account uses its own context so a bind
@@ -96,10 +97,7 @@ class Api::V1::AuthController < Api::BaseController
   # WeChat 网页授权), where the proof is verified by the frontend server itself.
   # Gated by the NEXT_TOKEN shared secret, which only that server knows.
   def trusted_signin
-    secret = ENV["NEXT_TOKEN"]
-    unless secret.present? && ActiveSupport::SecurityUtils.secure_compare(params[:next_token].to_s, secret)
-      return render json: { error: "Unauthorized" }, status: :unauthorized
-    end
+    return render json: { error: "Unauthorized" }, status: :unauthorized unless next_token_ok?
 
     if params[:email].present?
       user = User.find_or_create_by!(email: params[:email].to_s.strip.downcase)
@@ -139,7 +137,52 @@ class Api::V1::AuthController < Api::BaseController
     render json: UserBlueprint.render(current_user, view: :self)
   end
 
+  # POST /api/v1/auth/bind_wechat  {next_token, wechat_openid, wechat_unionid?}
+  #
+  # Attaches a WeChat identity to the account already signed in. WeChat Pay's
+  # JSAPI cannot place an order without the payer's openid, and a buyer who
+  # signed in by email has none — so the frontend runs a silent snsapi_base
+  # authorize and posts the result here.
+  #
+  # Double-gated deliberately. The JWT establishes WHICH account, but only the
+  # frontend server may assert WHAT the openid is, because it is the one that
+  # just redeemed the code with the app secret. Accepted on user auth alone,
+  # anyone could claim a stranger's openid and thereby receive their next
+  # WeChat sign-in.
+  def bind_wechat
+    return render json: { error: "Unauthorized" }, status: :unauthorized unless next_token_ok?
+
+    openid = params[:wechat_openid].presence&.to_s
+    unionid = params[:wechat_unionid].presence&.to_s
+    return render_error("wechat_openid is required") if openid.blank?
+
+    owner = User.find_by(wechat_openid: openid)
+    owner ||= User.find_by(wechat_unionid: unionid) if unionid
+    if owner && owner.id != current_user.id
+      # This identity already has an account. Merging in THIS direction would
+      # delete an account that may hold events, orders and memberships —
+      # unlike #bind_email's window, which only ever removes a WeChat account
+      # created moments ago with nothing on it. Refuse; signing in as that
+      # account is the way through.
+      return render_error("this WeChat account is already linked to another account")
+    end
+
+    updates = {}
+    updates[:wechat_openid] = openid if claimable?(:wechat_openid, openid, current_user)
+    updates[:wechat_unionid] = unionid if unionid.present? && claimable?(:wechat_unionid, unionid, current_user)
+    current_user.update!(updates) if updates.any?
+
+    render json: UserBlueprint.render(current_user, view: :self)
+  end
+
   private
+
+  def next_token_ok?
+    secret = ENV["NEXT_TOKEN"]
+    # An unset NEXT_TOKEN must not authorize anyone — secure_compare("", "") is
+    # true, so the blank case is guarded explicitly.
+    secret.present? && ActiveSupport::SecurityUtils.secure_compare(params[:next_token].to_s, secret)
+  end
 
   # Resolves the WeChat identity the frontend just verified to an account.
   #

@@ -2,6 +2,97 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-08 (later) — orders remember what happened to them
+
+`ticketing_activities` / `Ticketing::Activity`: an append-only record of the
+ticketing domain, written from `TicketItem#transition!` — the one place a
+status change is guaranteed to pass through, so recording cannot be forgotten
+at a call site. Design and rationale in `design/PAYMENTS_PLAN.md` §8.
+
+The short version of why: an order kept only a current status, so its past was
+being derived from timestamps, and the derivation was wrong in ways nobody
+would notice. `updated_at` is the last write of any kind rather than the moment
+of a transition. A dispute lost at the provider runs `transition!(:refunded)`
+with no Refund row, making it identical to a voluntary refund afterwards —
+opposite facts, same evidence. Retries changed no status and so left nothing.
+
+The action vocabulary is deliberately wider than the status machine, because
+the events most needing explanation later are not transitions at all
+(`payment_retried`, `callback_rejected`, `prepay_created`).
+
+**Fixed while designing it**: `add_group_ticket_item` wrote
+`update(status: "succeeded")` directly — the only bypass of `transition!` in
+the codebase. Re-granting to an email whose order had expired silently
+reopened a closed order whose seat and coupon were already handed back.
+
+**Also fixed, found by a real refund**: `WechatPayGateway` asked for gzip
+(Net::HTTP's default) and the refund endpoint answered with something it could
+not inflate, raising `Zlib::DataError` *after* WeChat had accepted the refund —
+a 500 for an operation that succeeded.
+
+The dangerous part was the near-miss in the fix: catching it as a plain
+`Error` would have recorded a successful refund as `failed`, and the organizer
+retrying would refund a partial amount twice (only a duplicate *full* refund is
+caught by the unique index). So an unreadable answer is now
+`WechatPayGateway::Unreachable`, distinct from a refusal: it leaves the refund
+pending and waits for the callback. Same principle `query_order` already used
+for "could not ask" vs "not paid".
+
+The gateway moved to `httpx`, which was already a dependency and unused. Two
+Net::HTTP defaults had cost something here: the gzip one above, and
+`Net::HTTP.start` defaulting its proxy argument to `:ENV`, which silently
+routes payment traffic through `http_proxy` — set on the dev machine.
+
+**Organizer-facing**: `GET /tickets/list` gains an `:order_detail` view for
+managers (refunds, timestamps, ticket title, activities), and refunds accept an
+`amount` so a partial refund no longer needs curl. The manager who ordered a
+refund is named in the payload, not left as an id.
+
+## 2026-08-08 — WeChat Pay, and the currency that should always have been there
+
+CN's second payment rail, built on branch `wechat-pay` and not yet deployed.
+Full write-up in `design/WECHAT_INTEGRATION.md` §5; what follows is what
+changed for everything that is *not* WeChat.
+
+**Payment methods now carry a currency.** `payment_methods.currency` had been a
+column nobody wrote or read: orders were stamped `currency: "usd"` from a
+literal. It is now assigned from the rail, validated against it, and
+**snapshotted onto the order as charged** — a refund has to go out in the
+currency that came in, and an order taken before a rail's default moved must
+keep its own.
+
+**Three places stopped asking `chain == "stripe"`.** Each was correct with one
+fiat rail and wrong with two:
+
+- `Coupon#get_discounted_price` multiplied a fixed-amount discount by 10000
+  for anything that was not literally `"stripe"`. A ¥1 coupon on a WeChat order
+  would have become ¥10,000, clamped to the price — **the order goes free**.
+  Now keyed off `PaymentMethod::FIAT_CHAINS`, and the test asserts the property
+  over the whole set so the next rail is covered without anyone remembering.
+- `set_payment_status` refused to confirm stripe orders by name. It is
+  authenticated by a shared secret and verifies no payment, so any rail left
+  open there mints paid tickets for whoever holds `NEXT_TOKEN`. It now refuses
+  every fiat rail.
+- `payment_proof_ok?` split stripe from crypto, so a third rail fell through to
+  the crypto branch and was asked for a txhash it can never have.
+
+**The $4 card floor became `MIN_PRICE`, a per-rail map.** It exists to cover
+Stripe's fixed $0.30 per charge; a rail without a fixed fee has no reason for
+it, and one global constant imposes it anyway.
+
+**`AuthController#bind_wechat`** attaches a WeChat identity to an existing
+account — JSAPI cannot place an order without the payer's openid and
+email-registered buyers have none. It requires *both* a session and
+`NEXT_TOKEN`: the JWT says which account, the shared secret says the openid
+came from the server that just redeemed the code. On user auth alone anyone
+could claim a stranger's openid and receive their next WeChat sign-in. Unlike
+`bind_email` it refuses rather than merges when the identity already has an
+account — that direction would delete an account with real data on it.
+
+`ginger.cn.yml` gains `API_URL`. `WechatPayGateway.notify_url` is one default
+away from `localhost`, and a localhost notify_url is invisible: WeChat reports
+nothing, and payments would confirm solely through the 5-minute sweeper.
+
 ## 2026-08-08 — a second sign-in channel no longer means a second account
 
 WeChat sign-in creates an account with no email. Binding one that already

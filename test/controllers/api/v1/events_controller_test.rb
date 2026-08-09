@@ -123,6 +123,68 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_not json_response["is_owner"]
   end
 
+  test "show embeds participants by default — deployed clients index into that array" do
+    owner = create_user
+    viewer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_participant(event: event, user: viewer)
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(viewer)
+    assert_response :success
+    assert_equal 1, json_response["participants"].size
+  end
+
+  test "show omits participants with include_participants=false but still names the viewer's own" do
+    owner = create_user
+    viewer = create_user
+    other = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_participant(event: event, user: viewer)
+    create_participant(event: event, user: other)
+
+    get "/api/v1/events/#{event.id}?include_participants=false", headers: auth_headers(viewer)
+    assert_response :success
+    assert_not json_response.key?("participants"), "the attendee array should be left out entirely"
+    # The point of the flag: the page can still tell whether THIS viewer joined.
+    assert_equal viewer.id, json_response.dig("current_participant", "user", "id")
+  end
+
+  test "show reports current_participant as null for a viewer who hasn't joined" do
+    owner = create_user
+    viewer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+
+    get "/api/v1/events/#{event.id}?include_participants=false", headers: auth_headers(viewer)
+    assert_response :success
+    assert_nil json_response["current_participant"]
+  end
+
+  test "show treats a withdrawn RSVP as no RSVP" do
+    owner = create_user
+    viewer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    create_participant(event: event, user: viewer, status: "cancelled")
+
+    get "/api/v1/events/#{event.id}?include_participants=false", headers: auth_headers(viewer)
+    assert_response :success
+    assert_nil json_response["current_participant"],
+      "a cancelled participant must read as not joined — the embedded array rejects them too"
+  end
+
+  test "show omits current_participant entirely for an anonymous viewer" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+
+    get "/api/v1/events/#{event.id}?include_participants=false"
+    assert_response :success
+    assert_not json_response.key?("current_participant")
+  end
+
   test "show omits is_starred/is_attending/is_owner for an anonymous viewer" do
     owner = create_user
     group = create_group(owner: owner)

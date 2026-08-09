@@ -8,6 +8,9 @@ class TicketItem < ApplicationRecord
   belongs_to :coupon, optional: true
 
   has_many :refunds, dependent: :destroy
+  # dependent: nil — an order's history outlives the order. Cascading the
+  # delete would erase exactly the record a chargeback needs.
+  has_many :ticketing_activities, as: :subject, class_name: "Ticketing::Activity", dependent: nil
 
   class InvalidTransition < StandardError; end
 
@@ -35,11 +38,22 @@ class TicketItem < ApplicationRecord
   }.freeze
 
   validates :status, inclusion: { in: TRANSITIONS.keys }
+  validates :ticket_type, inclusion: { in: %w(event group) }
+
+  enum :auth_type, { free: "free", payment: "payment", badge: "badge", invite: "invite" }
 
   # Every status change funnels through here so the allowed-transition table
   # is actually enforced — nothing else may write `status`.
-  def transition!(to, **attrs)
+  #
+  # It is also where the audit row is written, for the same reason: this is
+  # the one place a status change is guaranteed to pass through, so recording
+  # here cannot be forgotten at a call site.
+  # `metadata:` is a separate kwarg rather than part of **attrs on purpose:
+  # everything in attrs is written as a column, so a stray audit field there
+  # raises UnknownAttributeError from inside a payment.
+  def transition!(to, source: "system", actor: nil, reason: nil, action: nil, metadata: {}, **attrs)
     to = to.to_s
+    from = status
     unless TRANSITIONS.fetch(status, []).include?(to)
       raise InvalidTransition, "ticket_item #{id}: #{status} → #{to}"
     end
@@ -47,10 +61,20 @@ class TicketItem < ApplicationRecord
       raise InvalidTransition, "ticket_item #{id} was paid — refund it instead of cancelling"
     end
     update!(attrs.merge(status: to))
-  end
-  validates :ticket_type, inclusion: { in: %w(event group) }
 
-  enum :auth_type, { free: "free", payment: "payment", badge: "badge", invite: "invite" }
+    Ticketing::Activity.record!(
+      self, action || Ticketing::Activity.action_for_transition(from, to),
+      source: source, from: from, to: to, actor: actor, reason: reason,
+      **{ provider: payment_provider, amount: amount, currency: currency }.merge(metadata)
+    )
+  end
+
+  # Non-transition events worth remembering: a retry, a rejected callback, a
+  # prepay re-issued. None of them change status, which is exactly why the
+  # status column can never explain them.
+  def record_activity!(action, source:, actor: nil, reason: nil, **metadata)
+    Ticketing::Activity.record!(self, action, source: source, actor: actor, reason: reason, **metadata)
+  end
 
   # Only meaningful for group tickets: checks whether this ticket's date/track
   # restrictions grant access to a specific event within the group.
@@ -74,19 +98,19 @@ class TicketItem < ApplicationRecord
     true
   end
 
-  def cancel
-    close!("cancelled")
+  def cancel(source: "api", actor: nil)
+    close!("cancelled", source: source, actor: actor)
   end
 
-  def timeout
-    close!("timeout")
+  def timeout(source: "sweeper")
+    close!("timeout", source: source)
   end
 
   # Confirms payment on every rail (crypto verify_payment, webhook
   # set_payment_status, and stripe_callback all funnel through here) so the
   # succeed-side effects can't drift between paths. Verification of the payment
   # itself happens in the controller before this is called.
-  def confirm_payment!(txhash: nil, sender_address: nil)
+  def confirm_payment!(txhash: nil, sender_address: nil, source: "system", actor: nil)
     attrs = { paid_at: Time.current }
     attrs[:txhash] = txhash if txhash.present?
     attrs[:sender_address] = sender_address if sender_address.present?
@@ -98,7 +122,7 @@ class TicketItem < ApplicationRecord
         # this also runs for the confirm side effects) just take the attrs.
         update!(attrs)
       else
-        transition!(:succeeded, **attrs)
+        transition!(:succeeded, source: source, actor: actor, **attrs)
       end
       if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
         group.add_member(user_id, "member")
@@ -126,10 +150,10 @@ class TicketItem < ApplicationRecord
   # refunds the coupon usage consumed at RSVP, and undoes the participant_count
   # bump so a capacity-limited event doesn't drift toward "full" on abandoned
   # checkouts.
-  def close!(new_status)
+  def close!(new_status, source: "system", actor: nil)
     transaction do
       closing_participant = participant
-      transition!(new_status, participant_id: nil)
+      transition!(new_status, source: source, actor: actor, participant_id: nil)
       release_resources!
       # Withdraw the person only when this was their LAST live order. They may
       # hold several for one event (a second ticket type, a re-purchase after
@@ -157,17 +181,17 @@ class TicketItem < ApplicationRecord
   # reconciliation) and applies the decision-#10 side effects: a full refund
   # releases the seat/coupon/count, cancels the participant, and revokes a
   # group-ticket auto-join membership; a partial refund moves money only.
-  public def apply_refund_success!(refund)
+  public def apply_refund_success!(refund, source: "webhook")
     transaction do
       refund.update!(status: "succeeded")
       if refund.full_refund
         holder = participant
-        transition!(:refunded)
+        transition!(:refunded, source: source, reason: refund.reason, metadata: { refund_id: refund.id })
         release_resources!
         settle_participant!(holder)
         revoke_purchase_membership!
       else
-        transition!(:partially_refunded)
+        transition!(:partially_refunded, source: source, reason: refund.reason, metadata: { refund_id: refund.id })
       end
     end
   end
@@ -193,5 +217,7 @@ class TicketItem < ApplicationRecord
       coupon&.decrement!(:order_usage_count) if coupon && coupon.order_usage_count.to_i > 0
     end
     ticket.release!
+    Ticketing::Activity.record!(self, "inventory_released", source: "system",
+      coupon_id: coupon_id, ticket_id: ticket_id)
   end
 end

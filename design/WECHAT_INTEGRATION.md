@@ -1,8 +1,10 @@
 # 微信集成调研报告 — 服务号网页登录 + 微信支付
 
 调研日期：2026-07-31
-状态：**§1 微信登录已实现（2026-07-31，未部署）**，方案 A；**§2 微信支付仍是方案**，
-被 §2.2 的商户模式决策阻塞。
+状态：**§1 微信登录已实现并已上线**（2026-07-31，方案 A）；
+**§2 微信支付已上线 CN 并完成真机验证**（2026-08-08，分支 `wechat-pay`，见 §5）。
+§2.2 的商户模式按 **(a) 平台单一商户号** 落地，但代码形状按 (b) 服务商模式预留。
+**分支未合入 main** —— 功能成熟前刻意保持分离，生产跑的就是分支镜像。
 
 已实现部分与本文的差异：仅一处——用户信息不再单独调 `/sns/userinfo`，因为
 `unionid` 已经在 code 换 token 的响应里返回，省掉一次请求。落地文件：
@@ -494,3 +496,326 @@ the sweeper is what's trusted"）。已有的 `StripeReconciliationJob` /
    pay.weixin.qq.com 与 developers.weixin.qq.com 当期文档**。
 7. **Ruby 侧 SDK 未评估** —— 建议自建 gateway（§2.3），但若决定用现成 gem，
    需先验证其对 APIv3 平台公钥模式的支持。
+
+---
+
+## 5. 实现记录（2026-08-08，分支 `wechat-pay`）
+
+商户模式选 **(a) 平台单一商户号**：票款进平台商户号，再与组织者线下结算。
+组织者侧无需任何配置，加一个「微信支付」收款方式即可。
+**二清合规仍未由法务确认**（§4.2），这是上线前唯一的非技术阻塞项。
+
+代码按 (b) 服务商模式的形状写：`wechat_pay_settings` 是一张表而不是几个 env
+变量，订单快照 `wechat_pay_setting_id`，`sub_mchid` 列预留。将来要迁到服务商
+模式是插入数据行 + 下单多传 `sub_mchid`，不是对着线上订单做迁移。
+`WechatPayGateway` 对 `sub_mchid` 存在时**直接抛异常**，不猜 partner 端点的字段名。
+
+### 5.1 与本文原方案的差异
+
+- **`payment_methods.currency` 变成真字段**。原先这一列存在但没人读写，订单的
+  `currency` 是硬编码的 `"usd"`。现在由 `PaymentMethod::RAIL_CURRENCY` 按渠道
+  填充（stripe→usd、wechat→cny），下单时**快照**到订单上——退款必须按收款时
+  的币种发起，重新推导会改写历史订单。
+- **`STRIPE_MIN_CENTS` 变成 `MIN_PRICE` 按渠道的 map**（stripe 400、wechat 1）。
+  $4 门槛的理由是 Stripe 每笔 $0.30 固定费，微信没有固定费，照搬会把每一张
+  ¥4 以下的票都禁掉。
+- **`Coupon#get_discounted_price` 的 ×10000 缩放改按 `FIAT_CHAINS` 集合判断**。
+  原先写的是 `chain == "stripe"`，微信订单会落进 crypto 分支，固定额优惠券被
+  放大 10000 倍、再被 clamp 到订单金额——**结果是订单归零**。这是本次发现的
+  真实隐患，与微信是否上线无关，已单独提交。
+- **`set_payment_status` 改为拒绝整个 `FIAT_CHAINS`**，不再只挡 `"stripe"`。
+  该端点只有 NEXT_TOKEN 认证、不做任何支付校验，漏一个渠道就等于把「凭空造
+  已付订单」的能力交给持有该 token 的人。
+- **前端 `PAYMENTS_ENABLED` 必须或上 `WECHAT_PAY_ENABLED`**。CN 的 crypto 与
+  stripe 都是 false，漏掉这一行的话票价 UI 在唯一需要它的部署上整体消失，而
+  症状会表现为「微信支付没反应」。
+- **新增 openid 补全流程**（本文原方案没有）。JSAPI 下单必传 `payer.openid`，
+  而邮箱注册的 CN 用户没有。`wechat_prepay` 返回 `code: "OPENID_REQUIRED"`，
+  前端据此走 `/api/wechat/bind-openid` 的 `snsapi_base` 静默授权再回到结账页。
+  绑定由 `POST /api/v1/auth/bind_wechat` 完成，**同时要求 JWT 与 NEXT_TOKEN**：
+  JWT 说明是哪个账号，NEXT_TOKEN 说明 openid 来自刚用 AppSecret 换过码的服务端。
+  只凭用户认证的话，任何人都能声称一个陌生人的 openid，从而接管其下次微信登录。
+- **不实现「复用未过期的下单」**。Stripe 那边要复用 Checkout Session 是因为两个
+  session 都能被支付；微信按 `out_trade_no`（即订单 id）唯一，同一订单只可能有
+  一笔成功支付，重新下单是覆盖而不是并存。
+- **sweeper 必须先关单再过期**。Stripe 的 session 会自己过期，微信订单不会——
+  先释放库存再关单会留出一个「票已释放但仍可支付」的窗口。
+
+### 5.2 落地文件
+
+后端 `soon`：
+`db/migrate/20260808120000_create_wechat_pay_settings.rb`、
+`20260808120001_create_wechat_pay_events.rb`、
+`app/models/{wechat_pay_setting,wechat_pay_event,payment_method,coupon}.rb`、
+`app/services/wechat_pay_gateway.rb`、
+`app/services/ticketing/quote.rb`、
+`app/controllers/api/v1/{tickets,wechat_pay_webhooks,auth}_controller.rb`、
+`app/jobs/{wechat_pay_webhook,ticketing_sweeper}_job.rb`、
+`lib/tasks/wechat_pay.rake`、`ginger.cn.yml`。
+
+前端 `seastar-app`：
+`src/app/config.ts`、`src/utils/{payment_setting,wechat_pay}.ts`、
+`src/app/api/wechat/{wechat.ts,bind-openid/route.ts,bind-openid/callback/route.ts}`、
+`src/components/client/DialogTicket.tsx`、
+`src/app/(normal)/event/[grouphandle]/create/TicketForm.tsx`、
+`src/app/(normal)/event/detail/[eventid]/PaymentReturn.tsx`（原 `StripePaymentReturn`，
+现在两条渠道共用）、`packages/sola-sdk/src/wechat/`、`src/lang/{en,zh}.ts`。
+
+### 5.3 已验证 / 未验证
+
+已验证（`bin/rails test` 849 runs 全绿，另有对真实运行中的服务器的探测）：
+
+- 签名 / 验签 / AES-256-GCM 解密全部用真实密钥对与真实 APIv3 密钥往返，不是 stub。
+- 完整链路测试 `wechat_purchase_journey_test.rb`：建票 → 下单 → 预支付 →
+  签名回调确认 → 退款 → 退款回调结算，库存恰好回收一次。
+  **这个测试抓到了一个真 bug**：`build_paid_ticket_item` 漏写
+  `wechat_pay_setting_id`，导致每一笔真实订单在预支付时都会因商户为空而失败。
+  各单元测试都通过，因为它们各自直接构造了带商户的订单。
+- 对真实 HTTP 服务器：签名回调 → 204 且资源解密正确（验证了 header 大小写在
+  Rack 下的映射）、重复投递 → 204 且只入库一次、篡改报文 → 401、
+  15 分钟前的有效签名（重放）→ 401。
+- `wechat_pay:install` 首次创建、二次更新不重复建行、单行 PEM 的 `\n` 转义能
+  还原并真正签名成功；把**证书**误填成私钥会被拒绝并给出改法。
+
+**对真实商户 API 的只读探测**（2026-08-08，凭据齐备后补做，未产生任何订单）：
+
+- `GET /v3/pay/transactions/out-trade-no/<不存在的订单号>` →
+  `404 {"code":"ORDER_NOT_EXIST","message":"订单不存在"}`。
+  **签名被接受**——这是本地测试永远证明不了的一件事：本地签名与验签用的是同一
+  套代码，规范化串（canonical string）的布局写错了也会自洽通过。
+- **这次探测抓到一个真 bug**：`query_order` 里判断的是 `ORDERNOTEXIST`（v2 时代
+  文档里的拼写），真实接口返回的是 **`ORDER_NOT_EXIST`**。不匹配的话，未支付
+  订单会被当成「问不到」而不是「没付」，sweeper 于是**永远跳过它、库存永不释放**，
+  并且每 5 分钟打一条警告。已改为同时接受两种拼写，并补了 sweeper 层的断言。
+- `POST /v3/pay/transactions/jsapi` 用一个伪造 openid（真实与畸形两种都试过）→
+  `400 {"code":"PARAM_ERROR","message":"无效的openid"}`，**没有**
+  `APPID_MCHID_NOT_MATCH`、**没有** `NOAUTH`。
+  可以确定的是：签名通过、商户号被识别。至于 appid 关联与 JSAPI 权限，
+  微信的参数校验顺序没有文档，所以这只是**强证据而非证明**——唯一的结论性验证
+  是拿一个真实 openid 下一次单。
+
+**真机验证：核心链路已全部跑通**（2026-08-08，微信内置浏览器，真实收款与退款）：
+
+| 环节 | 状态 |
+|---|---|
+| JSAPI 下单 → 调起支付 → 真实付款 | ✅ |
+| 支付回调确认，订单转 succeeded | ✅ |
+| sweeper 超时**关单**并释放库存 | ✅（那笔 timeout 订单） |
+| 退款 → 退款回调 → 释放座位、取消参与者 | ✅ |
+| 与微信侧对账（`query_order` 返回 `REFUND`） | ✅ |
+
+仍未真机验证的一条：**`snsapi_base` 静默授权补 openid**。几次付款都是用已有
+openid 的账号做的，邮箱注册账号那条路还没跑过——它也是这次唯一全新写、且完全
+没被真实流量走过的链路。
+
+> 参照 Stripe 那次的经验（PAYMENTS_PLAN §7.4），真实接口总会有字段级出入。这次
+> 一共撞到两处，都不是靠读文档能预见的：`ORDER_NOT_EXIST` 的拼写（§5.3 上文），
+> 和退款接口的响应压缩（§5.7）。前者一次只读查询就暴露了，后者要等到真的退一笔钱。
+
+### 5.4 部署前必须完成
+
+1. **凭据补齐** —— 状态（2026-08-08 复核）：
+
+   | 凭据 | 状态 |
+   |---|---|
+   | 商户号 `1115981704` | ✅ |
+   | appid `wxdf1ef2c65db36224` | ✅ |
+   | 证书序列号 | ✅ 与证书内 serial 实测一致 |
+   | APIv3 密钥 | ✅ 32 字节 |
+   | 微信支付公钥 `wxpay_pub_key.pem` + `PUB_KEY_ID_…` | ✅ 2048-bit RSA，已实测能经转义 env 往返并被 `notify_public_key` 加载 |
+   | 商户 API 证书私钥 `apiclient_key.pem` | ✅ 位于 `cert/1115981704_20260808_cert/`，已实测 |
+
+   私钥核对结果（`openssl`，2026-08-08）：未加密的 PKCS#8、2048-bit、modulus 与
+   `apiclient_cert.pem` **及**文档里那张证书三者完全一致，签名能被证书公钥验证
+   通过（`Verified OK`），证书 serial 与 `WECHAT_PAY_CERT_SERIAL` 一致。
+   随后用它对真实商户 API 发起的只读查询被微信接受（见 §5.3）。
+
+   > 留档，因为这个坑很容易再踩一次：同一个目录里的三个文件只有一个能签名，
+   > `wechat_credentials.md` 先后贴过的两种都不行。
+   >
+   > - `-----BEGIN CERTIFICATE-----` 是 **`apiclient_cert.pem`**（证书），装的是
+   >   **公钥**那一半——`openssl rsa -check` 对它的回答就是 "Could not find
+   >   private key"。证书是给对方验签用的，签不了任何东西。
+   > - `-----BEGIN CERTIFICATE REQUEST-----` 是 **CSR**（证书请求），是「公钥 +
+   >   主体信息，再用私钥签个名」，交给 CA 换证书用的。**同样不是私钥。**
+   >   CSR 的存在只说明私钥当时确实生成过。
+   >
+   > 能签名的是 `-----BEGIN PRIVATE KEY-----` 开头的 `apiclient_key.pem`。三个
+   > 文件都由商户平台的证书工具**一次性在本地生成**，所以手上有 CSR 或证书，
+   > 私钥基本就在同一个目录里——先去那里找，不要急着重新申请（重新申请会让旧
+   > 证书失效，`WECHAT_PAY_CERT_SERIAL` 得跟着换）。核对是否配套：
+   >
+   > ```bash
+   > openssl rsa  -in apiclient_key.pem  -noout -modulus
+   > openssl x509 -in apiclient_cert.pem -noout -modulus   # 两条必须完全相同
+   > ```
+
+   写入 `.env.cn.production` 时 PEM 要压成单行（`\n` 转义），已实测可还原：
+
+   ```bash
+   echo "WECHAT_PAY_PRIVATE_KEY=$(awk '{printf "%s\\n", $0}' apiclient_key.pem)"
+   echo "WECHAT_PAY_PUBLIC_KEY=$(awk '{printf "%s\\n", $0}' wxpay_pub_key.pem)"
+   ```
+2. **商户平台配置** —— APPID 关联服务号 `wxdf1ef2c65db36224`（支付 appid 必须
+   与签发 openid 的 appid 一致）、开通 JSAPI 支付、支付授权目录填
+   `https://www.juluo.xyz/`。
+   §5.3 的下单探测**没有**报 `APPID_MCHID_NOT_MATCH` 或 `NOAUTH`，说明前两项
+   很可能已经配好了；但微信的参数校验顺序无文档，所以**仍需在商户平台上目视
+   确认一遍**，尤其是支付授权目录——那一项在下单阶段根本不会被校验，只在浏览器
+   调起支付时才生效，探测不到。
+3. **`api.juluo.xyz` 的 ICP 备案确认** —— notify_url 域名要求备案（§4.3 至今未核实）。
+4. **`rails wechat_pay:install`** —— 部署后手动执行一次；`ginger.cn.yml` 已注入
+   所需的 `WECHAT_PAY_*`。凭据轮换时重跑同一条命令。
+5. **`NEXT_PUBLIC_WECHAT_PAY_ENABLED="true"` 写入 `seastar-app/.env.cn.production`**
+   （gitignored，不在本仓库里）。SG 的 `.env.production` **不加**。
+6. **二清合规确认**（§4.2）。
+
+> `wechat_credentials.md` / `wxpay_pub_key.pem` 都在工作区根目录下。根目录本身
+> 是个 git 仓库，此前**没有 .gitignore**，`git add .` 会把 APIv3 密钥直接提交
+> 进去。已补上（`soma/.gitignore`：凭据、`*.pem`、`.env*`、数据库 dump）。
+> 长期正确的位置仍是 `.env.cn.production`。
+
+### 5.5 CN 上线记录（2026-08-08）
+
+**分支未合并。** 生产跑的是 `wechat-pay` 分支的镜像，`main` 保持在
+`soon 9aeb803` / `seastar-app 38b31d5`。功能成熟前不并入 main，是刻意的。
+
+```
+soon         09e178d → registry.juluo.xyz/soon:09e178d          Nomad healthy
+seastar-app  c528229 → registry.juluo.xyz/seastar-app:c528229   Nomad healthy
+商户          1115981704 → wechat_pay_settings 3mskt7jn6gi63
+```
+
+部署命令（两个仓库各自根目录，**必须带 `-c ginger.cn.yml`**，不带就部到 SG 了）：
+
+```bash
+cd soon        && ginger deploy -c ginger.cn.yml
+ssh root@juluo.xyz 'docker exec <soon 容器> bin/rails wechat_pay:install'
+cd seastar-app && ginger deploy -c ginger.cn.yml
+```
+
+顺序有意义：先后端、装商户、再前端。反过来的话组织者能看到「添加微信支付」
+按钮但保存会失败（没有商户可挂）。
+
+上线后的生产实测：
+
+- 容器内 `query_order` → `{"trade_state"=>"NOTPAY"}`，即生产环境的签名被微信接受。
+- `notify_url` = `https://api.juluo.xyz/api/v1/webhooks/wechat/3mskt7jn6gi63`，
+  公网 POST 无签名报文 → `401 {"code":"FAIL",...}`，未知商户 id → `unknown merchant`。
+- 前端镜像内 `.env.production` 含 `NEXT_PUBLIC_WECHAT_PAY_ENABLED="true"`；
+  客户端 bundle 里 inline 了 `api.juluo.xyz`，证明构建确实读的是 CN 那份 env
+  （即微信渠道没有被开关过滤掉——编译产物里是 `"wechat"===a&&!z.UQ`）。
+
+#### 一个会静默毁掉私钥的坑：.env 里的 PEM 必须**单引号**
+
+写成不带引号的 `WECHAT_PAY_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIE…`，
+dotenv 会把 `\n` 的**反斜杠当转义符吃掉、又不插入换行**：
+
+```
+写进去:  -----BEGIN PRIVATE KEY-----\nMIIEvQIBADA…
+读出来:  -----BEGIN PRIVATE KEY-----nMIIEvQIBADA…      ← 每个换行变成字母 n
+```
+
+私钥直接报废。单引号的值 dotenv 不做任何转义处理，字面 `\n` 原样送到
+install 任务再还原。`wechat_pay.rake` 里的 `pem()` 会专门认出这种「换行变成
+字母 n」的形态并指名道姓地报错——否则模型层给出的是「请用 apiclient_key.pem
+而不是证书」，会把人引到完全错误的方向。
+
+### 5.6 上线后立刻暴露的两个老问题
+
+CN 在微信支付之前**从来没有过可购买的票**（crypto 与 Stripe 都关着），所以这
+两个 main 上早就存在的问题今天才第一次被撞到。都已修复并部署
+（`seastar-app c528229`）。
+
+1. **票价单位写死成 USD** —— `displayTicketPrice`（`utils/index.ts`）直接在返回
+   字符串里拼 `USD`。¥1 的票渲染成 `1 USD`，在买家做决定的那块屏幕上把价格说
+   错了近 7 倍。现在单位取自 `payment_method.currency`，加密货币回落到 token
+   名；**不同币种不合并成区间**（可用 ¥1 或 5 USDT 支付是两个报价，合并等于
+   凭空发明汇率）。单位读 `currency` 而非 token 表，是因为那才是实际扣款/退款
+   的币种，而且后端从不强制 `token_name`。
+
+2. **「加入活动(RSVP)」按钮根本没连到支付** —— 它是个
+   `<a href="?tab=tickets">`，同一个页面加个查询参数，按下去看着就是刷新，而
+   它展开的票列表在首屏之下。买家读到的信息是「按钮坏了」。
+   现在是客户端按钮：只有一种票时直接打开购票弹窗，多种票才跳 tab。未登录也
+   放行——弹窗里有登录按钮，比一个点了没反应的按钮更能说明下一步。
+
+   > 教训留档：**微信 JSAPI 只在弹窗的「支付」按钮之后调用**
+   > （`invokeWechatPay` → `WeixinJSBridge.invoke('getBrandWCPayRequest')`，
+   > 全前端仅此一处）。排查「没有调起微信支付」时，先确认流程是否真的走到了
+   > 那一步，而不是先怀疑签名或配置。
+
+### 5.7 退款 500：一个只有真实退款才会暴露的坑
+
+第一次真实退款返回了 **500**,但**钱退成功了**——回调把订单、座位、参与者全部
+正确收尾了。异常发生在**读响应**这一步,发生在微信已经受理退款之后。
+
+```
+Zlib::DataError (incorrect header check)
+  app/services/wechat_pay_gateway.rb:in 'request'
+```
+
+`Net::HTTP` 默认发 `Accept-Encoding: gzip…` 并自动解压回包。查单和下单的响应
+没有被压缩,所以一路正常;退款接口回的东西它解不开,于是抛异常。
+
+关键在于**这个默认值关不掉**——除非在**构造函数的 initheader 里**传
+accept-encoding:
+
+```ruby
+Net::HTTP::Post.new(uri)                      # 之后再 req["Accept-Encoding"]= 无效
+Net::HTTP::Post.new(uri, {"Accept-Encoding" => "identity"})   # 只有这样才行
+```
+
+`@decode_content` 在构造时就定死了。「事后赋值来不及」这件事不可发现,也正是它
+躲过 review 的原因。
+
+#### 比 500 更危险的那一半
+
+修的时候差点犯一个更严重的错误:把 `Zlib::DataError` 直接归进
+`WechatPayGateway::Error`。那样控制器会走这条分支——
+
+```ruby
+rescue Stripe::StripeError, WechatPayGateway::Error => e
+  refund.update!(status: "failed", ...)
+```
+
+——把一笔**已经成功**的退款记成 `failed`。组织者看到失败会再点一次,**部分退款
+就会退两次**(全额退有 `index_refunds_one_live_full_refund_per_item` 唯一索引挡
+着,部分退没有)。
+
+所以现在分成两个类:
+
+| 类 | 含义 | 处理 |
+|---|---|---|
+| `WechatPayGateway::Error` | 微信答复了,并且拒绝 | 记 `failed`,释放索引,可重试 |
+| `WechatPayGateway::Unreachable` | 请求发出去了,**读不到答复** | 保持 `pending`,返回 `awaiting_confirmation`,交给回调/对账,**绝不暗示重试** |
+
+`Unreachable < Error`,所以 `query_order` / `close_order` 里既有的 `rescue Error`
+仍然把它读成「问不到」,行为不变。这和文档里早就在用的
+**「问不到 ≠ 没付」**是同一条原则,只是这次施加到了退款上。
+
+#### 换成 httpx
+
+`Net::HTTP` 还有第二个静默默认值:
+
+```ruby
+Net::HTTP.start(host, port, use_ssl: true)   # p_addr 默认 :ENV
+```
+
+它**读 `http_proxy`**。开发机上三个代理变量都设着(见根 CLAUDE.md 的「本地环境
+陷阱」),也就是说本地每一次调微信的请求都在走 SOCKS 代理。生产没设所以没出事,
+但这是随时会咬人的。
+
+`httpx` 本来就在 `Gemfile` 里且**无人使用**,而这个文件是全项目最后一个
+`Net::HTTP` 调用者,所以换掉的成本是零。它:
+
+- 不读代理环境变量,除非显式要;
+- 把传输故障作为 `HTTPX::ErrorResponse` **返回**而不是抛异常——正好对上上面
+  那个 `Unreachable` 划分,它覆盖的一切(连接失败、超时、TLS、body 截断)含义
+  都是「说不准」;
+- `Accept-Encoding: identity` 仍然显式发送。不要钱,而且写出意图比赌某个库的
+  默认值不变要好。
+
+上线后对真实接口复验:空 body(不存在的订单号)和有内容的 body(真实已付订单)
+都读得回来——退款那个 500 是读**非空**响应时炸的,只测空响应证明不了什么。
+随后的真实退款返回 200,微信侧 `query_order` 返回 `REFUND`,两边对上。

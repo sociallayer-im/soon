@@ -175,6 +175,99 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil user.reload.last_signin_at
   end
 
+  # ---------------------------------------------------------------- bind_wechat
+
+  # JSAPI needs the payer's openid; a buyer who signed in by email has none.
+  test "bind_wechat attaches an openid to the signed-in account" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_new", wechat_unionid: "u_new" },
+      headers: auth_headers(user)
+
+    assert_response :success
+    assert_equal "o_new", user.reload.wechat_openid
+    assert_equal "u_new", user.wechat_unionid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  # The JWT says which account; only the frontend server may say what the
+  # openid is, because it is the one that redeemed the code. Without this,
+  # anyone could claim a stranger's openid and receive their next sign-in.
+  test "bind_wechat refuses a caller without NEXT_TOKEN even with a valid session" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user
+
+    post "/api/v1/auth/bind_wechat",
+      params: { wechat_openid: "o_new" }, headers: auth_headers(user)
+
+    assert_response :unauthorized
+    assert_nil user.reload.wechat_openid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "bind_wechat requires a session, not just the shared secret" do
+    ENV["NEXT_TOKEN"] = "tok"
+
+    post "/api/v1/auth/bind_wechat", params: { next_token: "tok", wechat_openid: "o_new" }
+
+    assert_response :unauthorized
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  # Merging in this direction would delete an account that may hold events and
+  # orders — unlike bind_email's window, which only removes an empty, freshly
+  # created WeChat account.
+  test "bind_wechat refuses an identity that already belongs to someone else" do
+    ENV["NEXT_TOKEN"] = "tok"
+    create_user(wechat_openid: "o_taken")
+    user = create_user
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_taken" }, headers: auth_headers(user)
+
+    assert_response :unprocessable_entity
+    assert_match "already linked", json_response["error"]
+    assert_nil user.reload.wechat_openid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "bind_wechat is idempotent for the identity's own owner" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user(wechat_openid: "o_mine")
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_mine", wechat_unionid: "u_mine" },
+      headers: auth_headers(user)
+
+    assert_response :success
+    assert_equal "o_mine", user.reload.wechat_openid
+    # The unionid is new information and still fills the blank.
+    assert_equal "u_mine", user.wechat_unionid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  # A WeChat-first account already has one; re-pointing it at a different
+  # person's identity is exactly what claimable? exists to prevent.
+  test "bind_wechat never overwrites an openid the account already has" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user(wechat_openid: "o_original")
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_other" }, headers: auth_headers(user)
+
+    assert_response :success
+    assert_equal "o_original", user.reload.wechat_openid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
   test "a correct code still works after a few (below-threshold) wrong attempts" do
     user = create_user
     AuthCode.create!(recipient: user.email, recipient_type: "email", context: "login", code: "ABC123")

@@ -51,11 +51,14 @@ module Ticketing
         amount, discount_value, discount_data = coupon.get_discounted_price(amount, paymethod, chain: chain)
       end
 
-      # Card floor (PaymentMethod::STRIPE_MIN_CENTS): creation already holds
-      # the base price to it, so landing in (0, min) here means a coupon
-      # discounted into the gap — reject; exactly 0 is the valid free path.
-      if stripe?(paymethod, chain) && amount.positive? && amount < PaymentMethod::STRIPE_MIN_CENTS
-        return failure(coupon ? "coupon not applicable to this payment method" : "amount is below the minimum for card payments")
+      # Fiat floor (PaymentMethod::MIN_PRICE): creation already holds the base
+      # price to it, so landing in (0, min) here means a coupon discounted into
+      # the gap — reject; exactly 0 is the valid free path. The floor is
+      # per-rail, not one number: it exists to cover a fixed per-charge fee,
+      # and a rail without one has no reason to refuse small amounts.
+      rail = fiat_rail(paymethod, chain)
+      if rail && amount.positive? && amount < PaymentMethod::MIN_PRICE.fetch(rail)
+        return failure(coupon ? "coupon not applicable to this payment method" : "amount is below the minimum for this payment method")
       end
 
       Result.new(amount: amount, chain: chain, coupon: coupon,
@@ -64,8 +67,14 @@ module Ticketing
 
     def self.failure(message) = Result.new(error: message)
 
-    def self.stripe?(paymethod, chain)
-      chain == "stripe" || (chain.nil? && paymethod.chain == "stripe")
+    # Which fiat rail this quote is priced on, or nil for a crypto quote.
+    # The resolved chain wins; only when there is none (the preview endpoint
+    # quotes without a chain choice) does the method's own rail stand in.
+    def self.fiat_rail(paymethod, chain)
+      return chain if PaymentMethod::FIAT_CHAINS.include?(chain)
+      return paymethod.fiat_chain if chain.nil?
+
+      nil
     end
   end
 end

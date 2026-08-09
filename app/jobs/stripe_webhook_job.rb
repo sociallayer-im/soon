@@ -42,11 +42,11 @@ class StripeWebhookJob < ApplicationJob
       # Verify amount + currency against the order before flipping to paid.
       return record_mismatch(record, item) unless amounts_match?(object, item)
 
-      item.confirm_payment!(txhash: object["payment_intent"])
+      item.confirm_payment!(txhash: object["payment_intent"], source: "webhook")
 
     when "checkout.session.expired"
       item = find_item(record, object, by_session: object["id"])
-      item.timeout if item&.status == "pending"
+      item.timeout(source: "webhook") if item&.status == "pending"
 
     when "charge.refunded"
       item = find_item(record, object, by_intent: object["payment_intent"])
@@ -56,17 +56,17 @@ class StripeWebhookJob < ApplicationJob
 
     when "charge.dispute.created"
       item = find_item(record, object, by_intent: object["payment_intent"])
-      item.transition!(:disputed) if item && %w[succeeded partially_refunded].include?(item.status)
+      item.transition!(:disputed, source: "webhook") if item && %w[succeeded partially_refunded].include?(item.status)
 
     when "charge.dispute.closed"
       item = find_item(record, object, by_intent: object["payment_intent"])
       return unless item&.status == "disputed"
 
       if object["status"] == "won"
-        item.transition!(:succeeded)
+        item.transition!(:succeeded, source: "webhook")
       else
         # Lost/conceded: the funds are gone — same outcome as a full refund.
-        item.transition!(:refunded)
+        item.transition!(:refunded, source: "webhook", reason: "dispute lost")
         item.release_resources!
       end
       # payment_intent.payment_failed: buyer can retry on the same session —
@@ -125,7 +125,7 @@ class StripeWebhookJob < ApplicationJob
       )
       next if refund.status == "succeeded"
 
-      item.apply_refund_success!(refund)
+      item.apply_refund_success!(refund, source: "webhook")
     end
   end
 

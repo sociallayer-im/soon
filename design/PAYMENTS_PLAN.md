@@ -682,3 +682,92 @@ Beyond §3's list:
 5. Refund one from the Stripe dashboard instead → the daily reconciliation
    job picks it up.
 6. Abandon a checkout → the sweeper expires it and returns the hold.
+
+---
+
+## 8. The order audit trail (2026-08-08)
+
+§3.6 specified that transitions would go "through `Ticketing::Order#transition!`
+— one method asserting the allowed-transition table, **writing an audit row**".
+The transition table shipped; the audit row did not. This is that half, built
+once WeChat Pay made a second money rail live.
+
+Rail-agnostic on purpose — it is documented here rather than in
+WECHAT_INTEGRATION because it describes the order model, not a provider.
+
+### 8.1 Why a current status was not enough
+
+An order keeps one status. Everything about its past was being reconstructed
+from timestamps, which turned out to be both incomplete and quietly wrong:
+
+- **`updated_at` is not the time of a transition.** It is the last write of any
+  kind. `apply_refund_success!` transitions and then writes `released_at`, so
+  the refund's own timestamp was already gone by the time anyone looked.
+- **A lost dispute was indistinguishable from a voluntary refund.** Losing at
+  the provider runs `transition!(:refunded)` with **no Refund row**
+  (`stripe_webhook_job.rb`), so afterwards it looks exactly like an organizer
+  refunding on purpose. Those two facts mean opposite things — one is a
+  decision, the other is money taken back.
+- **Retries left nothing at all.** A buyer who abandons the payment sheet and
+  pays again never changes status.
+- **Nothing recorded who acted.** `refunds.requested_by_user_id` covered
+  refunds and only refunds; a sweeper expiry, a webhook confirmation and a
+  manual cancel were indistinguishable afterwards.
+
+### 8.2 Shape
+
+`ticketing_activities`, model `Ticketing::Activity`. Named for the domain
+rather than the table: `Ticketing` is already the namespace for the services
+and the sweeper, and `Ticketing::Activity` does not collide with the top-level
+`Activity`, which is the user notification feed.
+
+Two decisions worth keeping:
+
+- **The subject is polymorphic AND `NOT NULL`.** Polymorphic so a coupon
+  redemption or a ticket-type change can live here without a migration; not
+  null because the property that makes this usable in a chargeback is *"this
+  subject's history is exactly these rows"*. A log with an optional owner
+  degrades into a dumping ground and stops being evidence.
+- **`action` is the required column, not `to_status`.** The vocabulary is
+  deliberately wider than the status machine, because the events that most
+  need explaining afterwards are not transitions: `payment_retried`,
+  `callback_rejected`, `prepay_created`. A table called "transitions" would
+  have missed precisely the interesting cases — which is why it isn't one.
+
+Rows are **append-only**, enforced by `readonly?` rather than by convention: a
+row is an observation, and observations are not edited. Anything that changes
+is a later row.
+
+`Ticketing::Activity.record!` never raises into its caller. A lost audit row
+is bad; a lost payment confirmation is worse.
+
+### 8.3 The bug this found
+
+Designing it surfaced the only place in the codebase that bypassed
+`transition!`: `add_group_ticket_item` did `update(status: "succeeded")`
+directly. That skipped the allowed-transition table, so **re-granting a ticket
+to an email whose order had expired silently reopened a closed order** — one
+whose seat and coupon had already been handed back, leaving two people holding
+one unit. It goes through `transition!` now and answers with an error.
+
+### 8.4 Backfill
+
+`rails ticketing:backfill` reconstructs history for orders predating the table
+(1450 locally, 5 on CN). Every row is stamped `source: "backfill"` and
+`Ticketing::Activity.recorded` excludes them, because a derivation must never
+be able to pass as an observation — the frontend labels them "(estimated)".
+
+They inherit every weakness listed in §8.1: approximate closure times, no
+retries, and lost disputes rendered as ordinary refunds. What could not be
+recovered was not invented.
+
+### 8.5 Accountability
+
+A refund is the one organizer action that moves money out, so the actor is
+recorded **twice** — `refunds.requested_by_user_id` and the `refund_requested`
+activity — and both are rendered by name, not as a bare id. One place to look
+is one place to lose.
+
+The **absence** of an actor is equally deliberate: a callback or a sweeper run
+has none, so `refund_succeeded` shows no name. That blank is what distinguishes
+"a manager ordered this refund" from "the provider settled it".
