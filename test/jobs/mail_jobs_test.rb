@@ -99,4 +99,68 @@ class MailJobsTest < ActiveJob::TestCase
       GroupBroadcastMailJob.perform_now(group_id: group.id, subject: "Hi", content: "News")
     end
   end
+
+  # ---- GroupRegisteredMailJob ----
+
+  test "mails platform admins who have an address, and nobody else" do
+    create_user(admin: true, email: "a1@test.com")
+    create_user(admin: true, email: "a2@test.com")
+    create_user(admin: true, email: nil, eth: "0x#{unique_suffix}")
+    create_user(email: "ordinary@test.com")
+    group = create_group(owner: create_user)
+
+    assert_enqueued_emails 2 do
+      GroupRegisteredMailJob.perform_now(group_id: group.id)
+    end
+  end
+
+  # platform_admin? also answers to the legacy permissions array, but the
+  # notification list deliberately does not — being able to remove a popup city
+  # is not a request for mail about every group that signs up.
+  test "a permissions-array admin is authorized but is not a mail recipient" do
+    legacy = create_user(permissions: ["admin"], email: "legacy@test.com")
+    group = create_group(owner: create_user)
+
+    assert legacy.platform_admin?
+    assert_no_enqueued_emails do
+      GroupRegisteredMailJob.perform_now(group_id: group.id)
+    end
+  end
+
+  # ---- EventSubmittedMailJob ----
+
+  test "mails the group's owners and managers who are still subscribed" do
+    owner = create_user(email: "owner@test.com")
+    group = create_group(owner: owner)
+    create_membership(user: create_user(email: "mgr@test.com"), group: group, role: "manager")
+    create_membership(user: create_user(email: "muted@test.com"), group: group, role: "manager",
+      admin_notification: false)
+    create_membership(user: create_user(email: "member@test.com"), group: group, role: "member")
+    create_membership(user: create_user(email: nil, eth: "0x#{unique_suffix}"), group: group, role: "manager")
+    event = create_event(group: group, owner: create_user)
+
+    assert_enqueued_emails 2 do # owner + the one subscribed manager with an address
+      EventSubmittedMailJob.perform_now(event_id: event.id)
+    end
+  end
+
+  test "existing owner and manager rows default to subscribed" do
+    owner = create_user(email: "owner@test.com")
+    group = create_group(owner: owner)
+    manager = create_membership(user: create_user(email: "mgr@test.com"), group: group, role: "manager")
+
+    assert manager.admin_notification, "a new manager must be opted in by default"
+    assert_equal %w[mgr@test.com owner@test.com], group.admin_notification_emails.sort
+  end
+
+  test "an inactive admin membership is not mailed" do
+    owner = create_user(email: "owner@test.com")
+    group = create_group(owner: owner)
+    group.memberships.find_by(user: owner).update!(active: false)
+    event = create_event(group: group, owner: create_user)
+
+    assert_no_enqueued_emails do
+      EventSubmittedMailJob.perform_now(event_id: event.id)
+    end
+  end
 end

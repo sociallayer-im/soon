@@ -25,18 +25,37 @@ class Api::V1::MembershipsController < Api::BaseController
   end
 
   # PATCH /api/v1/groups/:group_id/memberships/:id
+  #
+  # Two independently-authorized attributes: `role` (a group admin acting on
+  # someone) and `admin_notification` (an admin's own mail preference). They're
+  # checked separately and only the ones actually sent are written, so toggling
+  # a notification setting doesn't require role-change rights and doesn't
+  # accidentally clear the role.
   def update
     membership = @group.memberships.find(params[:id])
-    new_role = params.dig(:membership, :role)
-    raise Pundit::NotAuthorizedError unless can_change_role?(membership.role, new_role)
+    attrs = params[:membership] || ActionController::Parameters.new
+    writes = {}
 
-    # Only an owner may grant the owner role or modify an existing owner's role,
-    # so an admin can't self-promote to owner or demote the owner.
-    if (new_role == "owner" || membership.role == "owner") && !group_owner?
-      return render_error("only an owner can change owner-level roles", status: :forbidden)
+    if attrs.key?(:admin_notification)
+      raise Pundit::NotAuthorizedError unless can_set_admin_notification?(membership)
+      writes[:admin_notification] = ActiveModel::Type::Boolean.new.cast(attrs[:admin_notification])
     end
 
-    if membership.update(role: new_role)
+    if attrs.key?(:role)
+      new_role = attrs[:role]
+      raise Pundit::NotAuthorizedError unless can_change_role?(membership.role, new_role)
+
+      # Only an owner may grant the owner role or modify an existing owner's role,
+      # so an admin can't self-promote to owner or demote the owner.
+      if (new_role == "owner" || membership.role == "owner") && !group_owner?
+        return render_error("only an owner can change owner-level roles", status: :forbidden)
+      end
+      writes[:role] = new_role
+    end
+
+    return render_error("nothing to update") if writes.empty?
+
+    if membership.update(writes)
       render json: MembershipBlueprint.render(membership)
     else
       render_error(membership.errors.full_messages.join(", "))
@@ -75,6 +94,17 @@ class Api::V1::MembershipsController < Api::BaseController
     policy = GroupPolicy.new(current_user, @group)
     return true if policy.manage?
     policy.can_assign_manager? && [current_role, new_role].include?("manager")
+  end
+
+  # The setting only governs mail sent to owners and managers, so it is only
+  # settable on such a row — flipping it on a plain member would silently do
+  # nothing and read back as if it had worked. Otherwise it's the member's own
+  # preference; a group admin may also set it for another admin, which is how
+  # the member roster's toggle works for an owner tidying up notifications.
+  def can_set_admin_notification?(membership)
+    return false unless %w[owner manager].include?(membership.role)
+
+    membership.user_id == current_user.id || GroupPolicy.new(current_user, @group).manage?
   end
 
   def group_owner?

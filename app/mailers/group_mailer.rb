@@ -16,6 +16,15 @@ class GroupMailer < ApplicationMailer
     mail(to: recipient, subject: subject)
   end
 
+  # Tells a platform admin that a group just registered. Fanned out by
+  # GroupRegisteredMailJob, one delivery per admin address.
+  def registered(group_id:, recipient:)
+    @group = Group.find(group_id)
+    @owner = @group.memberships.includes(:user).find_by(role: "owner")&.user
+    @group_url = "#{WEB_URL}/group/#{@group.name}"
+    mail(to: recipient, subject: "New group: #{@group.display_name}")
+  end
+
   # Notifies a group's owner that one of their group tickets was purchased.
   def ticket_purchased(ticket_item_id:, recipient:)
     @ticket_item = TicketItem.find(ticket_item_id)

@@ -34,6 +34,20 @@ class EventMailer < ApplicationMailer
     mail(to: recipient, subject: "Update on your application — #{@event.title}")
   end
 
+  # A member (not an owner/manager) created an event in a group — tells that
+  # group's admins it happened. Fanned out by EventSubmittedMailJob to the
+  # owner/manager rows that still have admin_notification set.
+  #
+  # No .ics: the recipient isn't attending, they're being asked to look at it.
+  def submitted(event_id:, recipient:)
+    @event = Event.find(event_id)
+    @group = @event.group
+    return if recipient.blank?
+
+    action = @event.status == "pending" ? "Review needed" : "New event"
+    mail(to: recipient, subject: "#{action} — #{@event.title}")
+  end
+
   # An event was cancelled — the .ics carries STATUS:CANCELLED so calendars drop it.
   def cancelled(event_id:, recipient:)
     @event = Event.find(event_id)

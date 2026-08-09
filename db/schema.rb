@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -443,6 +443,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
 
   create_table "memberships", id: :string, force: :cascade do |t|
     t.boolean "active", default: true
+    t.boolean "admin_notification", default: true, null: false
     t.datetime "created_at", null: false
     t.jsonb "data", default: {}
     t.string "group_id", null: false
@@ -530,7 +531,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
     t.string "ticket_item_id", null: false
     t.datetime "updated_at", null: false
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
-    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
 
   create_table "stripe_events", id: :string, force: :cascade do |t|
@@ -674,6 +675,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
 
   create_table "users", id: :string, force: :cascade do |t|
     t.boolean "active", default: true
+    t.boolean "admin", default: false, null: false
     t.text "bio"
     t.datetime "created_at", null: false
     t.jsonb "data", default: {}
@@ -692,6 +694,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_180000) do
     t.datetime "updated_at", null: false
     t.string "wechat_openid"
     t.string "wechat_unionid"
+    t.index ["admin"], name: "index_users_on_admin", where: "admin"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["eth"], name: "index_users_on_eth", unique: true
     t.index ["name"], name: "index_users_on_name", unique: true

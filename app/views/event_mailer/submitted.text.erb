@@ -1,0 +1,12 @@
+<%= @event.status == "pending" ? "An event is waiting for review" : "A new event in your group" %>
+
+<%= @event.owner&.nickname.presence || @event.owner&.name || "Someone" %> created "<%= @event.title %>" in <%= @group.display_name %>.
+<% if @event.status == "pending" %>It won't be published until a group admin approves it.
+<% end %>
+When: <%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %>
+<% if @event.location_text.present? %>Where: <%= @event.location_text %>
+<% end %>Status: <%= @event.status %>
+
+View event: <%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>
+
+You're receiving this as an admin of <%= @group.display_name %>. Turn these off from the group's member list.

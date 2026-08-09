@@ -1,0 +1,32 @@
+<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">
+  <%= @event.status == "pending" ? "An event is waiting for review" : "A new event in your group" %>
+</h1>
+<p style="margin: 0 0 16px; color: #4b5563;">
+  <strong><%= @event.owner&.nickname.presence || @event.owner&.name || "Someone" %></strong>
+  created <strong><%= @event.title %></strong> in <strong><%= @group.display_name %></strong><%=
+    @event.status == "pending" ? ". It won't be published until a group admin approves it." : "." %>
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 16px;">
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">When</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %></td>
+  </tr>
+  <% if @event.location_text.present? %>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Where</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.location_text %></td>
+  </tr>
+  <% end %>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Status</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.status %></td>
+  </tr>
+</table>
+
+<%= cta_button "View event", "#{MailerHelper::WEB_URL}/event/detail/#{@event.id}" %>
+
+<p style="margin: 0; color: #6b7280; font-size: 13px;">
+  You're receiving this as an admin of <%= @group.display_name %>. Turn these off from the
+  group's member list.
+</p>

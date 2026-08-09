@@ -49,4 +49,28 @@ class EventMailerTest < ActionMailer::TestCase
     assert_match "STATUS:CANCELLED", ics.body.to_s
     assert_match "METHOD:CANCEL", ics.body.to_s
   end
+
+  test "submitted names the creator, the event and the group, and carries no invite" do
+    creator = create_user(name: "member_user")
+    @event.update!(owner: creator, status: "published")
+
+    mail = EventMailer.submitted(event_id: @event.id, recipient: @owner.email)
+
+    assert_equal [@owner.email], mail.to
+    assert_equal "New event — Launch Party", mail.subject
+    assert_match "member_user", mail.html_part.body.to_s
+    assert_match @group.display_name, mail.html_part.body.to_s
+    # The recipient is being asked to look at the event, not to attend it — an
+    # .ics here would put someone else's event on a reviewer's calendar.
+    assert_empty mail.attachments
+  end
+
+  test "submitted says review is needed when the event is pending" do
+    @event.update!(status: "pending")
+
+    mail = EventMailer.submitted(event_id: @event.id, recipient: @owner.email)
+
+    assert_equal "Review needed — Launch Party", mail.subject
+    assert_match "waiting for review", mail.html_part.body.to_s
+  end
 end

@@ -13,7 +13,9 @@ class UserBlueprint < Blueprinter::Base
   # Private fields, only rendered for the user viewing their own record.
   view :self do
     include_view :profile
-    fields :email, :permissions
+    # `admin` is read-only everywhere above the database — it is here so the UI
+    # can show admin-only affordances, not so it can be changed (see User).
+    fields :email, :permissions, :admin
   end
 
   view :extended do

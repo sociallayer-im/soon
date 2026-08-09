@@ -50,6 +50,9 @@ class Api::V1::GroupsController < Api::BaseController
       group.save!
       group.add_member(current_user.id, "owner") # counter_cache keeps memberships_count right
     end
+    # Enqueued after the transaction commits, not inside it — a job picked up
+    # before the commit lands would look up a group that isn't there yet.
+    GroupRegisteredMailJob.perform_later(group_id: group.id)
     render json: GroupBlueprint.render(group, view: :detail), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))

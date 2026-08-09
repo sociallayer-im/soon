@@ -54,6 +54,7 @@ class Api::V1::EventsController < Api::BaseController
       create_nested_roles!(event, params[:event_roles])
       create_nested_tickets!(event, params[:tickets], event.group_id)
     end
+    notify_group_admins_of_submission(event)
     render json: EventBlueprint.render(event), status: :created
   rescue InvalidChild => e
     render_error(e.message)
@@ -202,6 +203,23 @@ class Api::V1::EventsController < Api::BaseController
       starred_ids: Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Event", removed: false)
                           .pluck(:item_id).to_set
     }
+  end
+
+  # A group's admins hear about events created in their group by someone else —
+  # the submission they may have to review, or at minimum didn't know about.
+  # An admin creating their own event is not news to themselves.
+  #
+  # Direct membership, not GroupPolicy#manage?: a platform admin manages every
+  # group but is a stranger to almost all of them, and their event is exactly
+  # the kind that group's owners want to hear about.
+  #
+  # Drafts are excluded. A draft is visible to nobody but its owner and isn't
+  # asking anything of a reviewer; it becomes news if and when it's published.
+  def notify_group_admins_of_submission(event)
+    return if event.group_id.blank? || event.status == "draft"
+    return if current_user.memberships.exists?(group_id: event.group_id, role: %w[manager owner])
+
+    EventSubmittedMailJob.perform_later(event_id: event.id)
   end
 
   # Email every attending participant that the event was cancelled (with an .ics

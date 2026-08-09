@@ -1,0 +1,14 @@
+A new group registered
+
+<%= @group.display_name %> was just created on <%= MailerHelper::BRAND_NAME %>.
+
+Handle: <%= @group.name %>
+<% if @owner %>Owner: <%= @owner.nickname.presence || @owner.name || @owner.id %>
+<% end %><% if @group.parent %>Parent group: <%= @group.parent.display_name %>
+<% end %>Created: <%= @group.created_at.strftime("%b %-d, %Y · %H:%M UTC") %>
+<% if @group.bio.present? %>
+"<%= @group.bio %>"
+<% end %>
+View group: <%= @group_url %>
+
+You're receiving this because your account is a platform administrator.

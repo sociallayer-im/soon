@@ -32,4 +32,26 @@ class GroupMailerTest < ActionMailer::TestCase
     assert_match "GA", mail.html_part.body.to_s
     assert_match "buyer_user", mail.html_part.body.to_s
   end
+
+  test "registered names the new group, its handle and its owner" do
+    owner = create_user(name: "founder_user")
+    group = create_group(owner: owner, nickname: "Fresh Start", bio: "we do things")
+
+    mail = GroupMailer.registered(group_id: group.id, recipient: "admin@test.com")
+
+    assert_equal ["admin@test.com"], mail.to
+    assert_equal "New group: Fresh Start", mail.subject
+    assert_match "founder_user", mail.html_part.body.to_s
+    assert_match group.name, mail.html_part.body.to_s
+    assert_match "we do things", mail.html_part.body.to_s
+    assert_match "founder_user", mail.text_part.body.to_s
+  end
+
+  test "registered renders for a group whose owner row is gone" do
+    group = create_group # no owner membership at all
+
+    mail = GroupMailer.registered(group_id: group.id, recipient: "admin@test.com")
+
+    assert_match group.name, mail.html_part.body.to_s
+  end
 end

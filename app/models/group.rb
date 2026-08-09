@@ -81,6 +81,17 @@ class Group < ApplicationRecord
                .distinct.pluck(Arel.sql("users.email"))
   end
 
+  # Addresses of the group's owners and managers who still have the
+  # admin_notification flag set — the audience for "someone submitted an event
+  # to your group". Same shape and reasoning as member_emails: one definition
+  # so the job that sends and anything that counts recipients can't disagree.
+  def admin_notification_emails
+    memberships.where(active: true, role: %w[owner manager], admin_notification: true)
+               .joins(:user)
+               .where.not(users: { email: [ nil, "" ] })
+               .distinct.pluck(Arel.sql("users.email"))
+  end
+
   # Raises ActiveRecord::RecordInvalid on failure (e.g. an invalid role) instead
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.

@@ -140,6 +140,96 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  # ── admin_notification ──────────────────────────────────────────────────────
+
+  test "a manager can mute their own admin notifications without role rights" do
+    owner = create_user
+    manager = create_user
+    group = create_group(owner: owner)
+    create_membership(user: manager, group: group, role: "manager")
+    membership = group.memberships.find_by(user: manager)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+      params: { membership: { admin_notification: false } }, headers: auth_headers(manager)
+
+    assert_response :success
+    assert_not membership.reload.admin_notification
+    assert_equal "manager", membership.role, "toggling a preference must not touch the role"
+  end
+
+  test "an owner can mute an admin's notifications for them" do
+    owner = create_user
+    manager = create_user
+    group = create_group(owner: owner)
+    create_membership(user: manager, group: group, role: "manager")
+    membership = group.memberships.find_by(user: manager)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+      params: { membership: { admin_notification: false } }, headers: auth_headers(owner)
+
+    assert_response :success
+    assert_not membership.reload.admin_notification
+  end
+
+  test "a member cannot set admin_notification on someone else's membership" do
+    owner = create_user
+    other = create_user
+    group = create_group(owner: owner)
+    create_membership(user: other, group: group, role: "member")
+    owner_membership = group.memberships.find_by(user: owner)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{owner_membership.id}",
+      params: { membership: { admin_notification: false } }, headers: auth_headers(other)
+
+    assert_response :forbidden
+    assert owner_membership.reload.admin_notification
+  end
+
+  # The setting only governs mail sent to owners/managers. Accepting it on a
+  # plain member would store a value nothing ever reads and report success.
+  test "admin_notification is rejected on a plain member row" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    membership = group.memberships.find_by(user: member)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+      params: { membership: { admin_notification: false } }, headers: auth_headers(member)
+
+    assert_response :forbidden
+  end
+
+  test "role and admin_notification can be set in one request" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "manager")
+    membership = group.memberships.find_by(user: member)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+      params: { membership: { role: "member", admin_notification: false } }, headers: auth_headers(owner)
+
+    assert_response :success
+    membership.reload
+    assert_equal "member", membership.role
+    assert_not membership.admin_notification
+  end
+
+  test "an update naming no attribute is a 422, not a silent success" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: member, group: group, role: "member")
+    membership = group.memberships.find_by(user: member)
+
+    patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+      params: { membership: { nickname: "nope" } }, headers: auth_headers(owner)
+
+    assert_response :unprocessable_entity
+    assert_equal "member", membership.reload.role
+  end
+
   test "update rejects an invalid role value" do
     owner = create_user
     member = create_user

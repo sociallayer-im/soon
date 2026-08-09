@@ -134,4 +134,112 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     assert_includes mailer_calls, ["EventMailer", "ticket_purchased"], "expected the buyer confirmation email"
     assert_includes mailer_calls, ["GroupMailer", "ticket_purchased"], "expected the group owner notification email"
   end
+
+  # ---- new group registered -> platform admins ----
+
+  test "creating a group emails every platform admin" do
+    admin = create_user(admin: true, email: "admin@test.com")
+    create_user(admin: true, email: nil, eth: "0x#{unique_suffix}") # no address to write to
+    create_user(admin: false) # not an admin
+
+    assert_difference -> { ActionMailer::Base.deliveries.size }, 1 do
+      perform_enqueued_jobs do
+        post "/api/v1/groups", params: { group: { name: "brand-new-#{unique_suffix}" } },
+          headers: auth_headers(create_user)
+      end
+    end
+    assert_response :created
+
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal [admin.email], mail.to
+    assert_match "New group", mail.subject
+  end
+
+  test "creating a group sends nothing when there is no platform admin" do
+    assert_no_enqueued_jobs only: MailDeliveryJob do
+      perform_enqueued_jobs only: GroupRegisteredMailJob do
+        post "/api/v1/groups", params: { group: { name: "quiet-#{unique_suffix}" } },
+          headers: auth_headers(create_user)
+      end
+    end
+    assert_response :created
+  end
+
+  # ---- new event by a non-admin -> subscribed group admins ----
+
+  test "an event created by a plain member emails the group's owner and managers" do
+    manager = create_user(email: "manager@test.com")
+    create_membership(user: manager, group: @group, role: "manager")
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+
+    # owner + manager, both opted in by default
+    assert_difference -> { ActionMailer::Base.deliveries.size }, 2 do
+      perform_enqueued_jobs do
+        post "/api/v1/events", params: { event: event_attrs }, headers: auth_headers(member)
+      end
+    end
+    assert_response :created
+
+    assert_equal [[@owner.email], [manager.email]].flatten.sort,
+      ActionMailer::Base.deliveries.flat_map(&:to).sort
+  end
+
+  test "an admin who opted out of admin_notification is not mailed" do
+    manager = create_user(email: "optedout@test.com")
+    create_membership(user: manager, group: @group, role: "manager", admin_notification: false)
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+
+    assert_difference -> { ActionMailer::Base.deliveries.size }, 1 do # the owner only
+      perform_enqueued_jobs do
+        post "/api/v1/events", params: { event: event_attrs }, headers: auth_headers(member)
+      end
+    end
+    assert_equal [@owner.email], ActionMailer::Base.deliveries.flat_map(&:to)
+  end
+
+  test "an event created by a group manager notifies nobody" do
+    manager = create_user
+    create_membership(user: manager, group: @group, role: "manager")
+
+    assert_no_enqueued_jobs only: [GroupRegisteredMailJob, EventSubmittedMailJob] do
+      post "/api/v1/events", params: { event: event_attrs }, headers: auth_headers(manager)
+    end
+    assert_response :created
+  end
+
+  test "a draft event does not notify — nobody can see it yet" do
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+
+    assert_no_enqueued_jobs only: EventSubmittedMailJob do
+      post "/api/v1/events", params: { event: event_attrs.merge(status: "draft") },
+        headers: auth_headers(member)
+    end
+    assert_response :created
+  end
+
+  test "an event awaiting review notifies, and says so" do
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+
+    assert_difference -> { ActionMailer::Base.deliveries.size }, 1 do
+      perform_enqueued_jobs do
+        post "/api/v1/events", params: { event: event_attrs.merge(status: "pending") },
+          headers: auth_headers(member)
+      end
+    end
+    assert_match "Review needed", ActionMailer::Base.deliveries.last.subject
+  end
+
+  private
+
+  # status is sent explicitly because the editor sends it (seastar-app's
+  # event/[grouphandle]/create/data.ts posts "published"); the column's own
+  # default is "draft", which is the one case that deliberately notifies nobody.
+  def event_attrs
+    { title: "Submitted #{unique_suffix}", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+      group_id: @group.id, status: "published" }
+  end
 end

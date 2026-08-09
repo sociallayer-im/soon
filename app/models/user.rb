@@ -35,10 +35,25 @@ class User < ApplicationRecord
   validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
     allow_blank: true
 
-  # Platform administrators (users.permissions includes "admin") curate
-  # cross-group content: homepage featured/top tags, popup-city removal.
+  # Platform administrators curate cross-group content: homepage featured/top
+  # tags, popup-city removal. Two markers answer to this — the `admin` boolean
+  # (the current one) and "admin" in the legacy `permissions` array — because
+  # the array predates the column and still carries the live admins.
+  #
+  # `admin` is set in the database by hand and nowhere else. It is absent from
+  # UsersController's permit list on purpose — that list is a closed allowlist,
+  # so there is no request, from any client, that can grant or revoke it.
   def platform_admin?
-    permissions.include?("admin")
+    admin? || permissions.include?("admin")
+  end
+
+  # Where platform-wide notices go (a new group registering, today). Deliberately
+  # keyed on the `admin` column alone: `permissions` is an authorization legacy
+  # and being able to remove a popup city is not the same as wanting mail about
+  # every group that signs up. Blank addresses are dropped here rather than at
+  # each call site — a wallet- or WeChat-first admin has no email to write to.
+  def self.admin_emails
+    where(admin: true).where.not(email: [ nil, "" ]).distinct.pluck(:email)
   end
 
   private def has_login_identity
