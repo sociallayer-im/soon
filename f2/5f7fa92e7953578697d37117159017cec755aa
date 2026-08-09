@@ -1,0 +1,71 @@
+app/controllers/api/v1/memberships_controller.rb
+  s_448695a5d036bc::t_37f33ac2b95254 28-33,36-46,48-53,56-58
+  s_448695a5d036bc::t_430dbacb4f79db 99-109
+app/views/group_mailer/registered.text.erb
+  s_448695a5d036bc::t_521ecd7e0e0028 1-14
+test/jobs/mail_jobs_test.rb
+  s_448695a5d036bc::t_4341d86f3ee197 102-165
+app/jobs/group_registered_mail_job.rb
+  s_448695a5d036bc::t_45bab7e54f69fa 1-17
+app/models/user.rb
+  s_448695a5d036bc::t_535dc339c907d3 42-45
+  s_448695a5d036bc::t_e16208b702f406 38-41,47-56
+test/integration/email_notifications_test.rb
+  s_448695a5d036bc::t_52e9b506494a7f 194-195
+  s_448695a5d036bc::t_71f207e66db49e 176-178
+  s_448695a5d036bc::t_4a86b791216057 137-144,147-175,179-193,196-222,236-237,241-242,244
+  s_448695a5d036bc::t_c0aced0659b421 238-240,243
+  s_448695a5d036bc::t_6f88fe8128eb6a 145-146
+  s_448695a5d036bc::t_6a346ca9e44884 223-235
+test/mailers/event_mailer_test.rb
+  s_448695a5d036bc::t_739fa48b13838d 52-75
+app/models/group.rb
+  s_448695a5d036bc::t_8d133ed2b93892 84-94
+app/jobs/event_submitted_mail_job.rb
+  s_448695a5d036bc::t_b294ac89870116 1-21
+db/migrate/20260809120000_add_admin_to_users.rb
+  s_448695a5d036bc::t_58469201c2b652 1-16
+test/controllers/api/v1/memberships_controller_test.rb
+  s_448695a5d036bc::t_4b71ba9b56c986 143-232
+test/mailers/group_mailer_test.rb
+  s_448695a5d036bc::t_bc57881cd7bc66 35-56
+app/blueprints/membership_blueprint.rb
+  s_448695a5d036bc::t_5312d238da9228 4-7
+app/blueprints/user_blueprint.rb
+  s_448695a5d036bc::t_5b19d759e31a8d 16-18
+app/mailers/event_mailer.rb
+  s_448695a5d036bc::t_99216741d37ef3 37-50
+app/views/event_mailer/submitted.text.erb
+  s_448695a5d036bc::t_b4c911d2f90905 1-12
+app/controllers/api/v1/events_controller.rb
+  s_448695a5d036bc::t_77e6e4477f29a4 208-224
+  s_448695a5d036bc::t_6c97f2d319d382 57
+app/mailers/group_mailer.rb
+  s_448695a5d036bc::t_afb767b24d26c7 19-27
+app/views/group_mailer/registered.html.erb
+  s_448695a5d036bc::t_f855c9ac80b760 1-39
+app/views/event_mailer/submitted.html.erb
+  s_448695a5d036bc::t_52d32bdd6db048 1-32
+db/migrate/20260809120001_add_admin_notification_to_memberships.rb
+  s_448695a5d036bc::t_18afeeea9ed9a0 1-16
+app/controllers/api/v1/groups_controller.rb
+  s_448695a5d036bc::t_6ca865534eafc3 53-55
+db/schema.rb
+  s_448695a5d036bc::t_5aaa32b77527a7 13,446,534,678,697
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f25f7fa92e7953578697d37117159017cec755aa",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
