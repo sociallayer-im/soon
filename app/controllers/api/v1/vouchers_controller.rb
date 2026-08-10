@@ -16,9 +16,13 @@ class Api::V1::VouchersController < Api::BaseController
 
   # GET /api/v1/vouchers
   def index
+    # Columns are table-qualified because the group_handle branch below joins
+    # badge_classes, which has its own `counter` — unqualified, Postgres raises
+    # AmbiguousColumn and the whole endpoint 500s. It only ever broke on that
+    # one branch, so the sender/unfiltered paths kept working and hid it.
     vouchers = Voucher.includes(:sender, :badge_class)
-                       .where("expires_at > ? OR expires_at IS NULL", Time.current)
-                       .where("counter != 0 OR counter IS NULL")
+                       .where("vouchers.expires_at > ? OR vouchers.expires_at IS NULL", Time.current)
+                       .where("vouchers.counter != 0 OR vouchers.counter IS NULL")
     if params[:sender_handle].present?
       sender = User.find_by!(name: params[:sender_handle])
       vouchers = vouchers.where(sender_id: sender.id)

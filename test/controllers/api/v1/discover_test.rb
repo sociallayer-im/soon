@@ -21,6 +21,61 @@ class DiscoverTest < ActionDispatch::IntegrationTest
     assert_includes json_response["events"].map { |e| e["id"] }, upcoming.id
   end
 
+  # `communities` answers "what groups exist", `groups` answers "what did a
+  # curator pick". A plain untagged group belongs in the first and not the
+  # second — that distinction is the whole reason the field was added.
+  test "communities lists every active group, tagged or not" do
+    owner = create_user
+    plain = create_group(owner: owner)
+    featured = create_group(owner: owner, group_tags: ["featured"])
+    popup = create_group(owner: owner, group_tags: ["top"])
+
+    get "/api/v1/discover"
+    assert_response :success
+    ids = json_response["communities"].map { |g| g["id"] }
+    assert_includes ids, plain.id
+    assert_includes ids, featured.id
+    assert_includes ids, popup.id
+    assert_not_includes json_response["groups"].map { |g| g["id"] }, plain.id
+  end
+
+  test "communities excludes inactive groups" do
+    owner = create_user
+    live = create_group(owner: owner)
+    frozen = create_group(owner: owner)
+    frozen.update!(active: false)
+
+    get "/api/v1/discover"
+    ids = json_response["communities"].map { |g| g["id"] }
+    assert_includes ids, live.id
+    assert_not_includes ids, frozen.id
+  end
+
+  # The card shows member and event counts, and those live only in the :card
+  # view — rendering the default view leaves them undefined on the client.
+  test "communities carries the member and event counts the card renders" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    get "/api/v1/discover"
+    entry = json_response["communities"].find { |g| g["id"] == group.id }
+    assert entry.key?("memberships_count"), "card view must expose memberships_count"
+    assert entry.key?("events_count"), "card view must expose events_count"
+    assert_equal 1, entry["memberships_count"]
+  end
+
+  # The frontend renders the list in the order given rather than re-sorting,
+  # so the order the API picks is the order on screen.
+  test "communities is ordered oldest first" do
+    owner = create_user
+    first = create_group(owner: owner)
+    second = create_group(owner: owner)
+
+    get "/api/v1/discover"
+    ids = json_response["communities"].map { |g| g["id"] }
+    assert ids.index(first.id) < ids.index(second.id)
+  end
+
   test "popup_cities is curated by the 'top' tag, not just having dates+location" do
     owner = create_user
     curated = create_group(owner: owner, group_tags: ["top"], start_date: Date.new(2026, 9, 1),

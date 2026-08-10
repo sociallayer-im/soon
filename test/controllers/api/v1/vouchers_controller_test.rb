@@ -481,6 +481,49 @@ class Api::V1::VouchersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [v1.id], ids
   end
 
+  # This branch joins badge_classes, which has its own `counter` column. With
+  # the filter above written unqualified, Postgres raised AmbiguousColumn and
+  # the endpoint 500'd — taking the group page's "Sending" tab down with it.
+  # It went unnoticed because nothing exercised group_handle at all.
+  test "index filters by group_handle" do
+    creator = create_user
+    group = create_group(owner: creator)
+    other_group = create_group(owner: creator)
+    bc = create_badge_class(creator: creator, group: group)
+    other_bc = create_badge_class(creator: creator, group: other_group)
+    mine = create_voucher(sender: creator, badge_class: bc, counter: 3)
+    create_voucher(sender: creator, badge_class: other_bc, counter: 3)
+
+    get "/api/v1/vouchers", params: { group_handle: group.name }
+    assert_response :success
+    assert_equal [mine.id], json_response["data"].map { |v| v["id"] }
+  end
+
+  # The 500 fired even with nothing to return, since the ambiguity is in the
+  # SQL rather than in any row — which is exactly the state a brand-new group
+  # is in, and the one a group page hits first.
+  test "index by group_handle succeeds for a group with no vouchers" do
+    creator = create_user
+    group = create_group(owner: creator)
+
+    get "/api/v1/vouchers", params: { group_handle: group.name }
+    assert_response :success
+    assert_empty json_response["data"]
+  end
+
+  test "index by group_handle still applies the expiry and counter filters" do
+    creator = create_user
+    group = create_group(owner: creator)
+    bc = create_badge_class(creator: creator, group: group)
+    live = create_voucher(sender: creator, badge_class: bc, counter: 3)
+    create_voucher(sender: creator, badge_class: bc, counter: 0)
+    create_voucher(sender: creator, badge_class: bc, counter: 3, expires_at: 1.day.ago)
+
+    get "/api/v1/vouchers", params: { group_handle: group.name }
+    assert_response :success
+    assert_equal [live.id], json_response["data"].map { |v| v["id"] }
+  end
+
   test "show renders the voucher with its badges" do
     creator = create_user
     claimer = create_user
