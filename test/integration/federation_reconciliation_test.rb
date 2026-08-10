@@ -224,6 +224,70 @@ class FederationReconciliationTest < ActionDispatch::IntegrationTest
     assert FedFollow.exists?(follow.id), "unattested movedTo must not tear the edge down"
   end
 
+  # --- canonical-id re-key (same-host id redirect) -----------------------------
+
+  test "an actor that changed its canonical id form is re-keyed and still probed" do
+    alias_uri = "https://peer.example/users/alice"
+    canonical_uri = "https://peer.example/ap/users/42"
+    actor, key = create_fed_actor(uri: alias_uri, last_fetched_at: 3.days.ago)
+    user = create_user(name: "ru#{unique_suffix}")
+    follow = outbound_follow(user, actor, confirmed_at: 8.days.ago)
+    canonical_doc = remote_actor_doc(canonical_uri, key)
+
+    stub_get(
+      alias_uri => ap_result(canonical_doc), # doc claims the canonical id
+      canonical_uri => ap_result(canonical_doc)
+    ) do
+      assert_difference "FedDelivery.count", 1 do
+        SVC.run
+      end
+    end
+
+    refute FedActor.exists?(uri: alias_uri), "the alias row must be re-keyed away"
+    canonical = FedActor.find_by!(uri: canonical_uri)
+    follow.reload
+    assert_equal canonical.id, follow.fed_actor_id, "the edge must survive the re-key"
+    assert_equal 1, follow.probe_count
+    probe = FedDelivery.order(:created_at).last
+    assert_equal canonical_uri, probe.payload["object"],
+                 "the probe must name the canonical id, not the dead alias"
+  end
+
+  test "a cross-host id claim is not followed" do
+    alias_uri = "https://peer.example/users/alice"
+    actor, key = create_fed_actor(uri: alias_uri, last_fetched_at: 3.days.ago)
+    user = create_user(name: "ru#{unique_suffix}")
+    follow = outbound_follow(user, actor, confirmed_at: 8.days.ago)
+
+    hijack = remote_actor_doc("https://evil.example/users/alice", key)
+    stub_get(alias_uri => ap_result(hijack)) do
+      assert_no_difference "FedDelivery.count" do
+        SVC.run
+      end
+    end
+    assert FedActor.exists?(uri: alias_uri), "a cross-host claim must change nothing"
+    assert_equal 0, follow.reload.probe_count
+  end
+
+  test "re-keying merges into an existing canonical row and drops duplicate edges" do
+    alias_uri = "https://peer.example/users/alice"
+    canonical_uri = "https://peer.example/ap/users/42"
+    old, key = create_fed_actor(uri: alias_uri, last_fetched_at: 3.days.ago)
+    canonical, = create_fed_actor(uri: canonical_uri)
+    user = create_user(name: "ru#{unique_suffix}")
+    dup_via_alias = outbound_follow(user, old, confirmed_at: 8.days.ago)
+    kept = outbound_follow(user, canonical, confirmed_at: 1.day.ago)
+    canonical_doc = remote_actor_doc(canonical_uri, key)
+
+    stub_get(alias_uri => ap_result(canonical_doc), canonical_uri => ap_result(canonical_doc)) do
+      SVC.run
+    end
+
+    refute FedActor.exists?(uri: alias_uri)
+    refute FedFollow.exists?(dup_via_alias.id), "the duplicate edge must be dropped, not doubled"
+    assert_equal "accepted", kept.reload.state
+  end
+
   # --- audience integration ----------------------------------------------------
 
   test "lapsed inbound edges are excluded from event fan-out" do

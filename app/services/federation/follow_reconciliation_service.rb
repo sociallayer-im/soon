@@ -68,6 +68,16 @@ module Federation
           actor
         end
 
+      # The refresh may have re-keyed the actor to its canonical uri
+      # (ActorFetchService#rekey_alias!): edges were re-pointed or deduped in
+      # the DB, so the in-memory list is stale — reload it against the row
+      # that actually came back.
+      if refreshed.id != actor.id
+        follows = FedFollow.outbound.where(id: follows.map(&:id), fed_actor: refreshed)
+                           .includes(:fed_actor).to_a
+        return if follows.empty?
+      end
+
       return repoint_moved(refreshed, follows) if refreshed.moved_to.present?
       follows.each { |f| probe(f) }
     end

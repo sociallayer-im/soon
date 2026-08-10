@@ -62,7 +62,7 @@ module Federation
       actor
     end
 
-    def self.fetch!(uri)
+    def self.fetch!(uri, redirected: false)
       domain = FedDomainPolicy.canonicalize(URI.parse(uri).host)
       raise FetchError, "domain #{domain} not allowed" unless FedDomainPolicy.domain_allowed?(domain)
       raise FetchError, "#{uri} failed recently, not retrying" if recently_failed?(uri)
@@ -77,6 +77,20 @@ module Federation
 
       begin
         doc = signed_get(uri)
+        # An actor whose document names a DIFFERENT id on the SAME host has
+        # changed its canonical form (we did exactly this: name-keyed URLs →
+        # immutable-id URLs). Follow the claim once, with full validation at
+        # the canonical id — the host is authoritative for all its own paths,
+        # so this trusts nothing the alias couldn't already assert. A
+        # cross-host claim stays an error: that is a migration, and
+        # migrations require Move + alsoKnownAs attestation.
+        if doc.is_a?(Hash) && doc["id"] != uri && !redirected &&
+           http_url?(doc["id"]) && same_host?(doc["id"], uri)
+          canonical = fetch!(doc["id"], redirected: true)
+          rekey_alias!(uri, canonical)
+          forget_failure(uri)
+          return canonical
+        end
         validate!(doc, uri)
       rescue FetchError, HttpClient::Error
         remember_failure(uri)
@@ -89,6 +103,38 @@ module Federation
       end
       forget_failure(uri)
       upsert(doc, uri, domain)
+    end
+
+    def self.same_host?(a, b)
+      URI.parse(a).host == URI.parse(b).host
+    rescue URI::Error
+      false
+    end
+
+    # After a canonical-id redirect: a row cached under the alias uri would be
+    # permanently unfetchable (validate! can never pass for it again), and its
+    # follows would silently never reconcile. Re-key it in place so every edge
+    # stays attached. If a row already exists under the canonical uri, the
+    # alias row is redundant — hand its edges to the canonical row (dropping
+    # exact duplicates) rather than leaving them pinned to a dead uri.
+    def self.rekey_alias!(alias_uri, canonical)
+      row = FedActor.find_by(uri: alias_uri)
+      return if row.nil? || row.id == canonical.id
+      Logging.log(:out, "Fetch", status: "actor_rekeyed",
+                  from: alias_uri, to: canonical.uri)
+      FedActor.transaction do
+        row.fed_follows.find_each do |f|
+          if FedFollow.exists?(local: f.local, fed_actor: canonical, direction: f.direction)
+            f.destroy!
+          else
+            f.update!(fed_actor: canonical)
+          end
+        end
+        FedEvent.where(fed_actor_id: row.id).update_all(fed_actor_id: canonical.id)
+        Participant.where(fed_actor_id: row.id).update_all(fed_actor_id: canonical.id)
+        Comment.where(fed_actor_id: row.id).update_all(fed_actor_id: canonical.id)
+        row.reload.destroy!
+      end
     end
 
     def self.signed_get(uri)
