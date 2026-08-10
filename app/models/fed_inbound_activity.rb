@@ -44,6 +44,12 @@ class FedInboundActivity < ApplicationRecord
     if mismatch?(existing, fed_actor_id, activity_type)
       return :conflict
     end
+    # A tolerated same-key re-key (see mismatch?): re-bind the claim to the
+    # row that is actually signing now, so the check keeps passing after the
+    # stale alias row is eventually purged.
+    if fed_actor_id.present? && existing.fed_actor_id != fed_actor_id
+      existing.update_column(:fed_actor_id, fed_actor_id)
+    end
     if existing.body_digest.present? && body_digest.present? && existing.body_digest != body_digest
       Rails.logger.warn("[fed] inbound #{uri}: body digest drift on redelivery")
     end
@@ -59,8 +65,21 @@ class FedInboundActivity < ApplicationRecord
   end
 
   def self.mismatch?(existing, fed_actor_id, activity_type)
-    (existing.fed_actor_id.present? && fed_actor_id.present? && existing.fed_actor_id != fed_actor_id) ||
-      (existing.activity_type.present? && activity_type.present? && existing.activity_type != activity_type)
+    if existing.activity_type.present? && activity_type.present? && existing.activity_type != activity_type
+      return true
+    end
+    return false if existing.fed_actor_id.blank? || fed_actor_id.blank? ||
+                    existing.fed_actor_id == fed_actor_id
+
+    # Different actor ROW, same activity id. Rows are cache entries, not
+    # identities: a peer that changes its canonical URL form leaves us two
+    # rows for one actor, and its reconciliation probes then re-sign old
+    # activity ids from the new row. The controller of the signing key IS
+    # the identity — same key, same claimant, no forgery to reject. Any
+    # missing or differing key stays a conflict (P1-4).
+    old_pem = FedActor.where(id: existing.fed_actor_id).pick(:public_key_pem)
+    new_pem = FedActor.where(id: fed_actor_id).pick(:public_key_pem)
+    old_pem.blank? || new_pem.blank? || old_pem != new_pem
   end
 
   def self.digest(body)

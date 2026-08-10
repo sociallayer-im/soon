@@ -76,8 +76,12 @@ class FederationInboxTest < ActionDispatch::IntegrationTest
 
   # --- idempotency (OO-1) ----------------------------------------------------
 
-  test "duplicate activity id is a 202 no-op" do
-    activity = follow_activity(@remote, @group)
+  test "duplicate activity id is a 202 no-op (except Follow, which re-Accepts)" do
+    # Follow is deliberately exempt from duplicate-swallowing: a re-sent
+    # Follow is the reconciliation probe (§10.3) and must be answered with a
+    # fresh Accept — covered in federation_reconciliation_test. Every other
+    # type dedupes to a no-op.
+    activity = follow_activity(@remote, @group).merge("type" => "Join")
     perform_enqueued_jobs { post_signed_activity(@remote, @key, activity) }
     assert_no_difference -> { FedDelivery.count } do
       perform_enqueued_jobs { post_signed_activity(@remote, @key, activity) }

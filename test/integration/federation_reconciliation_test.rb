@@ -288,6 +288,49 @@ class FederationReconciliationTest < ActionDispatch::IntegrationTest
     assert_equal "accepted", kept.reload.state
   end
 
+  # --- answering side: what our own inbox does with a probe --------------------
+
+  test "a duplicate Follow is re-processed and re-Accepted, not swallowed by dedup" do
+    actor, key = create_fed_actor
+    owner = create_user(name: "ro#{unique_suffix}")
+    group = create_group(name: "rg#{unique_suffix}", owner: owner)
+    follow = {"@context" => Federation::JsonLd::AS, "id" => "#{actor.uri}#follows/probe",
+              "type" => "Follow", "actor" => actor.uri,
+              "object" => Federation::Urls.actor_url(group)}
+    accepts = -> { FedDelivery.all.count { |d| d.payload["type"] == "Accept" } }
+
+    perform_enqueued_jobs { post_signed_activity(actor, key, follow) }
+    first = accepts.call
+    assert_operator first, :>=, 1
+
+    perform_enqueued_jobs { post_signed_activity(actor, key, follow) }
+    assert_response :accepted
+    assert_equal first + 1, accepts.call,
+                 "a probe (§10.3) is answered by the re-run's fresh Accept; a no-op would " \
+                 "make every probe against a soon peer decay into a false lapse"
+  end
+
+  test "the dedup ledger tolerates a same-key re-keyed sender and rejects a different key" do
+    key = OpenSSL::PKey::RSA.new(2048)
+    old_row, = create_fed_actor(public_key_pem: key.public_key.to_pem)
+    new_row, = create_fed_actor(public_key_pem: key.public_key.to_pem)
+    uri = "https://peer.example/activities/#{unique_suffix}"
+
+    assert_equal :new, FedInboundActivity.record!(uri: uri, activity_type: "Follow",
+                                                 fed_actor_id: old_row.id)
+    FedInboundActivity.mark!(uri, "processed")
+
+    assert_equal :duplicate, FedInboundActivity.record!(uri: uri, activity_type: "Follow",
+                                                        fed_actor_id: new_row.id),
+                 "same signing key = same claimant; a re-keyed actor row is not a forgery"
+    assert_equal new_row.id, FedInboundActivity.find_by(uri: uri).fed_actor_id,
+                 "the claim must re-bind to the row that is signing now"
+
+    stranger, = create_fed_actor
+    assert_equal :conflict, FedInboundActivity.record!(uri: uri, activity_type: "Follow",
+                                                       fed_actor_id: stranger.id)
+  end
+
   # --- audience integration ----------------------------------------------------
 
   test "lapsed inbound edges are excluded from event fan-out" do

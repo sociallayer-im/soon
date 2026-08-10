@@ -51,6 +51,16 @@ module Federation
                                            body_digest: FedInboundActivity.digest(body))
       # same id, different actor or type: a replay/pre-claim, not a retry
       return reject(:activity_id_conflict, status: 403) if outcome == :conflict
+      if outcome == :duplicate && activity["type"] == "Follow"
+        # A re-sent Follow under a known id is the reconciliation probe
+        # (INTEROP §10.3): the sender is asking "does this edge still exist
+        # on your side?". The answer IS the re-run — handle_follow is
+        # idempotent and re-Accepts, which is the confirmation the prober is
+        # waiting for. Swallowing it as a duplicate would make every probe
+        # against a soon peer time out into a false lapse. Mastodon and
+        # Mobilizon re-Accept duplicate Follows the same way (verified live).
+        outcome = :retry
+      end
       if outcome == :duplicate
         Logging.log(:in, activity["type"], domain: @domain, status: "duplicate")
       else
