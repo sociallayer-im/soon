@@ -1,0 +1,29 @@
+config/routes.rb
+  s_448695a5d036bc::t_7a4241de07635f 54-57
+app/controllers/api/v1/discover_controller.rb
+  s_448695a5d036bc::t_dcdc04a4ea5ecd 27-36,39-42
+app/controllers/api/v1/groups_controller.rb
+  s_448695a5d036bc::t_7a66187d4e2a8b 107-111
+  s_448695a5d036bc::t_e28f87f0f6cf1f 2-3,10-22
+  s_448695a5d036bc::t_6c1f6ab1ac3dfe 23-24
+test/controllers/api/v1/groups_controller_test.rb
+  s_448695a5d036bc::t_c0a9113c021f03 123-206
+test/controllers/api/v1/discover_test.rb
+  s_448695a5d036bc::t_401d161e1fea76 24-27,29,31,36-49,54-55,68,81-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cfac579aa1ee5b987341854d8e853a8ecefa656d",
+  "prompts": {},
+  "sessions": {
+    "s_448695a5d036bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a66dea1-2099-416a-bee2-5d54030fb07f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
