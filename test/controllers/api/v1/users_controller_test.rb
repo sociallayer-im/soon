@@ -61,6 +61,33 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_not json_response.key?("email")
   end
 
+  # The phone number is PII on the same footing as the email, and `wechat` says
+  # which sign-in someone used — neither belongs on a profile page anyone can
+  # read. The frontend reads both off /users/me to decide the onboarding route.
+  test "show reveals own phone and wechat flag, and hides both from everyone else" do
+    user = create_user(phone: "+8613800138099", wechat_openid: "openid_#{unique_suffix}")
+    other = create_user
+
+    get "/api/v1/users/me", headers: auth_headers(user)
+    assert_response :success
+    assert_equal "+8613800138099", json_response["phone"]
+    assert_equal true, json_response["wechat"]
+
+    get "/api/v1/users/#{user.id}", headers: auth_headers(other)
+    assert_response :success
+    assert_not json_response.key?("phone")
+    assert_not json_response.key?("wechat")
+  end
+
+  # An account that never touched WeChat must report false, not nil — the
+  # frontend's phone step keys off it and `undefined` would read as "not a
+  # WeChat account" by accident rather than by answer.
+  test "the wechat flag is false for an account that signed in another way" do
+    get "/api/v1/users/me", headers: auth_headers(create_user)
+    assert_response :success
+    assert_equal false, json_response["wechat"]
+  end
+
   test "update rejects a name that is not a valid slug" do
     user = create_user
     patch "/api/v1/users/#{user.id}", params: { user: { name: "Not A Slug" } }, headers: auth_headers(user)

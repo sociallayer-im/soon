@@ -22,6 +22,10 @@ Rails.application.routes.draw do
       # Auth (no JWT required, except bind_email)
       post "auth/request_code",   to: "auth#request_code"
       post "auth/verify_code",    to: "auth#verify_code"
+      # CN only — both 404 unless PHONE_LOGIN_ENABLED=true.
+      post "auth/request_phone_code", to: "auth#request_phone_code"
+      post "auth/verify_phone_code",  to: "auth#verify_phone_code"
+      post "auth/bind_phone",         to: "auth#bind_phone"
       get  "auth/nonce",          to: "auth#nonce"
       post "auth/verify_wallet",  to: "auth#verify_wallet"
       post "auth/trusted_signin", to: "auth#trusted_signin"

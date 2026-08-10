@@ -91,5 +91,13 @@ secrets:
     - WECHAT_PAY_PUBLIC_KEY_ID
     - WECHAT_PAY_PUBLIC_KEY
     - WECHAT_PAY_MERCHANT_NAME
+    # SMS sign-in. PHONE_LOGIN_ENABLED is the gate — the three /auth phone
+    # endpoints 404 without it, so leaving it off ginger.yml is what keeps
+    # this CN-only. Aliyun credentials shared with semi-backend.
+    - PHONE_LOGIN_ENABLED
+    - ALIYUN_ACCESS_KEY_ID
+    - ALIYUN_ACCESS_KEY_SECRET
+    - ALIYUN_SMS_SIGN_NAME
+    - ALIYUN_SMS_TEMPLATE_CODE
 
 retain_containers: 5

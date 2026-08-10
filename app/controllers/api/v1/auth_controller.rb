@@ -1,12 +1,20 @@
 class Api::V1::AuthController < Api::BaseController
   # Everything here IS the login flow — only the bind_* actions run with a
   # session already in hand.
-  skip_before_action :authenticate!, except: %i[bind_email bind_wechat]
+  skip_before_action :authenticate!, except: %i[bind_email bind_phone bind_wechat]
 
   LOGIN_CONTEXT = "login".freeze
   # Binding an email to a wallet-first account uses its own context so a bind
   # code can never be replayed as a login code (or vice versa).
   BIND_CONTEXT = "bind_email".freeze
+  # Phone codes travel over a different channel to a different identifier, so
+  # they get their own context for the same reason: a code texted to a phone
+  # must not be redeemable as the email login code of whoever shares the digits.
+  PHONE_LOGIN_CONTEXT = "phone_login".freeze
+  # …and its bind counterpart, for the required "attach a phone number" step a
+  # WeChat sign-in goes through. Same split, same reason as BIND_CONTEXT.
+  BIND_PHONE_CONTEXT = "bind_phone".freeze
+  PHONE_CONTEXTS = [ PHONE_LOGIN_CONTEXT, BIND_PHONE_CONTEXT ].freeze
   # SIWE nonces are stored server-side (as AuthCodes) so a signed message can
   # only be redeemed once — nonce reuse/replay is rejected.
   SIWE_CONTEXT = "siwe_nonce".freeze
@@ -25,6 +33,22 @@ class Api::V1::AuthController < Api::BaseController
   # Bare hostname, optionally with a :port — matches how wagmi/viem's
   # `window.location.host` fills the SIWE domain field in local dev.
   LOCAL_SIWE_DOMAIN = /\A(localhost|127\.0\.0\.1)(:\d+)?\z/
+
+  # Mainland mobile numbers only, and only ever +86. The 签名 and 模板 registered
+  # with Aliyun are domestic ones; an international number would be accepted
+  # here, cost a message, and be rejected by the gateway — so it is refused up
+  # front. Widening this is a product decision that also needs 国际短信 enabled
+  # on the Aliyun account, not just a looser regex.
+  CN_MOBILE = /\A1[3-9]\d{9}\z/
+  CN_COUNTRY_CODE = "+86".freeze
+
+  # SMS costs money per message and is sent to a number the requester does not
+  # have to own, which makes an unthrottled endpoint a way to bill us for
+  # texting strangers. Both limits are enforced against the auth_codes table
+  # rather than a cache: production configures no cache store, and a limit that
+  # silently evaporates is worse than none.
+  PHONE_CODE_INTERVAL = 60.seconds
+  PHONE_CODE_HOURLY_LIMIT = 5
 
   # POST /api/v1/auth/request_code
   # Sends a one-time code to any well-formed email — unknown addresses sign UP
@@ -55,6 +79,52 @@ class Api::V1::AuthController < Api::BaseController
     user = User.find_or_create_by!(email: email)
     GroupInvite.auto_accept_ticket_invites_for(user)
     render_token user
+  end
+
+  # POST /api/v1/auth/request_phone_code
+  # The SMS counterpart of #request_code. CN-only and +86-only; see
+  # #phone_login_enabled? and CN_MOBILE. context=bind_phone mints a code for
+  # the bind flow instead.
+  def request_phone_code
+    return render_not_found unless phone_login_enabled?
+
+    phone = normalized_phone
+    return render_error("invalid phone number") if phone.blank?
+    return if rate_limited?(phone)
+
+    context = params[:context] == BIND_PHONE_CONTEXT ? BIND_PHONE_CONTEXT : PHONE_LOGIN_CONTEXT
+    AuthCode.active.for_recipient(phone).for_context(context).update_all(used_at: Time.current)
+    code = AuthCode.create!(
+      recipient: phone, recipient_type: "phone", context: context,
+      code: generated_code
+    )
+    # Synchronous, like the emailed code: a gateway rejection (throttled,
+    # template under review, account out of balance) has to reach the person
+    # waiting for the text, not a log nobody reads.
+    SmsSender.send_login_code(phone: phone, code: code.code)
+    render json: { message: "Code sent" }
+  rescue SmsSender::Error => e
+    # The code was already minted and the priors already burned. Leave it
+    # active — the number may well have received an earlier attempt, and a
+    # valid code the user can still type is better than forcing a retry that
+    # is rate-limited for the next minute.
+    Rails.logger.error("[auth] SMS send failed for #{phone}: #{e.message}")
+    render_error("Failed to send SMS: #{e.message}", status: :bad_gateway)
+  end
+
+  # POST /api/v1/auth/verify_phone_code — signs in, creating the account on
+  # first use. A phone-first account has no email and no name, so the frontend
+  # routes it to /register exactly as it does a WeChat one.
+  def verify_phone_code
+    return render_not_found unless phone_login_enabled?
+
+    phone = normalized_phone
+    return render_error("invalid phone number") if phone.blank?
+
+    code = consume_code!(recipient: phone, context: PHONE_LOGIN_CONTEXT, attempt: params[:code])
+    return unless code
+
+    render_token User.find_or_create_by!(phone: phone)
   end
 
   # GET /api/v1/auth/nonce — mints a single-use SIWE nonce.
@@ -134,6 +204,28 @@ class Api::V1::AuthController < Api::BaseController
 
     current_user.update!(email: email)
     GroupInvite.auto_accept_ticket_invites_for(current_user)
+    render json: UserBlueprint.render(current_user, view: :self)
+  end
+
+  # POST /api/v1/auth/bind_phone — attaches a code-verified mobile number to the
+  # account already signed in. Structurally #bind_email, including the merge:
+  # this is the step a WeChat sign-in is REQUIRED to complete, so a number that
+  # already has its own account (from an earlier SMS sign-in) has to resolve to
+  # one account rather than dead-end the only path forward.
+  def bind_phone
+    return render_not_found unless phone_login_enabled?
+    return render_error("phone is already set") if current_user.phone.present?
+
+    phone = normalized_phone
+    return render_error("invalid phone number") if phone.blank?
+    return unless consume_code!(recipient: phone, context: BIND_PHONE_CONTEXT, attempt: params[:code])
+
+    if (existing = User.find_by(phone: phone))
+      return render_error("this phone number is already in use") unless mergeable?(current_user, existing)
+      return render_token(merge_wechat_account!(current_user, existing), merged: true)
+    end
+
+    current_user.update!(phone: phone)
     render json: UserBlueprint.render(current_user, view: :self)
   end
 
@@ -223,9 +315,9 @@ class Api::V1::AuthController < Api::BaseController
   # and the frontend sends the user straight to /register to pick it, so a blank
   # name means "signed in moments ago, never finished signing up" — exactly the
   # window this is for. Once a name is set the account is a real one and binding
-  # an in-use address goes back to being an error. (This is also why the email
-  # question has to come BEFORE the username step: picking a name closes the
-  # window.)
+  # an in-use address goes back to being an error. (This is also why both the
+  # phone and the email question come BEFORE the username step: picking a name
+  # closes the window for both.)
   #
   # Deliberately restricted to WeChat-first accounts. Nothing server-side
   # requires a name before writing — EventPolicy#create? never looks at it — so
@@ -245,11 +337,19 @@ class Api::V1::AuthController < Api::BaseController
   # the throwaway one. Order matters: both identity columns are uniquely
   # indexed, so `from` has to be gone before `into` can take them.
   def merge_wechat_account!(from, into)
-    openid = from.wechat_openid
-    unionid = from.wechat_unionid
+    # A WeChat account can already hold a verified phone by the time it gets
+    # here: binding the number is the FIRST onboarding step and the email
+    # question comes after it. Dropping `from` without carrying that across
+    # would silently discard a number the user has just proved they own.
+    carry = {
+      wechat_openid: from.wechat_openid,
+      wechat_unionid: from.wechat_unionid,
+      phone: (from.phone if into.phone.blank?)
+    }.compact
+
     User.transaction do
       from.destroy!
-      into.update!(wechat_openid: openid, wechat_unionid: unionid)
+      into.update!(carry)
     end
     GroupInvite.auto_accept_ticket_invites_for(into)
     into
@@ -273,6 +373,63 @@ class Api::V1::AuthController < Api::BaseController
 
   def normalized_email
     params[:email].to_s.strip.downcase
+  end
+
+  # Deployment gate, the same shape as #wechat_pay_enabled?: CN sets it, SG
+  # leaves it unset and both endpoints 404 as if the routes didn't exist. The
+  # 签名 is a CN company's and the numbers are domestic, so there is nothing for
+  # the international deployment to switch on.
+  def phone_login_enabled? = ENV["PHONE_LOGIN_ENABLED"] == "true"
+
+  # Accepts what people actually type — "138 0013 8000", "+86 13800138000",
+  # "8613800138000" — and returns a single canonical "+8613800138000", or nil
+  # if it isn't a mainland mobile. Canonical form matters twice over: it is the
+  # AuthCode recipient (so the code requested must be the code verified) and
+  # the uniquely-indexed users.phone (so one person is one row however they
+  # typed it that day).
+  def normalized_phone
+    raw = params[:phone].to_s.gsub(/[\s\-()]/, "")
+
+    digits =
+      if raw.start_with?("+")
+        # An explicit country code has to be +86. Without this check
+        # "+14155552671" — a perfectly ordinary US number — is eleven digits
+        # that satisfy CN_MOBILE by coincidence, and we would try to text it.
+        return nil unless raw.start_with?(CN_COUNTRY_CODE)
+        raw.delete_prefix(CN_COUNTRY_CODE)
+      elsif raw.length > 11 && raw.start_with?("86")
+        raw.delete_prefix("86")
+      else
+        raw
+      end
+
+    return nil unless digits.match?(CN_MOBILE)
+
+    "#{CN_COUNTRY_CODE}#{digits}"
+  end
+
+  # Renders the 429 and returns true when the number has asked too recently or
+  # too often. Counts every code minted for the number, not just live ones —
+  # requesting a new code marks the previous one used, so the `active` scope
+  # would see one row no matter how many were sent.
+  # Counts login and bind codes together: it is one number, one gateway and one
+  # bill, and a per-context limit would just be two ways to text the same person.
+  def rate_limited?(phone)
+    scope = AuthCode.for_recipient(phone).where(context: PHONE_CONTEXTS)
+
+    if scope.where(created_at: PHONE_CODE_INTERVAL.ago..).exists?
+      render json: { error: "Please wait a moment before requesting another code" },
+        status: :too_many_requests
+      return true
+    end
+
+    if scope.where(created_at: 1.hour.ago..).count >= PHONE_CODE_HOURLY_LIMIT
+      render json: { error: "Too many code requests, please try again later" },
+        status: :too_many_requests
+      return true
+    end
+
+    false
   end
 
   def siwe_domain_allowed?(domain)
