@@ -2,6 +2,81 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-10 — homepage curation, admin notifications, and a 500 nobody saw
+
+Three changes that arrived together because each uncovered the next.
+
+### `users.admin` and `memberships.admin_notification`
+
+`users.admin` is a platform administrator flag. The repo already had one marker
+for this — `"admin"` in the `permissions` array — so `platform_admin?` now
+answers to either and nothing needed backfilling for authorization. Only the
+*notification* recipient list (`User.admin_emails`) reads the column alone:
+being able to remove a popup city is not a request for mail about every group
+that signs up. The column is absent from `UsersController`'s permit list, which
+is a closed allowlist, so no request from any client can grant or revoke it —
+it is set in the database by hand.
+
+`memberships.admin_notification` is the per-admin opt-out for "someone who is
+not a group admin created an event in your group". It defaults to true, unlike
+sails' column of the same name, which defaulted false and so reached nobody
+until each manager opted in.
+
+Both fan-outs (`GroupRegisteredMailJob`, `EventSubmittedMailJob`) run in jobs
+rather than the request, so a mail failure cannot fail the group or event
+creation that triggered it.
+
+Two deliberate narrowings on the event notice: drafts do not notify (a draft is
+visible to nobody and asks nothing of a reviewer), and the "is the creator an
+admin" test uses direct membership rather than `GroupPolicy#manage?` — a
+platform admin manages every group but is a stranger to almost all of them, and
+their event is exactly the kind a group's owners want to hear about.
+
+**Operational note.** The `true` default is right for a new deployment and
+wrong for an established one. On `sola.day` the migration backfilled 841
+owner/manager rows to subscribed; replaying the last 30 days of real traffic
+against the new rule showed 168 of 279 events would have triggered mail, or
+~1,079 emails a month to 463 people who never asked for it. Those 841 rows were
+set to `false` immediately after the deploy, by decision, leaving member rows at
+their default so a later promotion still behaves as designed. **Any future
+deployment of this migration onto a populated database needs the same
+consideration.**
+
+### `pin` — the homepage community grid
+
+`GET /discover` gained `communities`: active groups tagged `pin`, capped at 40.
+
+A separate tag from `top`/`featured` because it curates a separate surface —
+those two drive the popup-city list and carousel, `pin` drives the community
+grid — and a group commonly belongs on one and not the other. It is in
+`PRIVILEGED_TAGS` for the same reason as the others: it decides what appears on
+the front page, so leaving it writable by a group's own owner would let any
+group put itself there.
+
+Curating by tag created a problem the uncurated version did not have: every
+list the frontend could reach returned only tagged groups, so a group with no
+tag appeared nowhere and could never be tagged through the UI.
+`GET /groups/directory` is the way out — public, paginated, every active group
+regardless of tags, rendered `:card` because the admin controls read
+`group_tags` off it. Distinct from `#index`, which is "the groups I belong to"
+and needs a token. Its route is declared *before* `resources :groups` or
+`/groups/directory` resolves to `#show` with id `"directory"`.
+
+### `vouchers#index` 500 on `group_handle`
+
+`PG::AmbiguousColumn`. Both `vouchers` and `badge_classes` have a `counter`
+column and the filter referenced it unqualified. Harmless until the
+`group_handle` branch joins `badge_classes`, at which point Postgres cannot
+resolve the name. The ambiguity is in the SQL rather than the data, so it fired
+with or without rows — **every** group's "Sending" tab was down, on both
+deployments, not one.
+
+It shipped because nothing exercised `group_handle` at all: the `sender_handle`
+and unfiltered paths never join, so they stayed green and hid it. The lesson is
+narrower than "add tests" — a `where` written against one code path becomes
+wrong when a *different* branch adds a join, and only a test of that branch can
+see it.
+
 ## 2026-08-08 (later) — orders remember what happened to them
 
 `ticketing_activities` / `Ticketing::Activity`: an append-only record of the
