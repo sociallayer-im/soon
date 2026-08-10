@@ -21,6 +21,21 @@ class SmsSender
   OPEN_TIMEOUT = 5
   READ_TIMEOUT = 10
 
+  # The 签名, deliberately NOT read from the environment like everything else
+  # here.
+  #
+  # ginger's secret injection cannot carry a non-ASCII value: it reads
+  # .env.cn.production's UTF-8 bytes as latin-1 and re-encodes them, so
+  # "深圳市岑赫科技" arrives in the container double-encoded and every send comes
+  # back isv.SMS_SIGNATURE_ILLEGAL — 该账号下找不到对应签名 (verified against CN
+  # production 2026-08-11, where the identical probe locally answered
+  # MOBILE_NUMBER_ILLEGAL). The 签名 is public, not a credential, so the safe
+  # place for it is the source; semi-backend hardcodes it for the same reason.
+  #
+  # Changing it means changing this constant. Adding ALIYUN_SMS_SIGN_NAME back
+  # to ginger.cn.yml's inject list will silently reintroduce the bug.
+  SIGN_NAME = "深圳市岑赫科技".freeze
+
   class Error < StandardError; end
   # Configuration is missing — distinct from Aliyun answering "no", because
   # this one is our fault and is never fixed by retrying.
@@ -42,15 +57,14 @@ class SmsSender
 
       post(
         "PhoneNumbers" => phone.to_s.delete_prefix("+"),
-        "SignName" => sign_name,
+        "SignName" => SIGN_NAME,
         "TemplateCode" => template_code,
         "TemplateParam" => JSON.generate({ "code" => code.to_s })
       )
     end
 
     def configured?
-      access_key_id.present? && access_key_secret.present? &&
-        sign_name.present? && template_code.present?
+      access_key_id.present? && access_key_secret.present? && template_code.present?
     end
 
     private
@@ -126,7 +140,6 @@ class SmsSender
     # require a redeploy rather than a restart.
     def access_key_id = ENV["ALIYUN_ACCESS_KEY_ID"].presence || ENV["ACCESS_KEY_ID"]
     def access_key_secret = ENV["ALIYUN_ACCESS_KEY_SECRET"].presence || ENV["ACCESS_KEY_SECRET"]
-    def sign_name = ENV["ALIYUN_SMS_SIGN_NAME"]
     def template_code = ENV["ALIYUN_SMS_TEMPLATE_CODE"]
   end
 end

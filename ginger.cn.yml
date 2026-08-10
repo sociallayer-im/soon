@@ -97,7 +97,9 @@ secrets:
     - PHONE_LOGIN_ENABLED
     - ALIYUN_ACCESS_KEY_ID
     - ALIYUN_ACCESS_KEY_SECRET
-    - ALIYUN_SMS_SIGN_NAME
+    # NOT ALIYUN_SMS_SIGN_NAME. Injection mangles non-ASCII — the UTF-8 签名
+    # arrives double-encoded and every send fails with SMS_SIGNATURE_ILLEGAL.
+    # It lives in SmsSender::SIGN_NAME instead; see the comment there.
     - ALIYUN_SMS_TEMPLATE_CODE
 
 retain_containers: 5
