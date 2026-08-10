@@ -24,17 +24,22 @@ class Api::V1::DiscoverController < Api::BaseController
                   .where(visibility: "public", status: "published")
                   .where("end_time >= ?", Time.current).order(:start_time).limit(20)
 
-    # Every active community, not a curated slice — this is the homepage's
-    # "社区" list, and a group should appear there by existing, not by being
-    # tagged. `groups` above stays tag-gated because it feeds curation
-    # (featured/top); the two answer different questions and a group can be in
-    # one without the other.
+    # The homepage's "社区" list: curated by the `pin` tag, capped at 40.
+    #
+    # A separate tag from `top`/`featured` because it answers a separate
+    # question — those two drive the popup-city carousel and list, while `pin`
+    # only decides what appears in the community grid. A group can be in either
+    # without the other.
+    #
+    # The full, uncurated list lives at GroupsController#directory; this is
+    # deliberately not "every group" so the homepage stays a fixed size no
+    # matter how many groups exist.
     #
     # Ordered oldest-first, which is simply the order the API returns: the
-    # frontend renders the list as given rather than re-sorting. The limit is a
-    # guard against an unbounded homepage payload, not a product decision — if
-    # a deployment ever passes it, this needs paging rather than a bigger number.
-    communities = Group.where(active: true).order(:created_at).limit(100)
+    # frontend renders the list as given rather than re-sorting.
+    communities = Group.where(active: true)
+                       .where("group_tags && ARRAY['pin']::varchar[]")
+                       .order(:created_at).limit(40)
 
     render json: {
       groups: JSON.parse(GroupBlueprint.render(featured)),

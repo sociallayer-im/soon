@@ -21,28 +21,38 @@ class DiscoverTest < ActionDispatch::IntegrationTest
     assert_includes json_response["events"].map { |e| e["id"] }, upcoming.id
   end
 
-  # `communities` answers "what groups exist", `groups` answers "what did a
-  # curator pick". A plain untagged group belongs in the first and not the
-  # second — that distinction is the whole reason the field was added.
-  test "communities lists every active group, tagged or not" do
+  # `communities` is the homepage grid, curated by `pin`. It is deliberately
+  # not "every group": the homepage stays a fixed size however many exist, and
+  # the uncurated list lives at /groups/directory instead.
+  test "communities is curated by the pin tag" do
     owner = create_user
+    pinned = create_group(owner: owner, group_tags: ["pin"])
     plain = create_group(owner: owner)
-    featured = create_group(owner: owner, group_tags: ["featured"])
-    popup = create_group(owner: owner, group_tags: ["top"])
+    top_only = create_group(owner: owner, group_tags: ["top"])
 
     get "/api/v1/discover"
     assert_response :success
     ids = json_response["communities"].map { |g| g["id"] }
-    assert_includes ids, plain.id
-    assert_includes ids, featured.id
-    assert_includes ids, popup.id
-    assert_not_includes json_response["groups"].map { |g| g["id"] }, plain.id
+    assert_includes ids, pinned.id
+    assert_not_includes ids, plain.id
+    assert_not_includes ids, top_only.id
+  end
+
+  # pin and top/featured curate different surfaces, so tagging one must not
+  # move a group onto the other.
+  test "a pinned group does not become a popup city" do
+    owner = create_user
+    pinned = create_group(owner: owner, group_tags: ["pin"])
+
+    get "/api/v1/discover"
+    assert_not_includes json_response["popup_cities"].map { |g| g["id"] }, pinned.id
+    assert_not_includes json_response["groups"].map { |g| g["id"] }, pinned.id
   end
 
   test "communities excludes inactive groups" do
     owner = create_user
-    live = create_group(owner: owner)
-    frozen = create_group(owner: owner)
+    live = create_group(owner: owner, group_tags: ["pin"])
+    frozen = create_group(owner: owner, group_tags: ["pin"])
     frozen.update!(active: false)
 
     get "/api/v1/discover"
@@ -55,7 +65,7 @@ class DiscoverTest < ActionDispatch::IntegrationTest
   # view — rendering the default view leaves them undefined on the client.
   test "communities carries the member and event counts the card renders" do
     owner = create_user
-    group = create_group(owner: owner)
+    group = create_group(owner: owner, group_tags: ["pin"])
 
     get "/api/v1/discover"
     entry = json_response["communities"].find { |g| g["id"] == group.id }
@@ -68,8 +78,8 @@ class DiscoverTest < ActionDispatch::IntegrationTest
   # so the order the API picks is the order on screen.
   test "communities is ordered oldest first" do
     owner = create_user
-    first = create_group(owner: owner)
-    second = create_group(owner: owner)
+    first = create_group(owner: owner, group_tags: ["pin"])
+    second = create_group(owner: owner, group_tags: ["pin"])
 
     get "/api/v1/discover"
     ids = json_response["communities"].map { |g| g["id"] }

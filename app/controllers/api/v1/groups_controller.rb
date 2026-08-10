@@ -1,10 +1,25 @@
 class Api::V1::GroupsController < Api::BaseController
-  # Group pages are public.
-  skip_before_action :authenticate!, only: :show
+  # Group pages and the public directory are public.
+  skip_before_action :authenticate!, only: %i[show directory]
   before_action :set_group, only: %i[update destroy freeze send_email]
 
   def index
     render_collection current_user.groups, blueprint: GroupBlueprint
+  end
+
+  # GET /api/v1/groups/directory — every active group, paginated.
+  #
+  # Distinct from #index, which is "the groups I belong to" and needs a token.
+  # This is the public browse-all list behind /communities, and the only place
+  # an admin can reach a group that carries no curation tag yet — the homepage
+  # payload only ever returns tagged ones, so an untagged group was previously
+  # unreachable from any list and could never be tagged through the UI.
+  #
+  # :card, because the cards show member/event counts and the tag state the
+  # admin controls read.
+  def directory
+    render_collection Group.where(active: true).order(:created_at),
+      blueprint: GroupBlueprint, view: :card
   end
 
   # :id accepts a TSID or the group's slug (Group.resolve!).
@@ -89,9 +104,11 @@ class Api::V1::GroupsController < Api::BaseController
     parent && GroupPolicy.new(current_user, parent).manage?
   end
 
-  # Tags a group cannot grant itself — homepage curation is a deploy-side
-  # decision (set directly in the DB / console), not self-service.
-  PRIVILEGED_TAGS = %w[featured top].freeze
+  # Tags a group cannot grant itself — homepage curation belongs to platform
+  # admins, not to whoever owns the group. `pin` is here for the same reason as
+  # the other two: it decides what shows in the homepage community grid, so
+  # leaving it open would let any group put itself on the front page.
+  PRIVILEGED_TAGS = %w[featured top pin].freeze
 
   def group_params
     permitted = params.require(:group).permit(:name, :nickname, :timezone, :location,

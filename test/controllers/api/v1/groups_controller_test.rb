@@ -120,6 +120,90 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  # `pin` decides what appears in the homepage community grid, so it is
+  # privileged for the same reason as featured/top — otherwise any group owner
+  # could put their own group on the front page.
+  test "update strips the pin tag from a non-admin" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { group_tags: ["pin", "popup"] } },
+      headers: auth_headers(owner)
+
+    assert_response :success
+    assert_equal ["popup"], group.reload.group_tags
+  end
+
+  test "update lets a platform admin set the pin tag" do
+    admin = create_user(admin: true)
+    group = create_group(owner: admin)
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { group_tags: ["pin"] } },
+      headers: auth_headers(admin)
+
+    assert_response :success
+    assert_equal ["pin"], group.reload.group_tags
+  end
+
+  # An owner editing unrelated fields must not silently drop a pin an admin set.
+  test "a non-admin update keeps an existing pin tag" do
+    owner = create_user
+    group = create_group(owner: owner, group_tags: ["pin"])
+
+    patch "/api/v1/groups/#{group.id}", params: { group: { group_tags: ["popup"] } },
+      headers: auth_headers(owner)
+
+    assert_response :success
+    assert_equal ["pin", "popup"].sort, group.reload.group_tags.sort
+  end
+
+  # ── directory ───────────────────────────────────────────────────────────────
+
+  test "directory is public and lists every active group regardless of tags" do
+    owner = create_user
+    plain = create_group(owner: owner)
+    pinned = create_group(owner: owner, group_tags: ["pin"])
+
+    get "/api/v1/groups/directory"
+
+    assert_response :success
+    ids = json_response["data"].map { |g| g["id"] }
+    assert_includes ids, plain.id
+    assert_includes ids, pinned.id
+  end
+
+  test "directory excludes inactive groups" do
+    owner = create_user
+    live = create_group(owner: owner)
+    frozen = create_group(owner: owner)
+    frozen.update!(active: false)
+
+    get "/api/v1/groups/directory"
+    ids = json_response["data"].map { |g| g["id"] }
+    assert_includes ids, live.id
+    assert_not_includes ids, frozen.id
+  end
+
+  # The admin tag controls read group_tags off these cards, and the cards show
+  # member/event counts — all :card-view fields.
+  test "directory renders the card view the admin controls need" do
+    owner = create_user
+    group = create_group(owner: owner, group_tags: ["pin"])
+
+    get "/api/v1/groups/directory"
+    entry = json_response["data"].find { |g| g["id"] == group.id }
+    assert_equal ["pin"], entry["group_tags"]
+    assert entry.key?("memberships_count")
+    assert entry.key?("events_count")
+  end
+
+  # "directory" must not be swallowed by the /groups/:id route.
+  test "directory is not shadowed by the group show route" do
+    get "/api/v1/groups/directory"
+    assert_response :success
+    assert json_response.key?("data"), "expected a paginated collection, not a single group"
+  end
+
   test "update accepts tag/permission/banner fields but strips privileged group_tags" do
     owner = create_user
     group = create_group(owner: owner, group_tags: ["top"])

@@ -51,6 +51,10 @@ Rails.application.routes.draw do
       get "group_invites/pending", to: "group_invites#pending"
       get "group_invites/:id", to: "group_invites#show"
 
+      # Before `resources :groups`, or /groups/directory resolves to #show with
+      # id "directory".
+      get "groups/directory", to: "groups#directory"
+
       resources :groups do
         member do
           post :freeze
