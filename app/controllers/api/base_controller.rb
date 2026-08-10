@@ -37,6 +37,12 @@ class Api::BaseController < ActionController::API
   # installed, which WechatPaySetting.platform_default is what answers.
   def wechat_pay_enabled? = ENV["WECHAT_PAY_ENABLED"] == "true"
 
+  # The third deployment gate: CN sets it, SG leaves it unset. Lives here rather
+  # than in AuthController because UsersController needs it too — a WeChat
+  # account must bind a phone before it can pick a username, and that rule only
+  # applies where phone sign-in exists.
+  def phone_login_enabled? = ENV["PHONE_LOGIN_ENABLED"] == "true"
+
   def require_wechat_pay_enabled!
     render_not_found unless wechat_pay_enabled?
   end

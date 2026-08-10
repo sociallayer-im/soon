@@ -37,6 +37,10 @@ class Api::V1::UsersController < Api::BaseController
       return render_error("name can't be blank")
     end
 
+    if params[:user]&.key?(:name) && naming_blocked_pending_phone?
+      return render_error("bind a phone number first")
+    end
+
     if current_user.update(user_params)
       render json: UserBlueprint.render(current_user, view: :self)
     else
@@ -45,6 +49,25 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   private
+
+  # A WeChat account has to finish binding its phone before it can take a
+  # username, and this is where that is actually enforced — the frontend's
+  # redirect chain only suggests the order, and typing /register bypasses it.
+  #
+  # It matters more than an ordering preference. A blank `name` is the whole
+  # merge window (AuthController#mergeable?): while it is blank, binding a phone
+  # that already has its own account folds the two together, and once it is set
+  # that same bind hard-fails. Since the phone step cannot be skipped, naming
+  # first would leave the user permanently stuck on a screen with no way past.
+  #
+  # Only the FIRST naming is blocked. Once a name exists the window is closed
+  # anyway, so refusing a later edit would cost something and protect nothing.
+  def naming_blocked_pending_phone?
+    phone_login_enabled? &&
+      current_user.name.blank? &&
+      current_user.phone.blank? &&
+      (current_user.wechat_openid.present? || current_user.wechat_unionid.present?)
+  end
 
   # email is intentionally excluded — it's the login identity, not updatable here.
   def user_params

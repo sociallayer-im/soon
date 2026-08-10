@@ -375,12 +375,6 @@ class Api::V1::AuthController < Api::BaseController
     params[:email].to_s.strip.downcase
   end
 
-  # Deployment gate, the same shape as #wechat_pay_enabled?: CN sets it, SG
-  # leaves it unset and both endpoints 404 as if the routes didn't exist. The
-  # 签名 is a CN company's and the numbers are domestic, so there is nothing for
-  # the international deployment to switch on.
-  def phone_login_enabled? = ENV["PHONE_LOGIN_ENABLED"] == "true"
-
   # Accepts what people actually type — "138 0013 8000", "+86 13800138000",
   # "8613800138000" — and returns a single canonical "+8613800138000", or nil
   # if it isn't a mainland mobile. Canonical form matters twice over: it is the

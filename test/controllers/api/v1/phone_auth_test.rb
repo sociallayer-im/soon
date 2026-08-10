@@ -314,6 +314,82 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert_equal "+8613800138008", target.reload.phone, "the verified number was dropped by the merge"
   end
 
+  # --- phone before username ----------------------------------------------
+
+  # Enforced server-side, not just by the frontend's redirect chain: /register
+  # is reachable by typing it, and a name set early closes the merge window for
+  # a bind step that cannot be skipped.
+  test "a WeChat account cannot take a username before binding a phone" do
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
+
+    patch "/api/v1/users/#{wechat.id}",
+      params: { user: { name: "too_early" } }, headers: auth_headers(wechat)
+
+    assert_response :unprocessable_entity
+    assert_nil wechat.reload.name
+  end
+
+  test "the same account can take a username once the phone is bound" do
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
+
+    post "/api/v1/auth/request_phone_code", params: { phone: "13800138010", context: "bind_phone" }
+    post "/api/v1/auth/bind_phone",
+      params: { phone: "13800138010", code: AuthCode.last.code }, headers: auth_headers(wechat)
+    assert_response :success
+
+    patch "/api/v1/users/#{wechat.id}",
+      params: { user: { name: "now_allowed" } }, headers: auth_headers(wechat)
+
+    assert_response :success
+    assert_equal "now_allowed", wechat.reload.name
+  end
+
+  # The rule is about WeChat's guarantee that the user is a mainland one with a
+  # number. An email or wallet account carries no such guarantee and must not be
+  # caught by it.
+  test "an email account is unaffected by the phone requirement" do
+    user = User.create!(email: "nophone#{unique_suffix}@test.com")
+
+    patch "/api/v1/users/#{user.id}",
+      params: { user: { name: "email_user_#{unique_suffix}" } }, headers: auth_headers(user)
+
+    assert_response :success
+    assert_not_nil user.reload.name
+  end
+
+  test "editing other fields still works while the phone is outstanding" do
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
+
+    patch "/api/v1/users/#{wechat.id}",
+      params: { user: { bio: "still me" } }, headers: auth_headers(wechat)
+
+    assert_response :success
+    assert_equal "still me", wechat.reload.bio
+  end
+
+  # Once a name exists the merge window is shut regardless, so a later edit has
+  # nothing left to protect and refusing it would only break renaming.
+  test "an already-named WeChat account can still edit its name" do
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}", name: "named_already")
+
+    patch "/api/v1/users/#{wechat.id}",
+      params: { user: { name: "renamed_ok" } }, headers: auth_headers(wechat)
+
+    assert_response :success
+    assert_equal "renamed_ok", wechat.reload.name
+  end
+
+  test "the requirement does not exist on a deployment without phone sign-in" do
+    ENV.delete("PHONE_LOGIN_ENABLED")
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
+
+    patch "/api/v1/users/#{wechat.id}",
+      params: { user: { name: "sg_user_#{unique_suffix}" } }, headers: auth_headers(wechat)
+
+    assert_response :success
+    assert_not_nil wechat.reload.name
+  end
+
   # --- gateway failure ----------------------------------------------------
 
   test "a gateway rejection reaches the caller instead of a silent success" do
