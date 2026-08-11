@@ -1,0 +1,21 @@
+app/services/federation/inbox_service.rb
+  s_e9ed806a3d225c::t_dd1956cecd0d66 197-207,210-217
+test/integration/federation_reconciliation_test.rb
+  s_e9ed806a3d225c::t_b57bd491d194d5 313-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b6d8268281b2553fb8697f6bc9562bc254209ce5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
