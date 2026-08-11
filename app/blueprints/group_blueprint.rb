@@ -35,6 +35,9 @@ class GroupBlueprint < Blueprinter::Base
     field :fed_followers_count do |group|
       Federation.enabled? ? FedFollow.accepted.inbound.where(local: group).count : 0
     end
+    # Public either way — it is what WebFinger answers on — and the settings
+    # page needs it to show the binding without a second request.
+    field :custom_domain
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint
