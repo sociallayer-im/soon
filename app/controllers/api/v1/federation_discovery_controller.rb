@@ -83,15 +83,76 @@ module Api
       # Destination side of a migration: this group claims a previous identity
       # in alsoKnownAs, which is what lets the old side's Move verify.
       def add_alias
-        group = Group.find_by(id: params[:id]) or return render_not_found
-        authorize group, :manage?, policy_class: GroupPolicy
-        uri = params[:uri].to_s
-        unless uri.match?(%r{\Ahttps?://\S+\z})
-          return render_error("uri must be an http(s) URL")
-        end
+        group = managed_group or return
+        uri = alias_uri(group) or return
         aliases = Array(group.fed_also_known_as) | [uri]
         group.update!(fed_also_known_as: aliases)
-        render json: {also_known_as: aliases}, status: :created
+        render json: alias_json(group), status: :created
+      end
+
+      # GET /api/v1/federation/groups/:id/aliases
+      def aliases
+        group = managed_group or return
+        render json: alias_json(group)
+      end
+
+      # DELETE /api/v1/federation/groups/:id/aliases?uri=
+      def remove_alias
+        group = managed_group or return
+        group.update!(fed_also_known_as: Array(group.fed_also_known_as) - [params[:uri].to_s])
+        render json: alias_json(group)
+      end
+
+      # --- custom domain (PLAN §9.4) -----------------------------------------
+
+      # GET /api/v1/federation/groups/:id/domain
+      def domain
+        group = managed_group or return
+        render json: Federation::DomainBindingService.status(group)
+      end
+
+      # POST /api/v1/federation/groups/:id/domain {domain} — claim + challenge
+      def claim_domain
+        group = managed_group or return
+        render json: Federation::DomainBindingService.claim!(group, params[:domain]), status: :created
+      rescue Federation::DomainBindingService::Error, ActiveRecord::RecordInvalid => e
+        render_error(e.message, status: :unprocessable_entity)
+      end
+
+      # POST /api/v1/federation/groups/:id/domain/verify — check DNS, bind
+      def verify_domain
+        group = managed_group or return
+        render json: Federation::DomainBindingService.verify!(group)
+      rescue Federation::DomainBindingService::Error, ActiveRecord::RecordInvalid => e
+        render_error(e.message, status: :unprocessable_entity)
+      end
+
+      # DELETE /api/v1/federation/groups/:id/domain
+      def unbind_domain
+        group = managed_group or return
+        render json: Federation::DomainBindingService.unbind!(group)
+      end
+
+      # --- the signed-in user's own aliases ----------------------------------
+      # The receiving half of a Move *into* this account: a user consolidating
+      # a remote identity here declares it before the remote side broadcasts.
+
+      # GET /api/v1/federation/profile/aliases
+      def profile_aliases
+        render json: alias_json(current_user)
+      end
+
+      # POST /api/v1/federation/profile/aliases {uri}
+      def add_profile_alias
+        uri = alias_uri(current_user) or return
+        current_user.update!(fed_also_known_as: Array(current_user.fed_also_known_as) | [uri])
+        render json: alias_json(current_user), status: :created
+      end
+
+      # DELETE /api/v1/federation/profile/aliases?uri=
+      def remove_profile_alias
+        current_user.update!(fed_also_known_as: Array(current_user.fed_also_known_as) - [params[:uri].to_s])
+        render json: alias_json(current_user)
       end
 
       # POST /api/v1/federation/groups/:id/move {target}
@@ -112,6 +173,38 @@ module Api
 
       def require_federation!
         render_error("federation is disabled", status: :not_found) unless Federation.enabled?
+      end
+
+      # Renders 404 and returns nil when absent — callers use `or return`, so
+      # a missing group never falls through to the action body.
+      def managed_group
+        group = Group.find_by(id: params[:id])
+        return render_not_found && nil if group.nil?
+        authorize group, :manage?, policy_class: GroupPolicy
+        group
+      end
+
+      def alias_uri(actor)
+        uri = params[:uri].to_s.strip
+        unless uri.match?(%r{\Ahttps?://\S+\z})
+          render_error("uri must be an http(s) URL")
+          return nil
+        end
+        # Claiming your own id as a previous identity is meaningless and would
+        # make a self-Move look attested.
+        if uri == Federation::Urls.actor_url(actor)
+          render_error("that is this actor's own id")
+          return nil
+        end
+        uri
+      end
+
+      def alias_json(actor)
+        {
+          also_known_as: Array(actor.fed_also_known_as),
+          actor_uri: Federation::Urls.actor_url(actor),
+          moved_to: actor.fed_moved_to
+        }
       end
 
       def actor_json(actor)
