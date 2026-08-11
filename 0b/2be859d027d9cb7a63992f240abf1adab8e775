@@ -1,0 +1,31 @@
+test/integration/federation_domain_binding_test.rb
+  s_e9ed806a3d225c::t_52f2685e783bd4 1-60,62-217
+  s_e9ed806a3d225c::t_e3c0b8997becc6 61
+db/migrate/20260812100000_add_custom_domain_verification.rb
+  s_e9ed806a3d225c::t_104a84e1930689 1-11
+app/services/federation/domain_binding_service.rb
+  s_e9ed806a3d225c::t_56235e034313d9 1-128
+app/controllers/api/v1/federation_discovery_controller.rb
+  s_e9ed806a3d225c::t_698e969c2366cf 86-87,90-155
+  s_e9ed806a3d225c::t_dbb8fd3baac5d3 178-209
+config/routes.rb
+  s_e9ed806a3d225c::t_5614f4b3fe3c7b 71,73,75-81
+db/schema.rb
+  s_e9ed806a3d225c::t_84464545357a20 13,545-547,606,658,759,772-788,842,867,928-958
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0b2be859d027d9cb7a63992f240abf1adab8e775",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
