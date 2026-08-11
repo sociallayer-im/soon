@@ -310,6 +310,46 @@ class FederationReconciliationTest < ActionDispatch::IntegrationTest
                  "make every probe against a soon peer decay into a false lapse"
   end
 
+  test "a probe from a re-keyed sender adopts the edge held by its old actor row" do
+    key = OpenSSL::PKey::RSA.new(2048)
+    old_row, = create_fed_actor(public_key_pem: key.public_key.to_pem)
+    owner = create_user(name: "ro#{unique_suffix}")
+    group = create_group(name: "rg#{unique_suffix}", owner: owner)
+    edge = FedFollow.create!(local: group, fed_actor: old_row, direction: "inbound",
+                             state: "accepted", uri: "https://peer.example/follows/orig-#{unique_suffix}")
+
+    new_row, = create_fed_actor(public_key_pem: key.public_key.to_pem)
+    probe = {"@context" => Federation::JsonLd::AS, "id" => edge.uri, "type" => "Follow",
+             "actor" => new_row.uri, "object" => Federation::Urls.actor_url(group)}
+    perform_enqueued_jobs { post_signed_activity(new_row, key, probe) }
+    assert_response :accepted
+
+    edge.reload
+    assert_equal new_row.id, edge.fed_actor_id,
+                 "the edge must move to the row that is signing now, not collide on uri"
+    assert FedDelivery.any? { |d| d.payload["type"] == "Accept" &&
+                                  d.inbox_url == new_row.delivery_inbox_url },
+           "the probe must still be answered with an Accept"
+  end
+
+  test "a Follow reusing a foreign id is ignored" do
+    actor, key = create_fed_actor
+    stranger, = create_fed_actor
+    owner = create_user(name: "ro#{unique_suffix}")
+    group = create_group(name: "rg#{unique_suffix}", owner: owner)
+    other = create_group(name: "rh#{unique_suffix}", owner: owner)
+    edge = FedFollow.create!(local: other, fed_actor: stranger, direction: "inbound",
+                             state: "accepted", uri: "https://elsewhere.example/follows/x#{unique_suffix}")
+
+    hijack = {"@context" => Federation::JsonLd::AS, "id" => edge.uri, "type" => "Follow",
+              "actor" => actor.uri, "object" => Federation::Urls.actor_url(group)}
+    perform_enqueued_jobs { post_signed_activity(actor, key, hijack) }
+
+    edge.reload
+    assert_equal stranger.id, edge.fed_actor_id, "an id held for a different target must not be stolen"
+    assert_equal other, edge.local
+  end
+
   test "the dedup ledger tolerates a same-key re-keyed sender and rejects a different key" do
     key = OpenSSL::PKey::RSA.new(2048)
     old_row, = create_fed_actor(public_key_pem: key.public_key.to_pem)

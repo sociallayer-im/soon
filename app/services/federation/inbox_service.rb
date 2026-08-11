@@ -194,11 +194,27 @@ module Federation
         return :ignored
       end
 
-      follow = FedFollow.find_or_initialize_by(local: target, fed_actor: fed_actor, direction: "inbound")
+      # An id we already hold may live under an OLD actor row for the same
+      # peer (the sender re-keyed its canonical uri and is now probing its
+      # old Follow id from the new row — the inbox ledger has already checked
+      # that the signing key matches, FedInboundActivity.mismatch?). Adopt
+      # that edge rather than colliding with its uri.
+      follow = FedFollow.find_by(uri: activity["id"])
+      if follow && (follow.direction != "inbound" || follow.local != target)
+        Logging.log(:in, "Follow", domain: fed_actor.domain, status: "id_conflict")
+        return :ignored
+      end
+      follow ||= FedFollow.find_or_initialize_by(local: target, fed_actor: fed_actor, direction: "inbound")
       # a repeat Follow updates the stored uri and re-Accepts (Mastodon
       # re-sends Accept for duplicate follows)
-      follow.assign_attributes(uri: activity["id"], state: "accepted")
-      follow.save!
+      FedFollow.transaction do
+        # the adopted row moving onto this (local, actor, direction) triple
+        # must not trip the unique index on a stale sibling
+        FedFollow.where(local: target, fed_actor: fed_actor, direction: "inbound")
+                 .where.not(id: follow.id).destroy_all if follow.persisted?
+        follow.assign_attributes(uri: activity["id"], fed_actor: fed_actor, state: "accepted")
+        follow.save!
+      end
       OutboxService.accept_follow(target, fed_actor, activity)
       Logging.log(:in, "Follow", domain: fed_actor.domain, status: "accepted", target: target.name)
       :accepted
