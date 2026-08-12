@@ -203,10 +203,26 @@ B 上有 `nodeb`、`daospace`。
 > 自己的一面之词。对象 URL 是合同(老 event 链接仍可解析),活动 URL 是收据。
 
 页面 **`/event/<group>/setting` → 迁移社群**,按方向分成两半,顺序不能颠倒。
+入口只对该 group 的 manager/owner 显示。
+
+### 演示前必读:目标 group 要先手动建好
+
+**迁移不会在新服务器上凭空生出一个 group**,得先用常规入口把它建出来,再打开
+它自己的迁移页。迁入分支第一步就是把目标 id 解析成本站的一个 actor
+(`inbox_service.rb` `handle_move_to_local`),解析不到直接按
+`local_attestation_missing` 忽略——没有 group 就没有地方存「我曾是谁」这句声明,
+也就没有那一页可打开。新 handle 不必和老的一致。
+
+**Move 迁移的是身份和关注关系,不是数据。** 远端关注者被重指到新 id、老 event
+链接继续可解析;但老 group 的成员名单、events、评论**不会**跟过来,新 group
+就是个空壳。目前没有任何导出/导入通道来搬这部分——演示时要主动说明,否则观众
+会默认"整个社群搬家了"。
 
 ### 6a. Sola → Sola(daospace 从 A 迁到 B)
 
-1. **目的地先声明前身**:登录 `appb.seven.fan`(dana)→ 目标 group 的
+0. **在 B 上先建好目标 group**(dana 登录 `appb.seven.fan`,常规建群入口),
+   它是下面每一步的操作场所。
+1. **目的地先声明前身**:进这个新 group 的
    迁移页 → **「把社群迁移到这里」** → 粘贴 A 侧 group 的 ActivityPub id →
    「添加前身身份」。
    - A 侧 id 在 A 的迁移页顶部直接可复制。
@@ -231,7 +247,8 @@ B 上有 `nodeb`、`daospace`。
 
 ### 6c. 反方向(其他实例 → Sola)
 
-- 我们这边先在迁移页「把社群迁移到这里」声明对方老 id,对方再在其平台发起 Move。
+- 先在本站建好承接的 group(同上,不会自动生成),再在它的迁移页
+  「把社群迁移到这里」声明对方老 id,对方随后在其平台发起 Move。
 - 个人账号同理:`/profile/<handle>/edit` → **前身身份** → 添加远端老 id。
 
 ### 迁移后的兜底
@@ -317,6 +334,7 @@ ssh root@sg.sola.day 'docker exec fedlab-soon bin/rails runner \
 | Mastodon AUTHORIZED_FETCH | 匿名抓 actor 401 | 正常;我们用实例签名抓取 |
 | Mastodon 规范 id | Move target 用 handle URL 被拒 | 用 `/ap/users/<数字id>` |
 | Mobilizon 不发/不收 Move | 迁移后它的边不动 | 靠对账循环兜底 |
+| 目标 group 不存在 | 迁移页找不到/Move 被静默忽略 | 先在新服务器手动建好 group |
 | 只加了 TXT 没加 CNAME | 验证通过但域名打不开 | TXT 证所有权,CNAME 才通流量 |
 | NEXT_PUBLIC 构建期烘焙 | 改运行时 env 无效 | 重新 build(前端在 wamo.city 构建后传产物) |
 | 前端子域名白名单 | 新 app host 首页 404 | `SOLA_APP_SUBDOMAINS` 加一条 |
