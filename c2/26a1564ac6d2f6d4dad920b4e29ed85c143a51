@@ -1,0 +1,25 @@
+app/models/user.rb
+  s_e9ed806a3d225c::t_7b99cd55e2fb49 40-44
+test/models/user_test.rb
+  s_e9ed806a3d225c::t_5bccee1fa7e35c 21
+  s_e9ed806a3d225c::t_37720fcccdb70c 1-20,22-25
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_91372b3b87ab22 278,325
+  s_e9ed806a3d225c::t_4e20f7937d55e1 297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c226a1564ac6d2f6d4dad920b4e29ed85c143a51",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
