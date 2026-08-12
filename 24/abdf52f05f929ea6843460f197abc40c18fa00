@@ -1,0 +1,43 @@
+db/migrate/20260812100007_create_fed_events_and_participations.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-51
+db/migrate/20260812100004_create_fed_domain_tables.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-27
+db/migrate/20260812100005_add_federation_to_participants.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-16
+db/migrate/20260812100006_add_federation_to_comments.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-11
+db/migrate/20260812100008_add_fed_actor_foreign_keys.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-30
+db/migrate/20260812100014_add_custom_domain_verification.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-11
+db/migrate/20260812100003_create_fed_instance_keys.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-12
+db/migrate/20260812100012_add_move_integrity_and_custom_domain.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-25
+db/migrate/20260812100013_add_follow_reconciliation.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-11
+db/migrate/20260812100009_cascade_fed_events_on_actor_delete.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-14
+db/migrate/20260812100010_harden_federation_invariants.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-25
+db/migrate/20260812100011_harden_federation_round_two.rb
+  s_e9ed806a3d225c::t_c863d227406a06 1-17
+db/schema.rb
+  s_e9ed806a3d225c::t_ed185325647641 13,698
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "24abdf52f05f929ea6843460f197abc40c18fa00",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
