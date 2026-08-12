@@ -1,0 +1,23 @@
+app/controllers/api/v1/comments_controller.rb
+  s_e9ed806a3d225c::t_eff2ab87bbbeb2 11
+  s_e9ed806a3d225c::t_869d0c5e166a8f 51-62
+  s_e9ed806a3d225c::t_c8b26815208958 42
+app/blueprints/comment_blueprint.rb
+  s_e9ed806a3d225c::t_2220b99d672b8d 7-8,10-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "1107aec7cdac49b337d6defcc225f6c9bd11d13b",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

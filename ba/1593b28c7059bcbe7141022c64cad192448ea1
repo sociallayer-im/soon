@@ -1,0 +1,23 @@
+db/migrate/20260802000008_add_fed_actor_foreign_keys.rb
+  s_e9ed806a3d225c::t_2e38f9a74736e6 1-30
+test/integration/federation_participation_test.rb
+  s_e9ed806a3d225c::t_1347541426e866 203-223
+db/schema.rb
+  s_e9ed806a3d225c::t_e5066cc084c862 946,978
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ba1593b28c7059bcbe7141022c64cad192448ea1",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
