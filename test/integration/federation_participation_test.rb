@@ -70,6 +70,35 @@ class FederationParticipationTest < ActionDispatch::IntegrationTest
     assert_equal 1, event.reload.participant_count
   end
 
+  # A federated attendee has no local user row, so the event payload carries
+  # `user: null`. The frontend used to dereference that unconditionally and
+  # 500'd the whole event page — hence `remote_author`, which gives it
+  # something to render (and mirrors CommentBlueprint's field of the same name).
+  test "event payload identifies a remote participant through remote_author" do
+    event = public_event
+    send_join(event)
+
+    get "/api/v1/events/#{event.id}"
+    assert_response :success
+    participant = response.parsed_body["participants"].sole
+    assert_nil participant["user"]
+    author = participant["remote_author"]
+    assert_equal @remote.acct, author["acct"]
+    assert_equal @remote.domain, author["domain"]
+    assert_equal @remote.uri, author["url"]
+  end
+
+  test "a local participant carries a user and no remote_author" do
+    event = public_event
+    joiner = create_user
+    Participant.create!(event: event, user: joiner, status: "attending")
+
+    get "/api/v1/events/#{event.id}"
+    participant = response.parsed_body["participants"].sole
+    assert_equal joiner.id, participant["user"]["id"]
+    assert_nil participant["remote_author"]
+  end
+
   # --- approval required (restricted) ----------------------------------------
 
   test "require_approval holds the remote participant pending, no Accept yet" do
