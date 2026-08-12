@@ -232,8 +232,12 @@ class FederationMigrationTest < ActionDispatch::IntegrationTest
          params: {uri: old_id}, headers: auth_headers(rando)
     assert_response :forbidden
 
-    post "/api/v1/federation/groups/#{group.id}/aliases",
-         params: {uri: old_id}, headers: auth_headers(owner)
+    # the claimed previous identity has to resolve — see the 422 cases in
+    # FederationDomainBindingTest
+    with_remote(old_id => remote_actor_doc(old_id, OpenSSL::PKey::RSA.new(2048))) do
+      post "/api/v1/federation/groups/#{group.id}/aliases",
+           params: {uri: old_id}, headers: auth_headers(owner)
+    end
     assert_response :created
     assert_includes group.reload.fed_also_known_as, old_id
 

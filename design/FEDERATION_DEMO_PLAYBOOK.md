@@ -208,10 +208,14 @@ B 上有 `nodeb`、`daospace`。
 ### 演示前必读:目标 group 要先手动建好
 
 **迁移不会在新服务器上凭空生出一个 group**,得先用常规入口把它建出来,再打开
-它自己的迁移页。迁入分支第一步就是把目标 id 解析成本站的一个 actor
-(`inbox_service.rb` `handle_move_to_local`),解析不到直接按
-`local_attestation_missing` 忽略——没有 group 就没有地方存「我曾是谁」这句声明,
-也就没有那一页可打开。新 handle 不必和老的一致。
+它自己的迁移页——没有 group 就没有地方存「我曾是谁」这句声明,也就没有那一页
+可打开。新 handle 不必和老的一致。
+
+填错 id 会当场报错,不会闷着:声明前身(alsoKnownAs)和发起 Move 这两步都先把
+对方 id 解析一次,拉不到就是 422,页面弹红字(`could not resolve …` /
+`no group or user exists at …`),什么都不会存下。真正无声的只剩下**对端**收到
+Move 之后的判断——那边的日志会写 `local_target_missing`(目标 group 压根不存在)
+或 `local_attestation_missing`(存在但没声明前身),两者分开记,别混着查。
 
 **Move 迁移的是身份和关注关系,不是数据。** 远端关注者被重指到新 id、老 event
 链接继续可解析;但老 group 的成员名单、events、评论**不会**跟过来,新 group
@@ -334,7 +338,7 @@ ssh root@sg.sola.day 'docker exec fedlab-soon bin/rails runner \
 | Mastodon AUTHORIZED_FETCH | 匿名抓 actor 401 | 正常;我们用实例签名抓取 |
 | Mastodon 规范 id | Move target 用 handle URL 被拒 | 用 `/ap/users/<数字id>` |
 | Mobilizon 不发/不收 Move | 迁移后它的边不动 | 靠对账循环兜底 |
-| 目标 group 不存在 | 迁移页找不到/Move 被静默忽略 | 先在新服务器手动建好 group |
+| 目标/前身 group 不存在 | 声明前身或发起迁移时 422 弹红字;对端日志 `local_target_missing` | 先在新服务器手动建好 group,再核对 id |
 | 只加了 TXT 没加 CNAME | 验证通过但域名打不开 | TXT 证所有权,CNAME 才通流量 |
 | NEXT_PUBLIC 构建期烘焙 | 改运行时 env 无效 | 重新 build(前端在 wamo.city 构建后传产物) |
 | 前端子域名白名单 | 新 app host 首页 404 | `SOLA_APP_SUBDOMAINS` 加一条 |

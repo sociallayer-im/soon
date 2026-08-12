@@ -109,7 +109,8 @@ module Federation
         return :ignored
       end
       unless target.also_known_as.include?(fed_actor.uri)
-        Logging.log(:in, "Move", domain: fed_actor.domain, status: "attestation_missing")
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "attestation_missing",
+                    target: target_uri, expected_alias: fed_actor.uri)
         return :ignored
       end
 
@@ -133,8 +134,17 @@ module Federation
     # beforehand (there is nothing to fetch — we ARE the authority here).
     def self.handle_move_to_local(fed_actor, target_uri)
       target = resolve_local_actor(target_uri)
-      if target.nil? || !Array(target.fed_also_known_as).include?(fed_actor.uri)
-        Logging.log(:in, "Move", domain: fed_actor.domain, status: "local_attestation_missing")
+      # Two different operator mistakes, and conflating them cost a demo an
+      # hour: "the destination group was never created here" is not the same
+      # as "it exists but never claimed the old id". Name which one it was.
+      if target.nil?
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "local_target_missing",
+                    target: target_uri)
+        return :ignored
+      end
+      unless Array(target.fed_also_known_as).include?(fed_actor.uri)
+        Logging.log(:in, "Move", domain: fed_actor.domain, status: "local_attestation_missing",
+                    target: target_uri, expected_alias: fed_actor.uri)
         return :ignored
       end
       fed_actor.update!(moved_to: target_uri)

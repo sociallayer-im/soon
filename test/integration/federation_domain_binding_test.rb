@@ -165,8 +165,10 @@ class FederationDomainBindingTest < ActionDispatch::IntegrationTest
 
   test "group aliases can be listed, added and removed by a manager" do
     uri = "https://other.example/groups/9"
-    post "/api/v1/federation/groups/#{@group.id}/aliases", params: {uri: uri}.to_json,
-         headers: @headers.merge("Content-Type" => "application/json")
+    stub_remote_actors(uri => stub_actor_doc(uri)) do
+      post "/api/v1/federation/groups/#{@group.id}/aliases", params: {uri: uri}.to_json,
+           headers: @headers.merge("Content-Type" => "application/json")
+    end
     assert_response :created
     assert_equal [uri], JSON.parse(response.body)["also_known_as"]
 
@@ -185,10 +187,43 @@ class FederationDomainBindingTest < ActionDispatch::IntegrationTest
                     "self-aliasing would make a self-Move look attested"
   end
 
+  # A previous identity nobody can resolve is a typo, and it has to fail at the
+  # form rather than silently — the Move it was meant to attest would otherwise
+  # be dropped by the far side with nothing shown to anyone.
+  test "aliasing an unreachable actor is a 422, not a stored dud" do
+    uri = "https://gone.example/groups/nope"
+    stub_remote_actors({}) do
+      post "/api/v1/federation/groups/#{@group.id}/aliases", params: {uri: uri}.to_json,
+           headers: @headers.merge("Content-Type" => "application/json")
+    end
+    assert_response :unprocessable_entity
+    assert_match(/could not resolve/, JSON.parse(response.body)["error"])
+    assert_empty Array(@group.reload.fed_also_known_as)
+  end
+
+  test "aliasing a local url with no actor behind it names that as the problem" do
+    uri = "#{Federation::Urls.base_url}/groups/does-not-exist"
+    post "/api/v1/federation/groups/#{@group.id}/aliases", params: {uri: uri}.to_json,
+         headers: @headers.merge("Content-Type" => "application/json")
+    assert_response :unprocessable_entity
+    assert_match(/no group or user exists/, JSON.parse(response.body)["error"])
+  end
+
+  test "moving to a local url with no actor behind it is refused up front" do
+    uri = "#{Federation::Urls.base_url}/groups/does-not-exist"
+    post "/api/v1/federation/groups/#{@group.id}/move", params: {target: uri}.to_json,
+         headers: @headers.merge("Content-Type" => "application/json")
+    assert_response :unprocessable_entity
+    assert_match(/no group or user exists/, JSON.parse(response.body)["error"])
+    assert_nil @group.reload.fed_moved_to
+  end
+
   test "the signed-in user manages their own aliases" do
     uri = "https://mas.example/ap/users/7"
-    post "/api/v1/federation/profile/aliases", params: {uri: uri}.to_json,
-         headers: @headers.merge("Content-Type" => "application/json")
+    stub_remote_actors(uri => stub_actor_doc(uri)) do
+      post "/api/v1/federation/profile/aliases", params: {uri: uri}.to_json,
+           headers: @headers.merge("Content-Type" => "application/json")
+    end
     assert_response :created
     assert_equal [uri], @owner.reload.fed_also_known_as
 

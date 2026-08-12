@@ -42,4 +42,40 @@ module FederationHelpers
     body = JSON.generate(activity)
     post path, params: body, headers: signed_inbox_headers(actor, key, body, path: path, date: date)
   end
+
+  # A remote actor document that passes ActorFetchService.validate!.
+  def stub_actor_doc(uri, key = nil, also_known_as: [])
+    key ||= OpenSSL::PKey::RSA.new(2048)
+    doc = {
+      "@context" => [Federation::JsonLd::AS, Federation::JsonLd::SECURITY],
+      "id" => uri, "type" => "Person",
+      "preferredUsername" => "mover",
+      "inbox" => "#{uri}/inbox",
+      "endpoints" => {"sharedInbox" => "https://#{URI.parse(uri).host}/inbox"},
+      "publicKey" => {"id" => "#{uri}#main-key", "owner" => uri,
+                      "publicKeyPem" => key.public_key.to_pem}
+    }
+    doc["alsoKnownAs"] = also_known_as if also_known_as.any?
+    doc
+  end
+
+  # Serves `docs` (uri => doc) over GET and accepts every POST, so anything
+  # the block triggers — an alias's existence check, a delivery job — stays
+  # off the network. An unstubbed uri raises, which is what a dead or
+  # mistyped actor id looks like from here.
+  def stub_remote_actors(docs, &block)
+    fetcher = lambda { |uri, headers: nil|
+      doc = docs[uri] or raise Federation::HttpClient::Error, "no stub for #{uri}"
+      Federation::HttpClient::Result.new(
+        status: 200, headers: {"content-type" => "application/activity+json"},
+        body: JSON.generate(doc)
+      )
+    }
+    poster = lambda { |*_args, **_kwargs|
+      Federation::HttpClient::Result.new(status: 202, headers: {}, body: "")
+    }
+    Federation::HttpClient.stub(:get, fetcher) do
+      Federation::HttpClient.stub(:post, poster, &block)
+    end
+  end
 end

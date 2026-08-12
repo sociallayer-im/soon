@@ -161,7 +161,15 @@ module Api
       def move_group
         group = Group.find_by(id: params[:id]) or return render_not_found
         authorize group, :manage?, policy_class: GroupPolicy
-        Federation::OutboxService.move_actor(group, params[:target].to_s)
+        target_uri = params[:target].to_s
+        # A local target is resolved against our own tables — fetching
+        # ourselves over HTTP would turn "no such group" into a vague
+        # connection error.
+        if Federation::Urls.local?(target_uri) &&
+           Federation::InboxService.resolve_local_actor(target_uri).nil?
+          return render_error("no group or user exists at #{target_uri} on this server")
+        end
+        Federation::OutboxService.move_actor(group, target_uri)
         render json: {moved_to: group.reload.fed_moved_to}, status: :created
       rescue Federation::OutboxService::NotAttested => e
         render_error(e.message, status: :unprocessable_entity)
@@ -196,7 +204,29 @@ module Api
           render_error("that is this actor's own id")
           return nil
         end
+        return nil unless actor_reachable?(uri)
         uri
+      end
+
+      # A previous identity that does not exist is the migration's most common
+      # failure, and it used to surface nowhere: the alias saves fine, and only
+      # much later does the Move arrive at a peer, find no matching attestation
+      # and get dropped with a log line nobody is reading. Resolve the claimed
+      # actor now, while there is an operator watching a form.
+      def actor_reachable?(uri)
+        if Federation::Urls.local?(uri)
+          return true if Federation::InboxService.resolve_local_actor(uri)
+          render_error("no group or user exists at #{uri} on this server")
+          return false
+        end
+        Federation::ActorFetchService.fetch!(uri)
+        true
+      rescue Federation::ActorFetchService::FetchError, Federation::HttpClient::Error => e
+        # A transient failure must not poison NEGATIVE_TTL of retries: the
+        # operator will fix the URL and press the button again within seconds.
+        Federation::ActorFetchService.forget_failure(uri)
+        render_error("could not resolve #{uri}: #{e.message}")
+        false
       end
 
       def alias_json(actor)
