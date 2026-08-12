@@ -1031,4 +1031,63 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
     assert_not_equal "cancelled", event.reload.status
   end
+
+  # --- image_note: the after-you're-in image (group QR code) -----------------
+  # The whole point of the field is who does NOT get it, so the absent cases
+  # are the ones under test.
+
+  test "image_note is shown to a confirmed attendee and the organizer, and to nobody else" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", image_note: "https://img.example/qr.png")
+    attendee = create_user
+    create_participant(event: event, user: attendee)
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(attendee)
+    assert_equal "https://img.example/qr.png", json_response["image_note"]
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_equal "https://img.example/qr.png", json_response["image_note"],
+                 "the organizer edits the note, so they must see it without RSVPing"
+
+    get "/api/v1/events/#{event.id}", headers: auth_headers(create_user)
+    assert_not json_response.key?("image_note"), "a non-participant must not receive the field at all"
+
+    get "/api/v1/events/#{event.id}"
+    assert_not json_response.key?("image_note"), "nor a signed-out fetch"
+  end
+
+  test "image_note is withheld while the application is pending and while payment is pending" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published",
+                         require_approval: true, image_note: "https://img.example/qr.png")
+
+    applicant = create_user
+    create_participant(event: event, user: applicant, status: "pending")
+    get "/api/v1/events/#{event.id}", headers: auth_headers(applicant)
+    assert_not json_response.key?("image_note"), "pending approval holds no seat"
+
+    buyer = create_user
+    create_participant(event: event, user: buyer, status: "attending", payment_status: "pending")
+    get "/api/v1/events/#{event.id}", headers: auth_headers(buyer)
+    assert_not json_response.key?("image_note"), "an unpaid order is not a confirmed attendance"
+
+    paid = create_user
+    create_participant(event: event, user: paid, status: "attending", payment_status: "succeeded")
+    get "/api/v1/events/#{event.id}", headers: auth_headers(paid)
+    assert_equal "https://img.example/qr.png", json_response["image_note"]
+  end
+
+  test "image_note round-trips through create and update" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+
+    patch "/api/v1/events/#{event.id}",
+          params: { event: { image_note: "https://img.example/qr.png" } },
+          headers: auth_headers(owner), as: :json
+    assert_response :success
+    assert_equal "https://img.example/qr.png", event.reload.image_note
+  end
 end

@@ -192,7 +192,20 @@ class Api::V1::EventsController < Api::BaseController
     options = personalization_options
     options[:include_participants] = false if params[:include_participants].to_s == "false"
     options[:current_participant] = @event.participants.active.find_by(user_id: current_user.id) if current_user
+    options[:reveal_image_note] = reveal_image_note?(options[:current_participant])
     options
+  end
+
+  # image_note is the "after you're in" image (a group QR code, typically), so
+  # it is withheld until the RSVP is actually settled: approved if the event
+  # reviews applications (pending holds no seat), paid if it sells tickets.
+  # Organizers see their own note regardless — they have to edit it.
+  def reveal_image_note?(participant)
+    return false unless current_user
+    return true if EventPolicy.new(current_user, @event).update?
+    participant.present? &&
+      participant.status == "attending" &&
+      (participant.payment_status.nil? || participant.payment_status == "succeeded")
   end
 
   def personalization_options
@@ -273,7 +286,7 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def event_params
-    params.require(:event).permit(:title, :content, :notes, :image_url, :pinned,
+    params.require(:event).permit(:title, :content, :notes, :image_url, :image_note, :pinned,
       :start_time, :end_time, :timezone,
       :status, :visibility, :group_id, :place_id, :venue_id, :track_id, :meeting_url,
       :external_url, :max_participant, :require_approval, :category, :kind,

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_12_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -109,6 +109,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.string "content_type", default: "text"
     t.datetime "created_at", null: false
     t.string "edit_parent_id"
+    t.string "fed_actor_id"
+    t.string "fed_uri"
     t.string "icon_url"
     t.string "item_id"
     t.string "item_type"
@@ -116,7 +118,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.string "reply_parent_id"
     t.string "title"
     t.datetime "updated_at", null: false
-    t.string "user_id", null: false
+    t.string "user_id"
+    t.index ["fed_uri"], name: "index_comments_on_fed_uri", unique: true, where: "(fed_uri IS NOT NULL)"
     t.index ["item_type", "item_id", "removed"], name: "index_comments_on_item_type_and_item_id_and_removed"
     t.index ["user_id", "comment_type"], name: "index_comments_on_user_id_and_comment_type"
     t.index ["user_id"], name: "index_comments_on_user_id"
@@ -174,6 +177,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.string "external_url"
     t.string "form_id"
     t.string "group_id", null: false
+    t.string "image_note"
     t.string "image_url"
     t.string "kind"
     t.integer "max_participant"
@@ -208,6 +212,152 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.index ["ref_id"], name: "index_events_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["track_id"], name: "index_events_on_track_id"
     t.index ["venue_id"], name: "index_events_on_venue_id"
+  end
+
+  create_table "fed_actors", id: :string, force: :cascade do |t|
+    t.string "actor_type"
+    t.jsonb "also_known_as", default: [], null: false
+    t.datetime "blocked_at"
+    t.datetime "created_at", null: false
+    t.string "domain", null: false
+    t.string "followers_url"
+    t.string "icon_url"
+    t.string "inbox_url", null: false
+    t.string "key_id"
+    t.datetime "last_fetched_at"
+    t.string "moved_to"
+    t.string "name"
+    t.string "outbox_url"
+    t.string "preferred_username"
+    t.text "public_key_pem"
+    t.jsonb "raw"
+    t.string "shared_inbox_url"
+    t.text "summary"
+    t.datetime "updated_at", null: false
+    t.string "uri", null: false
+    t.index ["domain"], name: "index_fed_actors_on_domain"
+    t.index ["uri"], name: "index_fed_actors_on_uri", unique: true
+  end
+
+  create_table "fed_deliveries", id: :string, force: :cascade do |t|
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "inbox_url", null: false
+    t.string "last_error"
+    t.datetime "next_attempt_at"
+    t.jsonb "payload", null: false
+    t.string "sender_id"
+    t.string "sender_type", null: false
+    t.string "signing_key_id"
+    t.text "signing_key_pem"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["status", "next_attempt_at"], name: "index_fed_deliveries_on_status_and_next_attempt_at"
+    t.index ["status"], name: "index_fed_deliveries_on_status"
+  end
+
+  create_table "fed_domain_policies", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "created_by"
+    t.string "domain", null: false
+    t.string "policy", null: false
+    t.string "reason"
+    t.datetime "updated_at", null: false
+    t.index ["domain"], name: "index_fed_domain_policies_on_domain", unique: true
+  end
+
+  create_table "fed_domain_stats", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "delivered_count", default: 0, null: false
+    t.string "domain", null: false
+    t.integer "failed_count", default: 0, null: false
+    t.integer "inbound_count", default: 0, null: false
+    t.integer "inbound_rejected_count", default: 0, null: false
+    t.string "last_error"
+    t.datetime "last_failure_at"
+    t.datetime "last_success_at"
+    t.date "unavailable_since"
+    t.datetime "updated_at", null: false
+    t.index ["domain"], name: "index_fed_domain_stats_on_domain", unique: true
+  end
+
+  create_table "fed_events", id: :string, force: :cascade do |t|
+    t.string "address"
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.datetime "end_time"
+    t.string "external_participation_url"
+    t.string "fed_actor_id"
+    t.string "html_url"
+    t.string "image_url"
+    t.string "join_mode", default: "free"
+    t.datetime "last_fetched_at"
+    t.decimal "latitude", precision: 10, scale: 6
+    t.string "location_name"
+    t.decimal "longitude", precision: 10, scale: 6
+    t.integer "max_participant"
+    t.integer "participant_count", default: 0
+    t.jsonb "raw"
+    t.datetime "remote_updated_at"
+    t.datetime "start_time"
+    t.string "status", default: "CONFIRMED"
+    t.string "summary"
+    t.string "tags", default: [], array: true
+    t.string "timezone"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.string "uri", null: false
+    t.index ["fed_actor_id"], name: "index_fed_events_on_fed_actor_id"
+    t.index ["start_time"], name: "index_fed_events_on_start_time"
+    t.index ["uri"], name: "index_fed_events_on_uri", unique: true
+  end
+
+  create_table "fed_follows", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "direction", null: false
+    t.string "fed_actor_id", null: false
+    t.datetime "last_confirmed_at"
+    t.string "local_id", null: false
+    t.string "local_type", null: false
+    t.integer "probe_count", default: 0, null: false
+    t.datetime "probed_at"
+    t.string "state", default: "accepted", null: false
+    t.datetime "updated_at", null: false
+    t.string "uri", null: false
+    t.index ["fed_actor_id"], name: "index_fed_follows_on_fed_actor_id"
+    t.index ["local_type", "local_id", "fed_actor_id", "direction"], name: "idx_fed_follows_uniq", unique: true
+    t.index ["uri"], name: "index_fed_follows_on_uri", unique: true
+  end
+
+  create_table "fed_inbound_activities", id: :string, force: :cascade do |t|
+    t.string "activity_type"
+    t.string "body_digest"
+    t.datetime "created_at", null: false
+    t.string "fed_actor_id"
+    t.string "status", default: "received", null: false
+    t.string "uri", null: false
+    t.index ["fed_actor_id"], name: "index_fed_inbound_activities_on_fed_actor_id"
+    t.index ["uri"], name: "index_fed_inbound_activities_on_uri", unique: true
+  end
+
+  create_table "fed_instance_keys", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "private_key", null: false
+    t.text "public_key", null: false
+    t.integer "singleton_guard", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["singleton_guard"], name: "index_fed_instance_keys_on_singleton_guard", unique: true
+  end
+
+  create_table "fed_participations", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "fed_event_id", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "uri", null: false
+    t.string "user_id", null: false
+    t.index ["uri"], name: "index_fed_participations_on_uri", unique: true
+    t.index ["user_id", "fed_event_id"], name: "index_fed_participations_on_user_id_and_fed_event_id", unique: true
   end
 
   create_table "form_answers", id: :string, force: :cascade do |t|
@@ -392,12 +542,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
     t.datetime "created_at", null: false
+    t.string "custom_domain"
+    t.string "custom_domain_pending"
+    t.string "custom_domain_token"
+    t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true
     t.integer "events_count", default: 0, null: false
     t.string "featured_image_url"
+    t.jsonb "fed_also_known_as", default: [], null: false
+    t.text "fed_ed25519_private_key"
+    t.string "fed_ed25519_public_key"
+    t.string "fed_moved_to"
+    t.text "fed_private_key"
+    t.text "fed_public_key"
     t.string "group_tags", default: [], array: true
     t.string "group_ticket_event_id"
     t.string "image_url"
@@ -417,6 +577,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.datetime "updated_at", null: false
     t.string "venue_tag_list", default: [], array: true
     t.string "venue_union", array: true
+    t.index ["custom_domain"], name: "index_groups_on_custom_domain", unique: true, where: "(custom_domain IS NOT NULL)"
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
     t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
@@ -462,15 +623,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
     t.string "event_id", null: false
+    t.string "fed_actor_id"
+    t.string "fed_join_uri"
     t.string "message"
     t.string "payment_status", comment: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!"
     t.datetime "registered_at"
     t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
-    t.string "user_id", null: false
+    t.string "user_id"
     t.string "voucher_id"
     t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
     t.index ["event_id"], name: "index_participants_on_event_id"
+    t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
+    t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"
     t.index ["user_id", "event_id"], name: "index_participants_on_user_id_and_event_id", unique: true
     t.index ["user_id"], name: "index_participants_on_user_id"
   end
@@ -531,7 +696,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.string "ticket_item_id", null: false
     t.datetime "updated_at", null: false
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
-    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
+    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
   end
 
   create_table "stripe_events", id: :string, force: :cascade do |t|
@@ -681,6 +846,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
     t.jsonb "data", default: {}
     t.string "email"
     t.string "eth"
+    t.jsonb "fed_also_known_as", default: [], null: false
+    t.text "fed_ed25519_private_key"
+    t.string "fed_ed25519_public_key"
+    t.string "fed_moved_to"
+    t.text "fed_private_key"
+    t.text "fed_public_key"
     t.string "image_url"
     t.datetime "last_signin_at"
     t.string "name"
@@ -797,6 +968,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
   add_foreign_key "comments", "badges"
   add_foreign_key "comments", "comments", column: "edit_parent_id"
   add_foreign_key "comments", "comments", column: "reply_parent_id"
+  add_foreign_key "comments", "fed_actors", on_delete: :cascade
   add_foreign_key "comments", "users"
   add_foreign_key "coupons", "events"
   add_foreign_key "event_roles", "events"
@@ -806,6 +978,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
   add_foreign_key "events", "tracks"
   add_foreign_key "events", "users", column: "owner_id"
   add_foreign_key "events", "venues"
+  add_foreign_key "fed_events", "fed_actors", on_delete: :cascade
+  add_foreign_key "fed_follows", "fed_actors"
+  add_foreign_key "fed_participations", "fed_events"
+  add_foreign_key "fed_participations", "users"
   add_foreign_key "form_answers", "form_fields"
   add_foreign_key "form_answers", "form_submissions"
   add_foreign_key "form_fields", "forms"
@@ -824,6 +1000,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120001) do
   add_foreign_key "memberships", "users"
   add_foreign_key "participants", "badges"
   add_foreign_key "participants", "events"
+  add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
   add_foreign_key "participants", "vouchers"
   add_foreign_key "ticket_items", "coupons"
