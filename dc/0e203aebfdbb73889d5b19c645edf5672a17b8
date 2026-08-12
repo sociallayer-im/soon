@@ -1,0 +1,31 @@
+db/migrate/20260812120000_add_image_note_to_events.rb
+  s_e9ed806a3d225c::t_520f1fc44bf5e2 1-7
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_b6c1153d61953f 1042,1063
+  s_e9ed806a3d225c::t_eeebb901b569c9 1034-1041,1043-1062,1064-1092
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_6e98da65c7c111 289
+  s_e9ed806a3d225c::t_f6c96a7731a33a 195,199-207
+  s_e9ed806a3d225c::t_393e639bdbf14b 208
+  s_e9ed806a3d225c::t_528cbafe73fe6a 209-210
+app/blueprints/event_blueprint.rb
+  s_e9ed806a3d225c::t_2579a03effe138 33-36
+db/schema.rb
+  s_e9ed806a3d225c::t_ebb8fe93b2ef14 13,112-113,121-122,180,217-362,545-548,555-560,580,626-627,633,637-638,699,849-854,971,981-984,1003
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dc0e203aebfdbb73889d5b19c645edf5672a17b8",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
