@@ -37,8 +37,11 @@ class User < ApplicationRecord
   # be a well-formed slug and unique (the column is uniquely indexed). It is nil
   # until the user picks one on the register screen.
   validates :name, uniqueness: true, allow_nil: true
-  validates :name, format: { with: /\A[a-z0-9_]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, or underscores" },
-    allow_blank: true
+  # Only when the name is being set or changed: plenty of live users hold
+  # 3-5 character names from the old minimum, and they must keep saving —
+  # the floor applies to new picks, not to what's already taken.
+  validates :name, format: { with: /\A[a-z0-9_]{6,30}\z/, message: "must be 6-30 lowercase letters, digits, or underscores" },
+    allow_blank: true, if: :will_save_change_to_name?
 
   # Platform administrators curate cross-group content: homepage featured/top
   # tags, popup-city removal. Two markers answer to this — the `admin` boolean
