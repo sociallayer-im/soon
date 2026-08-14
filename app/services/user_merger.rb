@@ -7,6 +7,12 @@
 # carried over: merging identities is a distinct, narrower operation
 # (AuthController#merge_wechat_account!) with its own uniqueness rules. This
 # service only moves *data*; `from` keeps its identity until destroyed.
+#
+# NOT handled: db/schema.rb defines fed_participations.user_id with a live FK
+# and a unique(user_id, fed_event_id) index, but no FedParticipation model
+# exists on main (only on the federation branch(es)) — the schema was carried
+# over without the model. If `from` ever has rows there, `from.destroy!` will
+# raise ActiveRecord::InvalidForeignKey. Revisit once federation lands on main.
 class UserMerger
   # Tables where a duplicate (from, into) row would collide with a DB-level
   # uniqueness constraint once repointed — these need per-row dedup instead of
@@ -54,8 +60,12 @@ class UserMerger
       repoint("ticket_items", "user_id")
       repoint("wechat_pay_settings", "user_id")
       repoint("group_invites", "receiver_id")
+      repoint("group_invites", "sender_id")
+      repoint("forms", "created_by_id")
+      Ticketing::Activity.where(actor_user_id: @from.id).update_all(actor_user_id: @into.id)
 
       Domain.where(item_type: "User", item_id: @from.id).update_all(item_id: @into.id)
+      dedupe_and_repoint_event_roles
 
       @from.destroy!
     end
@@ -79,6 +89,19 @@ class UserMerger
         m.destroy!
       else
         m.update!(user_id: @into.id)
+      end
+    end
+  end
+
+  # event_roles.item is polymorphic (User | Group); unique on
+  # [event_id, item_id, item_type], so the same dedupe shape applies but
+  # keyed on item_id/item_type rather than a plain user_id column.
+  def dedupe_and_repoint_event_roles
+    EventRole.where(item_type: "User", item_id: @from.id).find_each do |r|
+      if EventRole.exists?(item_type: "User", item_id: @into.id, event_id: r.event_id)
+        r.destroy!
+      else
+        r.update!(item_id: @into.id)
       end
     end
   end

@@ -211,6 +211,32 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, Membership.where(group: group, user: into).count
   end
 
+  test "merge repoints group_invites sent by the source (FK would otherwise block destroy)" do
+    admin = create_user(admin: true)
+    from = create_user
+    into = create_user
+    group = create_group(owner: from)
+    invite = GroupInvite.create!(group: group, sender: from, receiver_address_type: "email", receiver_address: "x@test.com")
+
+    post "/api/v1/users/merge", params: { from_id: from.id, into_id: into.id }, headers: auth_headers(admin)
+    assert_response :success
+    assert_equal into.id, invite.reload.sender_id
+  end
+
+  test "merge dedupes event_roles, keeping only one role per event for the target" do
+    admin = create_user(admin: true)
+    from = create_user
+    into = create_user
+    group = create_group(owner: into)
+    event = create_event(group: group, owner: into)
+    EventRole.create!(event: event, item: from, role: "speaker")
+    EventRole.create!(event: event, item: into, role: "co_host")
+
+    post "/api/v1/users/merge", params: { from_id: from.id, into_id: into.id }, headers: auth_headers(admin)
+    assert_response :success
+    assert_equal 1, EventRole.where(event: event, item_type: "User", item_id: into.id).count
+  end
+
   test "merge refuses to merge a user into itself" do
     admin = create_user(admin: true)
     user = create_user
