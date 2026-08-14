@@ -1,0 +1,48 @@
+db/migrate/20260814100000_add_check_group_ids_to_tickets.rb
+  s_e9ed806a3d225c::t_4f09304ce57166 1-7
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_f77cd540dee9fb 367-369
+  s_e9ed806a3d225c::t_727d53da17de91 127-129
+  s_e9ed806a3d225c::t_60beb6dda88105 240
+  s_e9ed806a3d225c::t_5abbb0b359f4bb 393-397,399
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_e9ed806a3d225c::t_5a72e362171127 397-459
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_f161aef2c72b0c 32-47
+app/blueprints/ticket_blueprint.rb
+  s_e9ed806a3d225c::t_38e017ea114f06 4
+app/services/phone_number.rb
+  s_e9ed806a3d225c::t_f575b4042dfc55 1-34
+app/models/group_invite.rb
+  s_e9ed806a3d225c::t_91bcd2775fb043 20
+  s_e9ed806a3d225c::t_be37fdeed0c5c9 50-61
+  s_e9ed806a3d225c::t_f4ea51fd8df013 67
+app/controllers/api/v1/group_invites_controller.rb
+  s_e9ed806a3d225c::t_5530cfff29f099 150-152,154
+  s_e9ed806a3d225c::t_4c1b60a6e4d5f6 181-185
+  s_e9ed806a3d225c::t_9d0f55ad81bb23 180,186-198
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_32ee5db87cb2b8 352
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_668acf5e8eba60 810
+  s_e9ed806a3d225c::t_5cf89ca647d48a 607-612
+  s_e9ed806a3d225c::t_af70a12192df05 85-87
+db/schema.rb
+  s_e9ed806a3d225c::t_f67ff247cb66c6 13,794
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "846a99dce798b421258781722d6bc9ad0d9fc9e5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
