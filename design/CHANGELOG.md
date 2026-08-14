@@ -2,6 +2,87 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-14 — Google sign-in verified server-side, phone-whitelist tickets, admin user merge
+
+Three unrelated changes landed together in one session.
+
+### Google sign-in moved off `trusted_signin`, and `trusted_signin` narrowed to WeChat
+
+`trusted_signin` used a shared secret (`NEXT_TOKEN`) to let the frontend server
+mint a session for any identity it asserted — email, Solana address, or WeChat.
+The email branch was a real risk: nothing verified the caller actually owned
+that email, so a leaked `NEXT_TOKEN` (or a bug in the Next.js server) could mint
+a session for *any* address. WeChat is different by construction — the
+`openid`/`unionid` only exist because the frontend already exchanged a code
+with WeChat's own servers, so the identity is server-verified before
+`trusted_signin` ever sees it, not caller-asserted.
+
+Fix: added `GoogleAuth.verified_email` (`app/services/google_auth.rb`), which
+calls Google's userinfo endpoint directly from Rails and checks
+`email_verified`. New route `POST /auth/verify_google` does the same
+find-or-create/render-token flow `trusted_signin` used to do for email, but
+with a token Rails itself confirmed with Google. `trusted_signin` now only
+accepts the WeChat branch; its email and `sol_address` branches were deleted
+outright rather than left dead. WeChat sign-in is untouched — it was never the
+risk.
+
+### Members-only and approval-required tickets
+
+New ticket-level gates, additive to the existing badge-class gate:
+
+- `need_approval` — RSVPs land as pending instead of confirmed; an organizer
+  approves or rejects them. For "I have guests to invite but don't know who
+  yet" — free ticket, human-reviewed instead of address-reviewed.
+- `check_group_ids` (string array) — RSVP is rejected unless the user is a
+  member of at least one listed group (OR across the list, so a ticket can gate
+  on several communities at once). For "there's already a membership list, let
+  them in free" without inventing a separate phone-whitelist mechanism.
+
+Group membership for the whitelist case comes through `GroupInvite`, which
+gained a `phone` receiver-address type alongside `email`/`code`. Importing a
+CN phone number (`group_invites#send_invite_to`, normalized through the same
+`PhoneNumber.normalize` service `AuthController` already used) either adds a
+matching existing account directly, or creates a never-expiring invite with no
+SMS sent. `GroupInvite.auto_accept_phone_invites_for` runs inside
+`verify_phone_code`/`bind_phone`/`merge_wechat_account!` and joins the group
+the moment that number signs in — unconditional, not scoped to ticket invites
+the way the existing email auto-accept is.
+
+Two hazards worth remembering if this code is touched again:
+
+- **Auto-accept runs inside the sign-in request.** An exception in any one
+  invite's `accept!` used to be able to 500 the entire sign-in and permanently
+  lock that phone number out (the invite stays pending and retries every
+  login). Each invite is now processed in its own `rescue`, logged, never
+  propagated.
+- **`Group#add_member` unconditionally overwrites role.** A stale pending
+  invite auto-accepting after someone was promoted elsewhere would silently
+  demote them. `GroupInvite#accept!` now compares `ROLE_RANK` against the
+  existing membership first and skips the call if the existing role already
+  outranks the invite.
+
+### Admin-only user merge (`UserMerger`, `POST /api/v1/users/merge`)
+
+For consolidating duplicate accounts (e.g. a WeChat-only and an email account
+later found to be the same person, outside the narrow auto-merge window
+`AuthController#mergeable?` already covers). Moves every row a `platform_admin?`
+picks as the source onto the target — memberships, events, badges, comments,
+tickets, group invites (sent and received), form ownership, ticketing activity,
+event roles, and more — then destroys the source. Anywhere a unique index would
+collide if both users already had a row (memberships, participants,
+track_roles, form_submissions, event_roles), the merge dedupes instead of
+blindly repointing, keeping the higher-ranked role where roles are involved.
+
+Deliberately does **not** touch login identity (`email`/`phone`/`eth`/`sol`/
+`wechat_*`) — that stays `merge_wechat_account!`'s narrower job, with its own
+uniqueness handling.
+
+One known gap, left unhandled on purpose rather than silently: `fed_participations`
+has a live schema/FK on `main` with no `FedParticipation` model to drive a merge
+through (federation work hasn't landed on `main` yet). If a source user ever has
+rows there, the merge will fail loudly on the FK rather than losing data quietly
+— revisit once federation merges.
+
 ## 2026-08-10 — homepage curation, admin notifications, and a 500 nobody saw
 
 Three changes that arrived together because each uncovered the next.
