@@ -52,6 +52,7 @@ Rails.application.routes.draw do
           get :groups
         end
       end
+      post "users/merge", to: "users#merge"
 
       get "group_invites/pending", to: "group_invites#pending"
       get "group_invites/:id", to: "group_invites#show"

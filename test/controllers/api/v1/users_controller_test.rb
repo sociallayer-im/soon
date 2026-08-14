@@ -174,4 +174,47 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     ids = json_response.map { |m| m["group"]["id"] }
     assert_equal [newer_group.id, older_group.id], ids
   end
+
+  test "merge requires platform admin" do
+    admin = create_user
+    from = create_user
+    into = create_user
+    post "/api/v1/users/merge", params: { from_id: from.id, into_id: into.id }, headers: auth_headers(admin)
+    assert_response :forbidden
+    assert User.exists?(from.id)
+  end
+
+  test "merge moves events, badges, and comments onto the target and destroys the source" do
+    admin = create_user(admin: true)
+    from = create_user
+    into = create_user
+    group = create_group(owner: into)
+    event = create_event(group: group, owner: from)
+
+    post "/api/v1/users/merge", params: { from_id: from.id, into_id: into.id }, headers: auth_headers(admin)
+    assert_response :success
+    assert_not User.exists?(from.id)
+    assert_equal into.id, event.reload.owner_id
+  end
+
+  test "merge dedupes memberships in a shared group, keeping the higher role" do
+    admin = create_user(admin: true)
+    from = create_user
+    into = create_user
+    group = create_group
+    create_membership(user: from, group: group, role: "manager")
+    create_membership(user: into, group: group, role: "member")
+
+    post "/api/v1/users/merge", params: { from_id: from.id, into_id: into.id }, headers: auth_headers(admin)
+    assert_response :success
+    assert_equal "manager", Membership.find_by(user: into, group: group).role
+    assert_equal 1, Membership.where(group: group, user: into).count
+  end
+
+  test "merge refuses to merge a user into itself" do
+    admin = create_user(admin: true)
+    user = create_user
+    post "/api/v1/users/merge", params: { from_id: user.id, into_id: user.id }, headers: auth_headers(admin)
+    assert_response :unprocessable_entity
+  end
 end

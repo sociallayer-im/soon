@@ -48,6 +48,27 @@ class Api::V1::UsersController < Api::BaseController
     end
   end
 
+  # POST /api/v1/users/merge {from_id, into_id} — platform-admin-only. Moves
+  # every piece of data `from_id` owns onto `into_id` (memberships, events,
+  # badges, comments, ...; deduping anywhere a unique index would otherwise
+  # collide) and destroys `from_id`. Irreversible. Does NOT carry login
+  # identity (email/phone/eth/sol/wechat) — that is a narrower, separate
+  # operation (AuthController#merge_wechat_account!).
+  def merge
+    return render_error("forbidden", status: :forbidden) unless current_user.platform_admin?
+
+    from = User.resolve!(params[:from_id])
+    into = User.resolve!(params[:into_id])
+
+    begin
+      UserMerger.call(from: from, into: into)
+    rescue ArgumentError, ActiveRecord::RecordInvalid => e
+      return render_error(e.message)
+    end
+
+    render json: UserBlueprint.render(into, view: :self)
+  end
+
   private
 
   # A WeChat account has to finish binding its phone before it can take a
