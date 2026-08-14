@@ -1,0 +1,30 @@
+test/controllers/api/v1/auth_controller_test.rb
+  s_e9ed806a3d225c::t_5da23d41717a4b 313
+  s_e9ed806a3d225c::t_000c3135c192e1 284-312,314-336
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_7ce79ef8602e77 136-140,144,147
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_6216d964c474a2 165-179,181-186,189,191
+config/routes.rb
+  s_e9ed806a3d225c::t_c58961741c2cc5 31
+app/models/group_invite.rb
+  s_e9ed806a3d225c::t_a19c4655062f30 39
+app/services/google_auth.rb
+  s_e9ed806a3d225c::t_6a07515dbae113 1-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "020f434134c097989f488b8d85957fb4ed16c2b8",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
