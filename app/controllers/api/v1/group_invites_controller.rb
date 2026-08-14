@@ -147,7 +147,11 @@ class Api::V1::GroupInvitesController < Api::BaseController
   end
 
   def send_invite_to(address, role)
+    # Normalized with the SAME rules sign-in uses (PhoneNumber ⊂ AuthController)
+    # — the invite has to match users.phone verbatim for auto-join to find it.
+    phone = PhoneNumber.normalize(address)
     user = User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
+    user ||= User.find_by(phone: phone) if phone
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)
@@ -172,6 +176,25 @@ class Api::V1::GroupInvitesController < Api::BaseController
         message: params[:message]
       )
       GroupMailer.invite(invite_id: invite.id).deliver_later
+      return { address: address, result: "invited" }
+    elsif phone
+      # Re-importing a list that overlaps the last one is the normal case —
+      # an existing pending invite for the number is success, not a duplicate.
+      if @group.group_invites.pending_for_phone(phone).exists?
+        return { address: address, result: "invited" }
+      end
+      # A member whitelist import. No mail exists to send and no SMS is sent
+      # (invite templates aren't registered with the gateway) — the person
+      # simply becomes a member the moment they sign in with, or bind, this
+      # number (GroupInvite.auto_accept_phone_invites_for). No expiry for the
+      # same reason: a whitelist isn't an offer that lapses, and the holder
+      # gets no notification that would prompt them to hurry.
+      GroupInvite.create!(
+        group: @group, sender: current_user, role: role,
+        receiver_address_type: "phone", receiver_address: phone,
+        status: "sending", expires_at: nil,
+        message: params[:message]
+      )
       return { address: address, result: "invited" }
     else
       return { address: address, result: "error", message: "invalid receiver" }

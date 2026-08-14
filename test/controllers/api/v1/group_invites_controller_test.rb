@@ -394,4 +394,67 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal 1, json_response.size
   end
+
+  # --- phone whitelist invites ---------------------------------------------
+
+  test "create with a phone number invites the number, normalized, without expiry" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    assert_difference "GroupInvite.count", 1 do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: ["138 0013 8000"], role: "member" }, headers: auth_headers(owner)
+    end
+    assert_equal "invited", json_response["results"].first["result"]
+
+    invite = GroupInvite.last
+    assert_equal "phone", invite.receiver_address_type
+    assert_equal "+8613800138000", invite.receiver_address
+    assert_nil invite.expires_at
+  end
+
+  test "create with a phone number of an existing account adds them directly" do
+    owner = create_user
+    target = create_user
+    target.update!(phone: "+8613800138001")
+    group = create_group(owner: owner)
+
+    assert_no_difference "GroupInvite.count" do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: ["13800138001"], role: "member" }, headers: auth_headers(owner)
+    end
+    assert_equal "added", json_response["results"].first["result"]
+    assert group.memberships.exists?(user: target, role: "member")
+  end
+
+  test "re-importing a phone that is already pending does not duplicate the invite" do
+    owner = create_user
+    group = create_group(owner: owner)
+
+    2.times do
+      post "/api/v1/groups/#{group.id}/group_invites",
+        params: { receivers: ["13800138002"], role: "member" }, headers: auth_headers(owner)
+      assert_equal "invited", json_response["results"].first["result"]
+    end
+    assert_equal 1, GroupInvite.where(receiver_address: "+8613800138002").count
+  end
+
+  test "a phone invite auto-joins the group on SMS sign-in" do
+    owner = create_user
+    group = create_group(owner: owner)
+    post "/api/v1/groups/#{group.id}/group_invites",
+      params: { receivers: ["13800138003"], role: "member" }, headers: auth_headers(owner)
+
+    ENV["PHONE_LOGIN_ENABLED"] = "true"
+    post "/api/v1/auth/request_phone_code", params: { phone: "13800138003" }
+    code = AuthCode.last.code
+    post "/api/v1/auth/verify_phone_code", params: { phone: "13800138003", code: code }
+    assert_response :success
+
+    user = User.find_by(phone: "+8613800138003")
+    assert group.memberships.exists?(user: user, role: "member")
+    assert_equal "accepted", GroupInvite.find_by(receiver_address: "+8613800138003").status
+  ensure
+    ENV.delete("PHONE_LOGIN_ENABLED")
+  end
 end

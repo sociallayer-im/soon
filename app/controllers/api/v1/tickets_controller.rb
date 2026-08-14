@@ -82,6 +82,9 @@ class Api::V1::TicketsController < Api::BaseController
     if @ticket.check_badge_class_id.present? && !holds_required_badge?(@ticket)
       return render_error("this ticket requires a badge you do not hold", status: :forbidden)
     end
+    if @ticket.check_group_ids.present? && !member_of_required_group?(@ticket)
+      return render_error("this ticket is limited to members of specific groups", status: :forbidden)
+    end
     # A live order for THIS ticket already exists — a double-click, or a retry
     # during the post-payment confirmation window. Reserving again would hold a
     # second unit of inventory for one seat; the existing order is what needs
@@ -601,6 +604,12 @@ class Api::V1::TicketsController < Api::BaseController
          .where.not(status: "burned").exists?
   end
 
+  # Any listed group qualifies — the list is an OR, so a ticket can honour
+  # several member communities at once.
+  def member_of_required_group?(ticket)
+    current_user.memberships.exists?(group_id: ticket.check_group_ids)
+  end
+
   # Consumes one coupon usage for a persisted ticket_item, re-checking
   # availability under a row lock so concurrent RSVPs can't over-redeem the
   # last unit. Raises CouponUnavailable (rolling back the enclosing rsvp
@@ -798,7 +807,7 @@ class Api::V1::TicketsController < Api::BaseController
   def ticket_params
     params.require(:ticket).permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
       :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
-      days_allowed: [], tracks_allowed: [],
+      days_allowed: [], tracks_allowed: [], check_group_ids: [],
       payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :currency, :stripe_setting_id, :_destroy, chains: []])
   end
 

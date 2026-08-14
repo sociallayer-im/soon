@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_12_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_14_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -791,6 +791,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_120000) do
 
   create_table "tickets", id: :string, force: :cascade do |t|
     t.string "check_badge_class_id"
+    t.string "check_group_ids", array: true
     t.string "content"
     t.datetime "created_at", null: false
     t.date "days_allowed", array: true

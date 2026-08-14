@@ -29,6 +29,22 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal participant.id, job[:args][3]["args"][0]["participant_id"]
   end
 
+  test "rsvp on a group-gated ticket rejects a non-member and admits a member of ANY listed group" do
+    other_group = create_group(owner: @owner, nickname: "members-#{unique_suffix}")
+    ticket = create_ticket(event: @event, check_group_ids: [ other_group.id, @group.id ])
+    outsider = create_user
+    member = create_user
+    create_membership(user: member, group: other_group)
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(outsider)
+    assert_response :forbidden
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(member)
+    assert_response :success
+    assert_equal "attending", json_response["participant"]["status"]
+    assert_equal 0, json_response["ticket_item"]["amount"]
+  end
+
   test "rsvp rolls back atomically when a later step fails after the ticket_item saved" do
     ticket = create_ticket(event: @event, quantity: 1)
     buyer = create_user

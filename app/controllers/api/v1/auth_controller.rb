@@ -124,7 +124,9 @@ class Api::V1::AuthController < Api::BaseController
     code = consume_code!(recipient: phone, context: PHONE_LOGIN_CONTEXT, attempt: params[:code])
     return unless code
 
-    render_token User.find_or_create_by!(phone: phone)
+    user = User.find_or_create_by!(phone: phone)
+    GroupInvite.auto_accept_phone_invites_for(user)
+    render_token user
   end
 
   # GET /api/v1/auth/nonce — mints a single-use SIWE nonce.
@@ -235,6 +237,7 @@ class Api::V1::AuthController < Api::BaseController
     end
 
     current_user.update!(phone: phone)
+    GroupInvite.auto_accept_phone_invites_for(current_user)
     render json: UserBlueprint.render(current_user, view: :self)
   end
 
@@ -361,6 +364,9 @@ class Api::V1::AuthController < Api::BaseController
       into.update!(carry)
     end
     GroupInvite.auto_accept_ticket_invites_for(into)
+    # The merge may have just carried a verified phone onto `into` (see
+    # `carry` above) — any whitelist invites for that number land now.
+    GroupInvite.auto_accept_phone_invites_for(into)
     into
   end
 
@@ -384,31 +390,13 @@ class Api::V1::AuthController < Api::BaseController
     params[:email].to_s.strip.downcase
   end
 
-  # Accepts what people actually type — "138 0013 8000", "+86 13800138000",
-  # "8613800138000" — and returns a single canonical "+8613800138000", or nil
-  # if it isn't a mainland mobile. Canonical form matters twice over: it is the
-  # AuthCode recipient (so the code requested must be the code verified) and
-  # the uniquely-indexed users.phone (so one person is one row however they
-  # typed it that day).
+  # Canonical form matters twice over: it is the AuthCode recipient (so the
+  # code requested must be the code verified) and the uniquely-indexed
+  # users.phone (so one person is one row however they typed it that day).
+  # The rules live in PhoneNumber so the group-invite phone import normalizes
+  # with the same ones.
   def normalized_phone
-    raw = params[:phone].to_s.gsub(/[\s\-()]/, "")
-
-    digits =
-      if raw.start_with?("+")
-        # An explicit country code has to be +86. Without this check
-        # "+14155552671" — a perfectly ordinary US number — is eleven digits
-        # that satisfy CN_MOBILE by coincidence, and we would try to text it.
-        return nil unless raw.start_with?(CN_COUNTRY_CODE)
-        raw.delete_prefix(CN_COUNTRY_CODE)
-      elsif raw.length > 11 && raw.start_with?("86")
-        raw.delete_prefix("86")
-      else
-        raw
-      end
-
-    return nil unless digits.match?(CN_MOBILE)
-
-    "#{CN_COUNTRY_CODE}#{digits}"
+    PhoneNumber.normalize(params[:phone])
   end
 
   # Renders the 429 and returns true when the number has asked too recently or

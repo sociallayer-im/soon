@@ -17,6 +17,7 @@ class GroupInvite < ApplicationRecord
   # ticket grants (see #grant_ticket!) are created with no expiry since the ticket was
   # already paid for and shouldn't lapse just because signup is delayed.
   scope :pending_for_email, ->(email) { where(status: "sending", receiver_address_type: "email", receiver_address: email).where("expires_at IS NULL OR expires_at > ?", Time.current) }
+  scope :pending_for_phone, ->(phone) { where(status: "sending", receiver_address_type: "phone", receiver_address: phone).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   def expired?
     expires_at.present? && expires_at <= Time.current
@@ -46,12 +47,24 @@ class GroupInvite < ApplicationRecord
     pending_for_email(user.email).where.not(ticket_id: nil).find_each { |invite| invite.accept!(user) }
   end
 
+  # Phone invites auto-accept UNCONDITIONALLY, ticket or not — the opposite of
+  # the email rule above, on purpose. A phone invite only ever comes from a
+  # manager importing a member whitelist (there is no mail to send and no SMS
+  # is sent), so the intent is "these people already ARE members" and the join
+  # should land the moment the number is verified — sign-in or bind alike.
+  # Called from AuthController#verify_phone_code, #bind_phone and the account
+  # merge (which can carry a verified phone onto the surviving account).
+  def self.auto_accept_phone_invites_for(user)
+    return unless user.phone.present?
+    pending_for_phone(user.phone).find_each { |invite| invite.accept!(user) }
+  end
+
   private
 
   def grant_ticket!(user)
     item = TicketItem.create_with(status: "pending").find_or_create_by!(
       event_id: group.group_ticket_event_id, ticket_id: ticket_id,
-      selector_type: "email", selector_address: receiver_address,
+      selector_type: receiver_address_type, selector_address: receiver_address,
       ticket_type: "group", group_id: group_id, auth_type: "invite"
     )
     item.update!(status: "succeeded", user_id: user.id) unless item.status == "succeeded"

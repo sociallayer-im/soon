@@ -349,7 +349,7 @@ class Api::V1::EventsController < Api::BaseController
     Array(tickets).each do |ticket|
       permitted = ticket.permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
         :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
-        days_allowed: [], tracks_allowed: [],
+        days_allowed: [], tracks_allowed: [], check_group_ids: [],
         payment_methods_attributes: [:chain, :kind, :token_name, :token_address,
           :receiver_address, :price, :protocol, :stripe_setting_id, chains: []]).to_h
       permitted["group_id"] = group_id if permitted["group_id"].blank?
