@@ -439,6 +439,44 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, GroupInvite.where(receiver_address: "+8613800138002").count
   end
 
+  test "auto-accepting a member invite never demotes an existing manager" do
+    owner = create_user
+    group = create_group(owner: owner)
+    manager = create_user
+    manager.update!(phone: "+8613800138004")
+    create_membership(user: manager, group: group, role: "manager")
+    invite = GroupInvite.create!(
+      group: group, sender: owner, role: "member",
+      receiver_address_type: "phone", receiver_address: "+8613800138004", status: "sending"
+    )
+
+    GroupInvite.auto_accept_phone_invites_for(manager)
+
+    assert_equal "manager", group.memberships.find_by(user: manager).role
+    assert_equal "accepted", invite.reload.status
+  end
+
+  test "one broken invite does not block phone sign-in" do
+    owner = create_user
+    group = create_group(owner: owner)
+    broken = GroupInvite.create!(
+      group: group, sender: owner, role: "member",
+      receiver_address_type: "phone", receiver_address: "+8613800138005", status: "sending"
+    )
+    user = User.create!(phone: "+8613800138005")
+
+    # Auto-accept runs INSIDE sign-in, so an invite that blows up in accept!
+    # must be contained — logged, left pending — rather than propagate.
+    original = GroupInvite.instance_method(:accept!)
+    GroupInvite.define_method(:accept!) { |_u| raise ActiveRecord::RecordInvalid.new(self) }
+    begin
+      assert_nothing_raised { GroupInvite.auto_accept_phone_invites_for(user) }
+      assert_equal "sending", broken.reload.status
+    ensure
+      GroupInvite.define_method(:accept!, original)
+    end
+  end
+
   test "a phone invite auto-joins the group on SMS sign-in" do
     owner = create_user
     group = create_group(owner: owner)

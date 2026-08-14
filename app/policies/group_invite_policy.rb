@@ -19,6 +19,7 @@ class GroupInvitePolicy < ApplicationPolicy
 
   def recipient?
     return true if record.receiver_id.present? && record.receiver_id == user&.id
-    record.receiver_address_type == "email" && record.receiver_address == user&.email
+    return true if record.receiver_address_type == "email" && record.receiver_address == user&.email
+    record.receiver_address_type == "phone" && record.receiver_address == user&.phone
   end
 end

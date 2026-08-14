@@ -150,8 +150,11 @@ class Api::V1::GroupInvitesController < Api::BaseController
     # Normalized with the SAME rules sign-in uses (PhoneNumber ⊂ AuthController)
     # — the invite has to match users.phone verbatim for auto-join to find it.
     phone = PhoneNumber.normalize(address)
-    user = User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
-    user ||= User.find_by(phone: phone) if phone
+    # Phone match comes FIRST when the input reads as one: usernames may be
+    # all digits, and a user NAMED "13800138000" must not intercept an invite
+    # meant for whoever owns that number.
+    user = User.find_by(phone: phone) if phone
+    user ||= User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)

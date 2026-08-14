@@ -28,9 +28,18 @@ class GroupInvite < ApplicationRecord
   # TicketsController#add_group_ticket_item) also mints the TicketItem grant.
   # `user` is the person becoming the member — for a self-service join
   # request this is the original requester, not whoever approves it.
+  # Accepting must never DEMOTE: an invite minted while the person had no
+  # account (or an unbound phone) can be accepted long after they became a
+  # manager or owner through some other path, and add_member overwrites the
+  # role unconditionally. Keep whichever role ranks higher.
+  ROLE_RANK = { "member" => 0, "manager" => 1, "owner" => 2 }.freeze
+
   def accept!(user)
     transaction do
-      group.add_member(user.id, role)
+      existing = group.memberships.find_by(user_id: user.id)
+      unless existing && ROLE_RANK.fetch(existing.role, 0) >= ROLE_RANK.fetch(role, 0)
+        group.add_member(user.id, role)
+      end
       grant_ticket!(user) if ticket_id.present?
       update!(status: "accepted", receiver_id: user.id)
     end
@@ -56,7 +65,14 @@ class GroupInvite < ApplicationRecord
   # merge (which can carry a verified phone onto the surviving account).
   def self.auto_accept_phone_invites_for(user)
     return unless user.phone.present?
-    pending_for_phone(user.phone).find_each { |invite| invite.accept!(user) }
+    pending_for_phone(user.phone).find_each do |invite|
+      # This runs INSIDE sign-in (verify_phone_code / bind_phone). One broken
+      # invite must not lock the account out of logging in forever — it stays
+      # pending for a retry on the next sign-in instead.
+      invite.accept!(user)
+    rescue StandardError => e
+      Rails.logger.error("[group_invite] phone auto-accept failed for invite #{invite.id}: #{e.message}")
+    end
   end
 
   private
