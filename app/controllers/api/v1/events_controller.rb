@@ -17,6 +17,7 @@ class Api::V1::EventsController < Api::BaseController
   # → public events; with a token the response also carries
   # is_attending/is_starred/is_owner flags.
   def index
+    cache_when_anonymous!(max_age: 30)
     scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
     scope = apply_filters(scope)
     render_collection scope, blueprint: EventBlueprint, **personalization_options

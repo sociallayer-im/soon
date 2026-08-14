@@ -69,6 +69,17 @@ class Api::BaseController < ActionController::API
     request.headers["Authorization"]&.split(" ")&.last
   end
 
+  # Standard HTTP caching (browser + any CDN in front, e.g. Cloudflare) for
+  # public GETs that personalize when a token is present — NOT Next.js's own
+  # fetch cache, which the frontend deliberately avoids relying on. Only sets
+  # Cache-Control when the request is anonymous: an authenticated response
+  # carries per-user fields (is_attending/is_starred/...) and a CDN cache is
+  # shared across users, so caching it would leak one user's flags to another.
+  def cache_when_anonymous!(max_age:)
+    return if current_user
+    response.headers["Cache-Control"] = "public, max-age=#{max_age}"
+  end
+
   # soon mints {"user_id" => <tsid>}. The legacy sails backend minted
   # {"id" => <integer profile id>} with no `exp`, and those tokens are still in
   # users' browsers at cutover — without this fallback every signed-in user is

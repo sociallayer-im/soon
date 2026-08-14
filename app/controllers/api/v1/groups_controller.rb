@@ -24,6 +24,9 @@ class Api::V1::GroupsController < Api::BaseController
 
   # :id accepts a TSID or the group's slug (Group.resolve!).
   def show
+    # Never personalizes (no authenticate_optional! here), so this is always
+    # safe to cache regardless of whether a token was sent.
+    cache_when_anonymous!(max_age: 30)
     group = Group.with_detail_associations.resolve!(params[:id])
     render json: GroupBlueprint.render(group, view: :detail)
   end
