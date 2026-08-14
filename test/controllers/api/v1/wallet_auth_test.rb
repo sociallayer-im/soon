@@ -133,30 +133,19 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "trusted_signin with an email creates/finds the account (Google flow)" do
+  # Google moved to /auth/verify_google (the token is verified server-side
+  # against Google itself) and Solana died with the standalone auth app. The
+  # branches are gone so NEXT_TOKEN can no longer mint a session for an
+  # arbitrary email — a valid secret with a non-WeChat identity is an error.
+  test "trusted_signin no longer accepts email or sol identities" do
     with_next_token("s3cret") do
-      assert_difference "User.count", 1 do
-        post "/api/v1/auth/trusted_signin", params: { next_token: "s3cret", email: "Google@Test.com" }
-      end
-      assert_response :success
-      assert json_response["token"].present?
-      assert User.exists?(email: "google@test.com")
-
       assert_no_difference "User.count" do
         post "/api/v1/auth/trusted_signin", params: { next_token: "s3cret", email: "google@test.com" }
-      end
-    end
-  end
+        assert_response :unprocessable_entity
 
-  test "trusted_signin with a sol_address creates/finds the account (Solana flow)" do
-    with_next_token("s3cret") do
-      assert_difference "User.count", 1 do
         post "/api/v1/auth/trusted_signin", params: { next_token: "s3cret", sol_address: "So1anaAddre55" }
+        assert_response :unprocessable_entity
       end
-      assert_response :success
-      user = User.find_by(sol: "So1anaAddre55")
-      assert user
-      assert_nil user.email
     end
   end
 

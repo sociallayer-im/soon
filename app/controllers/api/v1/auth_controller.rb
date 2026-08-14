@@ -162,24 +162,33 @@ class Api::V1::AuthController < Api::BaseController
     render json: { error: "Invalid SIWE message or signature" }, status: :unauthorized
   end
 
+  # POST /api/v1/auth/verify_google — Google OAuth sign-in.
+  # The access token comes straight from the browser and is verified HERE
+  # against Google's userinfo endpoint; only the email Google returns is used.
+  # This replaces the old frontend-mediated path through #trusted_signin, which
+  # required trusting a shared secret with the power to mint a session for any
+  # email at all.
+  def verify_google
+    email = GoogleAuth.verified_email(params[:access_token].to_s)
+    return render json: { error: "Invalid Google access token" }, status: :unauthorized unless email
+
+    user = User.find_or_create_by!(email: email)
+    GroupInvite.auto_accept_ticket_invites_for(user)
+    render_token user
+  end
+
   # POST /api/v1/auth/trusted_signin
-  # For the auth frontend's server-side flows (Google OAuth, Solana signature,
-  # WeChat 网页授权), where the proof is verified by the frontend server itself.
-  # Gated by the NEXT_TOKEN shared secret, which only that server knows.
+  # For the frontend's WeChat 网页授权 callback ONLY: the openid is proven by the
+  # frontend server redeeming the code with the app secret, so that server (and
+  # only it, via NEXT_TOKEN) may assert the identity. The email and sol branches
+  # this once had are gone — Google verifies in #verify_google, Solana died with
+  # the standalone auth app — so NEXT_TOKEN can no longer mint a session for an
+  # arbitrary email.
   def trusted_signin
     return render json: { error: "Unauthorized" }, status: :unauthorized unless next_token_ok?
+    return render_error("wechat_openid is required") unless params[:wechat_openid].present? || params[:wechat_unionid].present?
 
-    if params[:email].present?
-      user = User.find_or_create_by!(email: params[:email].to_s.strip.downcase)
-      GroupInvite.auto_accept_ticket_invites_for(user)
-      render_token user
-    elsif params[:sol_address].present?
-      render_token User.find_or_create_by!(sol: params[:sol_address].to_s)
-    elsif params[:wechat_openid].present? || params[:wechat_unionid].present?
-      render_token wechat_user
-    else
-      render_error("email, sol_address or wechat_openid is required")
-    end
+    render_token wechat_user
   end
 
   # POST /api/v1/auth/bind_email — attaches an email to a wallet- or WeChat-first

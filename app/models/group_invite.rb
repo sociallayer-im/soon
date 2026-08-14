@@ -36,7 +36,7 @@ class GroupInvite < ApplicationRecord
   end
 
   # Auto-run whenever a user's email becomes verified (signup, wallet bind_email,
-  # trusted_signin) — see AuthController. Only ticket invites auto-accept: the
+  # Google sign-in) — see AuthController. Only ticket invites auto-accept: the
   # ticket was already paid for, so the grant should land the moment the
   # recipient's email is verified. Plain group invites stay pending for the
   # user to accept manually (GroupInvitesController#pending/#accept) — money

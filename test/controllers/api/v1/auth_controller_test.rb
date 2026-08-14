@@ -281,4 +281,57 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert json_response["token"].present?
   end
+
+  test "verify_google signs in the email Google vouches for" do
+    GoogleAuth.stub(:verified_email, "googler@test.com") do
+      assert_difference "User.count", 1 do
+        post "/api/v1/auth/verify_google", params: { access_token: "ya29.token" }
+      end
+    end
+    assert_response :success
+    assert json_response["token"].present?
+    assert_equal "googler@test.com", User.last.email
+  end
+
+  test "verify_google rejects a token Google does not vouch for" do
+    GoogleAuth.stub(:verified_email, nil) do
+      assert_no_difference "User.count" do
+        post "/api/v1/auth/verify_google", params: { access_token: "garbage" }
+      end
+    end
+    assert_response :unauthorized
+  end
+
+  # The email branch trusted_signin used to have let any NEXT_TOKEN holder mint
+  # a session for ANY address. It is gone — the endpoint is WeChat-only now —
+  # and must not come back.
+  test "trusted_signin no longer accepts an email identity" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    assert_no_difference "User.count" do
+      post "/api/v1/auth/trusted_signin", params: { next_token: "test-token", email: "victim@test.com" }
+    end
+    assert_response :unprocessable_entity
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "trusted_signin still signs in a WeChat identity with a valid NEXT_TOKEN" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    assert_difference "User.count", 1 do
+      post "/api/v1/auth/trusted_signin", params: { next_token: "test-token", wechat_openid: "oABC123" }
+    end
+    assert_response :success
+    assert json_response["token"].present?
+    assert_equal "oABC123", User.last.wechat_openid
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "trusted_signin rejects a wrong or missing NEXT_TOKEN" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    post "/api/v1/auth/trusted_signin", params: { next_token: "wrong", wechat_openid: "oABC123" }
+    assert_response :unauthorized
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
 end
