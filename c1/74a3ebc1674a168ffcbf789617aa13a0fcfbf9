@@ -1,0 +1,121 @@
+db/migrate/20260815120001_create_oauth_authorization_codes.rb
+  s_e9ed806a3d225c::t_63cb786d34c089 1-5,9-22,24-29
+  s_e9ed806a3d225c::t_20c75dcab8c652 6-8
+  s_e9ed806a3d225c::t_de565ad3774e00 23
+app/models/oauth_refresh_token.rb
+  s_e9ed806a3d225c::t_4ef469b2966e55 1-64
+app/blueprints/oauth_grant_blueprint.rb
+  s_e9ed806a3d225c::t_863e3ad2051a43 1-28
+app/blueprints/oauth_application_blueprint.rb
+  s_e9ed806a3d225c::t_019cf647e2541e 1-32
+Gemfile
+  s_e9ed806a3d225c::t_755f0f74bb7be9 22-25
+app/services/oauth_id_token.rb
+  s_e9ed806a3d225c::t_6d35f70051a5f5 1-32
+config/routes.rb
+  s_e9ed806a3d225c::t_de4d94a4a1dcfd 47-71
+  s_e9ed806a3d225c::t_54313d47996ef2 13-22
+test/controllers/api/v1/oauth_applications_controller_test.rb
+  s_e9ed806a3d225c::t_1e459b4e162707 70-78
+  s_e9ed806a3d225c::t_8a959226a01df7 1-69,79-177
+test/models/oauth_application_test.rb
+  s_e9ed806a3d225c::t_1e459b4e162707 1-48
+app/models/group.rb
+  s_e9ed806a3d225c::t_92d0a3d487bb49 28-33
+app/models/oauth_authorization_code.rb
+  s_e9ed806a3d225c::t_ce3e7e80e94654 42
+  s_e9ed806a3d225c::t_1d6630d8eed6dc 1-41,43-48
+ginger.yml
+  s_e9ed806a3d225c::t_84112d3a6cca4d 106-111
+design/OAUTH_PROVIDER_PLAN.md
+  s_e9ed806a3d225c::t_a965a12fa3f2c9 1-2,5-114,116-181,187-191,193-195,197-201
+  s_e9ed806a3d225c::t_f26dfa85d75c03 3-4,267-287,290-291
+  s_e9ed806a3d225c::t_f6c084623a9916 115
+  s_e9ed806a3d225c::t_915da0dfc1451f 182-186,192,196
+  s_e9ed806a3d225c::t_c45421dfca6e89 202-230
+  s_e9ed806a3d225c::t_d192bfe9c04f92 231-266,288-289,292-306
+  s_e9ed806a3d225c::t_475cde4bfb690f 307-373
+db/migrate/20260815120000_create_oauth_applications.rb
+  s_e9ed806a3d225c::t_23851d9ec4dc3f 30-31
+  s_e9ed806a3d225c::t_0f0f770759352c 1-29,32-33
+app/controllers/well_known_controller.rb
+  s_e9ed806a3d225c::t_3ddc18bfec6c39 26
+  s_e9ed806a3d225c::t_7cc5ef3cba01ed 1-25,27-50
+app/services/user_merger.rb
+  s_e9ed806a3d225c::t_5d9b48af810a01 65-68
+db/migrate/20260815120004_create_oauth_grants.rb
+  s_e9ed806a3d225c::t_ead44821aaa00c 1-14
+app/models/oauth_application.rb
+  s_e9ed806a3d225c::t_b70f993045b1c2 1-21,24,26-140
+  s_e9ed806a3d225c::t_3ddc18bfec6c39 22-23,25
+test/controllers/api/v1/oauth_admin_applications_controller_test.rb
+  s_e9ed806a3d225c::t_565266e56926ae 1-66
+test/services/oauth_config_test.rb
+  s_e9ed806a3d225c::t_eedd1b040e5502 1-46
+db/migrate/20260815120002_create_oauth_access_tokens.rb
+  s_e9ed806a3d225c::t_6592476ad9aac1 1-19
+app/models/concerns/oauth_digestible.rb
+  s_e9ed806a3d225c::t_5dac111d2cbcdb 9-11,15-20,22,24,30-31
+  s_e9ed806a3d225c::t_7a9a44b916b6c5 1-8,12-14,21,23,25-29
+app/controllers/api/v1/oauth_controller.rb
+  s_e9ed806a3d225c::t_955d00b8b0f444 1-205,215-315
+  s_e9ed806a3d225c::t_06fd444430d1e8 206-214
+test/controllers/api/v1/oauth_grants_controller_test.rb
+  s_e9ed806a3d225c::t_59497a3e383201 1-45
+test/models/oauth_cascade_test.rb
+  s_e9ed806a3d225c::t_7cfca30d52b823 1-50
+app/models/oauth_grant.rb
+  s_e9ed806a3d225c::t_6cdce6fee8e64e 1-33
+app/services/oauth_claims.rb
+  s_e9ed806a3d225c::t_41bd1c142e4430 1-95,99-113,115-133
+  s_e9ed806a3d225c::t_ff18a40267eb93 96-98
+  s_e9ed806a3d225c::t_aa0a3d7a741896 114
+ginger.cn.yml
+  s_e9ed806a3d225c::t_5ec32541d82f7f 84-89
+app/services/oauth_config.rb
+  s_e9ed806a3d225c::t_1d6d369dca4c89 16
+  s_e9ed806a3d225c::t_e4d7d75f514763 31-45
+  s_e9ed806a3d225c::t_65745ecf4eaee1 53-65
+  s_e9ed806a3d225c::t_7956fcee756d74 1-15,17-30,46,48-52,66-102
+  s_e9ed806a3d225c::t_9f8e86b4805088 47
+app/controllers/api/v1/oauth_grants_controller.rb
+  s_e9ed806a3d225c::t_4e7897beb95205 1-18
+app/controllers/api/v1/oauth_applications_controller.rb
+  s_e9ed806a3d225c::t_68b815fd737b04 1-72,80-82
+  s_e9ed806a3d225c::t_4fa21733743dda 73-79
+db/migrate/20260815120003_create_oauth_refresh_tokens.rb
+  s_e9ed806a3d225c::t_7d606b611a52e0 1-24
+app/models/user.rb
+  s_e9ed806a3d225c::t_7e4129472179ea 17-31
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_081c1fe66fa1ae 163-189
+app/controllers/api/v1/oauth_admin_applications_controller.rb
+  s_e9ed806a3d225c::t_8ec9dbcf0abba5 1-29,33-50
+  s_e9ed806a3d225c::t_0be42d9b03fa17 30-32
+test/controllers/api/v1/oauth_controller_test.rb
+  s_e9ed806a3d225c::t_0a6f1602e0dac2 1-11,13-16,18-34,36-45,47-48,50-78,80-85,87-155,157-167,169-179,181-191,193-228,230-255,257-272,274-283,285-297,307-315,317-332,334-344,346-351,353-375,377-405,407-432,434-448,450-457,459-501,503-504,506-511,513-514
+  s_e9ed806a3d225c::t_fe63934542b52c 12,17,35,46,49,79,86,156,168,180,192,229,256,273,284,316,333,345,352,376,406,433,449,458,512
+  s_e9ed806a3d225c::t_441820ceefdc7b 298-306,502,505
+app/models/oauth_access_token.rb
+  s_e9ed806a3d225c::t_210b364393045b 1-32
+Gemfile.lock
+  s_e9ed806a3d225c::t_d16241c61fab3e 102,464,523
+db/schema.rb
+  s_e9ed806a3d225c::t_85ad65ffe030a3 13,620-697,1080-1090
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c174a3ebc1674a168ffcbf789617aa13a0fcfbf9",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
