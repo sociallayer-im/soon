@@ -50,7 +50,10 @@ Rails.application.routes.draw do
       get  "oauth/authorize", to: "oauth#authorize_info"
       post "oauth/authorize", to: "oauth#authorize_decision"
       post "oauth/token",     to: "oauth#token"
+      # OIDC Core §5.3.1 requires UserInfo to answer on both verbs — a client
+      # that sends the token in a form body rather than a header needs POST.
       get  "oauth/userinfo",  to: "oauth#userinfo"
+      post "oauth/userinfo",  to: "oauth#userinfo"
       post "oauth/revoke",    to: "oauth#revoke"
 
       # Developer portal and the user's own consent management (session JWT).

@@ -360,6 +360,26 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
     assert_not OauthAccessToken.find_by_token(second["access_token"]).active?
   end
 
+  test "refresh can narrow the scope but never widen it" do
+    body = complete_flow(scope: "openid profile")
+
+    post "/api/v1/oauth/token", params: {
+      grant_type: "refresh_token", refresh_token: body["refresh_token"],
+      client_id: @client.client_id, client_secret: @secret, scope: "openid"
+    }
+    assert_response :success
+    assert_equal "openid", json_response["scope"]
+    narrowed = json_response
+
+    # And having narrowed, it cannot climb back up.
+    post "/api/v1/oauth/token", params: {
+      grant_type: "refresh_token", refresh_token: narrowed["refresh_token"],
+      client_id: @client.client_id, client_secret: @secret, scope: "openid profile"
+    }
+    assert_response :bad_request
+    assert_equal "invalid_scope", json_response["error"]
+  end
+
   test "refresh rejects a token belonging to another client" do
     body = complete_flow
     other_app, other_secret = create_oauth_application
@@ -411,6 +431,30 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [ group.id ], json_response["groups"].map { |g| g["id"] }
     assert_equal "owner", json_response["groups"].first["role"]
+  end
+
+  test "token and userinfo responses forbid caching" do
+    # RFC 6749 §5.1 makes this a MUST: without it a proxy or a browser is
+    # entitled to keep a copy of somebody's access token.
+    body = complete_flow
+    assert_equal "no-store", response.headers["Cache-Control"]
+
+    get "/api/v1/oauth/userinfo", headers: { "Authorization" => "Bearer #{body['access_token']}" }
+    assert_equal "no-store", response.headers["Cache-Control"]
+  end
+
+  test "userinfo answers on POST as well as GET" do
+    # OIDC Core §5.3.1 requires both verbs.
+    body = complete_flow
+    post "/api/v1/oauth/userinfo", headers: { "Authorization" => "Bearer #{body['access_token']}" }
+    assert_response :success
+    assert_equal @user.id, json_response["sub"]
+  end
+
+  test "a missing bearer token gets a WWW-Authenticate challenge" do
+    get "/api/v1/oauth/userinfo"
+    assert_response :unauthorized
+    assert_equal "Bearer", response.headers["WWW-Authenticate"]
   end
 
   test "userinfo rejects a sola session JWT" do

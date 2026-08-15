@@ -371,3 +371,28 @@ OAuth access token 打不进 `/api/v1` 的其余端点，sola 会话 JWT 也打�
 - **本次部署会跑 5 个建表迁移**，全部是新表、无数据回填，对现有表零改动。
   但注意 `ginger rollback` 只换镜像不回滚迁移 —— 回滚后这五张表会留在库里
   （空表，无害）。
+
+### 12. 规范符合性复查（部署 sola.day 前）
+
+对照 RFC 6749 / 6750 / 7009 / 7636 与 OIDC Core 逐条过了一遍。**已补的四处：**
+
+- **`Cache-Control: no-store`**（RFC 6749 §5.1 是 MUST，6750 §5.3 对资源端点
+  重申）。之前 token 与 userinfo 响应没有这个头，代理或浏览器有权留一份别人的
+  access token。
+- **UserInfo 必须同时支持 GET 和 POST**（OIDC Core §5.3.1），之前只有 GET。
+- **缺 bearer token 时要回 `WWW-Authenticate`**（RFC 6750 §3），否则客户端分不清
+  "凭证不对"和"根本不知道要什么"。
+- **refresh 时的 scope 收窄**（RFC 6749 §6）。之前传了 `scope` 会被静默忽略并
+  返回原样的全量 scope；现在支持收窄、拒绝扩大，两个方向都有测试。
+
+**已知且有意保留的偏离一处：** 授权端点在参数出错时（如 `invalid_scope`）不把
+错误重定向回 client 的 `redirect_uri`，而是在同意页上显示。规范说在
+`redirect_uri` 已确认合法的前提下 SHOULD 重定向回去。这里选择显示：本实现的
+同意页是前端页面，错误对开发者可见更有用，且少一条可被诱导的重定向路径。
+代价是标准客户端库在这种情况下会一直等着不返回。如果将来接入方反馈，再改。
+
+**逐条确认无误：** `expires_in` 为秒；`scope` 始终回传；错误码用 RFC 规定的那组
+（`invalid_grant` 是客户端丢弃 refresh token 的信号）；未知 token 的 revoke 返回
+200（否则是令牌有效性预言机）；PKCE 强制 S256 且恒定时间比较；只支持 code 流程，
+所以 `id_token` 只出现在 POST 响应体、不进 URL；`token_endpoint_auth_methods`
+三种都真的支持（basic / post / none）。

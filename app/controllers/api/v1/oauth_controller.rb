@@ -9,6 +9,10 @@ class Api::V1::OauthController < Api::BaseController
   # revoke — which authenticate by client credentials or bearer token) or
   # authenticates the end user itself (authorize).
   skip_before_action :authenticate!
+  # RFC 6749 §5.1 makes these a MUST on any response carrying a token, and
+  # RFC 6750 §5.3 repeats it for the resource endpoint. Without them a proxy or
+  # a browser is entitled to keep a copy of somebody's access token.
+  before_action :forbid_caching, only: %i[token userinfo revoke]
 
   OauthError = Class.new(StandardError) do
     attr_reader :code, :status
@@ -186,7 +190,15 @@ class Api::V1::OauthController < Api::BaseController
     end
     raise OauthError.new("invalid_grant", "refresh_token has expired") unless rt.active?
 
-    access, refresh = rt.rotate!
+    # RFC 6749 §6: a client may ask for a subset of what it was granted, and
+    # MUST NOT be able to widen. Omitting scope means "the same as before".
+    narrowed = requested_scopes
+    if narrowed.any?
+      extra = narrowed - rt.oauth_access_token.scopes
+      raise OauthError.new("invalid_scope", "Scopes exceed the original grant: #{extra.join(', ')}") if extra.any?
+    end
+
+    access, refresh = rt.rotate!(scopes: narrowed.presence)
     render json: token_response(access, refresh, user: rt.user, application: app)
   end
 
@@ -250,7 +262,15 @@ class Api::V1::OauthController < Api::BaseController
   # JWT. Keeping the two apart is the point: a third party holding a scoped
   # OAuth token must never be able to call the rest of /api/v1 with it.
   def access_token!
-    value = request.headers["Authorization"].to_s.split(" ", 2).last
+    header = request.headers["Authorization"].to_s
+    unless header.start_with?("Bearer ")
+      # RFC 6750 §3: a 401 from a resource endpoint has to say what scheme it
+      # wants, or a client cannot tell "wrong credentials" from "no idea".
+      response.headers["WWW-Authenticate"] = "Bearer"
+      raise OauthError.new("invalid_request", "Missing bearer token", :unauthorized)
+    end
+
+    value = header.split(" ", 2).last
     at = OauthAccessToken.find_by_token(value)
     unless at&.active?
       response.headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
@@ -274,6 +294,11 @@ class Api::V1::OauthController < Api::BaseController
   def current_user_required!
     current_user_optional ||
       raise(OauthError.new("login_required", "Sign in required", :unauthorized))
+  end
+
+  def forbid_caching
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
   end
 
   # --- request validation -------------------------------------------------

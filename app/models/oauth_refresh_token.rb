@@ -33,12 +33,14 @@ class OauthRefreshToken < ApplicationRecord
   # fresh pair carrying the same family_id. The expiry does NOT extend — the
   # family dies 30 days after the user consented, so a stolen refresh token
   # cannot be renewed indefinitely into a permanent session.
-  def rotate!
+  # `scopes` narrows the new token (RFC 6749 §6 lets a client ask for less than
+  # it was granted). It can only ever shrink — the caller checks that.
+  def rotate!(scopes: nil)
     transaction do
       revoke!
       oauth_access_token.update!(revoked_at: Time.current)
       new_access = OauthAccessToken.issue(
-        user: user, application: oauth_application, scopes: oauth_access_token.scopes
+        user: user, application: oauth_application, scopes: scopes || oauth_access_token.scopes
       )
       new_refresh = OauthRefreshToken.create!(
         user: user,
