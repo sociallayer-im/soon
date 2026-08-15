@@ -2,6 +2,104 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-15 — soon becomes an OAuth 2.0 / OpenID Connect provider
+
+Third parties can now offer "Login with Social Layer" and read a user's
+identity, communities, events and badges with that user's consent. Full design,
+decisions and pre-deploy review: `design/OAUTH_PROVIDER_PLAN.md`.
+
+Deployed to SG as `91beea0` (frontend `seastar-app@06a6f55`). **CN is not
+deployed** — its key and issuer are staged in `.env.cn.production` and
+`ginger.cn.yml` but nothing has shipped.
+
+### Two issuers, never one
+
+`sola.day` and `juluo.xyz` are separate databases and separate client
+registries, so they are two independent authorization servers. A client
+registered on one does not exist on the other. Every identity value comes from
+the environment (`OAUTH_ISSUER`, `OAUTH_RSA_PRIVATE_KEY`), and **the two
+deployments hold different RSA keys** — one shared key would let either
+issuer's `id_token` validate against the other's JWKS.
+
+The private key is stored base64-encoded on a single line, because a PEM is
+multi-line and `.env` is not; `OauthConfig` also accepts a literal-`\n` or real
+multi-line PEM, all three with tests. Both variables are in `secrets.inject`
+*and* `.env` — one without the other either fails the deploy outright or is
+silently ignored, the trap `ALLOWED_SIWE_DOMAINS` and `WEB_URL` were each
+caught by.
+
+### What was deliberately not copied from semi-backend
+
+The implementation is modelled on `/Users/jiang/dev/semi`, but five of its
+choices were rejected:
+
+- **Access tokens live one hour, not ten years.** They are opaque strings
+  looked up per request, so a short life costs nothing, and a leak stops being
+  a decade-long problem that depends on someone noticing and revoking.
+- **Nothing is stored in plaintext.** Authorization codes and both token kinds
+  keep only a SHA-256 digest. semi stored them verbatim, which makes one
+  database dump equal to every live session.
+- **Public clients exist.** Requiring a secret excludes SPAs or pushes
+  developers to ship one in a bundle. A public client authenticates with PKCE
+  alone and has no secret to leak.
+- **The admin endpoints authenticate.** semi's equivalent had no check at all,
+  so anyone could enumerate every application and its owner.
+- **A standards-compliant browser entry point.** `GET /oauth/authorize` at the
+  root 302s to the consent page carrying the query string, so a stock OIDC
+  library works unmodified. Validation happens once, in the API, not in both
+  places.
+
+### Registration is not reviewed, so the consent screen is the defence
+
+Any signed-in user may register a client and activate it themselves, and every
+scope is open (product decision, `OAUTH_PROVIDER_PLAN.md` §8). That puts the
+whole weight on the consent screen, hence: reserved-name rejection (word
+bounded, so "Solana Wallet" still registers), a ten-app per-owner cap,
+https-only redirect URIs matched as exact strings, the owner handle and
+redirect host shown before anything is asked for, and an admin `disable` that
+also burns the app's live tokens — the only lever against an app already in the
+wild.
+
+`trusted` (skips consent entirely) is settable in the database only, the same
+treatment as `users.admin`.
+
+### The foreign keys that would have broken user merges
+
+Every OAuth table carries a live FK to `users`, and `oauth_applications` one to
+`groups`. Without `dependent:` on the other side, `UserMerger`'s `from.destroy!`
+raised `ActiveRecord::InvalidForeignKey` for anyone who had ever authorized an
+app, and a group with a registered app could not be deleted at all — neither
+path has anything to do with OAuth. Found in review, not in production.
+
+Consents and credentials are destroyed with the account (a merge must not hand
+a third party access to the surviving one); applications a user *owns* are
+repointed, since a developer's clients should follow the developer. Groups use
+`nullify`: deleting a community should not silently break a live integration.
+
+### Spec gaps closed before deploying
+
+`Cache-Control: no-store` on token/userinfo/revoke (RFC 6749 §5.1 MUST),
+UserInfo on POST as well as GET (OIDC Core §5.3.1), `WWW-Authenticate` on a
+missing bearer token (RFC 6750 §3), and `scope` narrowing on refresh
+(RFC 6749 §6 — it was being silently ignored).
+
+One deviation kept on purpose: authorization errors render on the consent page
+instead of redirecting back to the client. The spec says SHOULD redirect; this
+is more useful to a developer and is one fewer inducible redirect.
+
+### Known risks accepted at launch
+
+**No rate limiting.** `/oauth/token` is unauthenticated and each attempt costs
+~100ms of BCrypt, which is both a secret-brute-force surface and cheap CPU
+amplification. `soon` has no rack-attack anywhere, so this is not a new hole —
+but OAuth makes it worth attacking. No audit log either. Both are phase two.
+
+### First integration
+
+`lean` (https://lean.sola.day, `github.com/jiangplus/lean`) — a Waku + Astryx
+demo doing the full authorization-code + PKCE round trip, verified end to end
+against production.
+
 ## 2026-08-15 — sola.day becomes the canonical frontend host
 
 The international frontend moved from `app.sola.day` to the bare apex
