@@ -1,0 +1,104 @@
+app/controllers/api/v1/uploads_controller.rb
+  s_e9ed806a3d225c::t_4f817c577e36c7 5-9,18-30,47-68
+  s_e9ed806a3d225c::t_fe3b66c2429664 10-17
+  s_e9ed806a3d225c::t_a3038b4fc17157 69-71
+test/fixtures/files/cv.pdf
+  s_e9ed806a3d225c::t_046dbcc019c1a3 1-4
+app/jobs/stripe_webhook_job.rb
+  s_e9ed806a3d225c::t_0a64308796c41b 68-72,75
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_e8aede12b855fa 51-57,63-92
+  s_e9ed806a3d225c::t_4ca7b303b4c72b 94-110
+  s_e9ed806a3d225c::t_e5b887f1d999ee 111-129
+  s_e9ed806a3d225c::t_3ec5f4fa70760d 5-50,58-62,93,130-148
+app/blueprints/form_submission_blueprint.rb
+  s_e9ed806a3d225c::t_dd72f06697a1cd 8,12-18
+app/controllers/api/v1/participants_controller.rb
+  s_e9ed806a3d225c::t_9d6aea7452b9fc 157-160
+  s_e9ed806a3d225c::t_9e2be67f61109c 45-51
+  s_e9ed806a3d225c::t_2b8f8d08557077 77-98
+  s_e9ed806a3d225c::t_893998603a9cd5 122,148,151-152,226-228
+  s_e9ed806a3d225c::t_1868ea78819a33 156
+app/blueprints/form_blueprint.rb
+  s_e9ed806a3d225c::t_fd0e441e28caff 14-20
+  s_e9ed806a3d225c::t_6896a2ef92c951 23-26,28-29,34-38
+  s_e9ed806a3d225c::t_1a41ec6cc7f7ee 8-10,21-22,27,30-33,39
+config/routes.rb
+  s_e9ed806a3d225c::t_94010453ae40e0 75-76,78
+  s_e9ed806a3d225c::t_2d74ef310e8a67 80-94
+  s_48a3d075bd0133::t_79e78738c82676 79
+app/controllers/api/v1/forms_controller.rb
+  s_e9ed806a3d225c::t_05b59361080c69 23,27
+test/controllers/api/v1/tickets_controller_test.rb
+  s_e9ed806a3d225c::t_8e9705fec492cd 608-687
+app/services/form_builder.rb
+  s_e9ed806a3d225c::t_775f083632de76 9-17,25-29
+  s_e9ed806a3d225c::t_132e60e8c26fed 1-8,18-24,30-41,70-88
+  s_e9ed806a3d225c::t_1d772851f4075c 42-69
+app/models/form.rb
+  s_e9ed806a3d225c::t_748db74db68f14 2-7,9
+app/services/object_store.rb
+  s_e9ed806a3d225c::t_e36bab32e58b35 47-54,58
+  s_e9ed806a3d225c::t_cfed789f818145 71-77
+design/ARCHITECTURE.md
+  s_e9ed806a3d225c::t_8fbbb2e1b83167 181
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_9086ad90bff7ac 605-608,610-611
+  s_e9ed806a3d225c::t_c6b5c01e6477d3 187-191,195-196,198,200
+app/controllers/api/v1/standalone_forms_controller.rb
+  s_e9ed806a3d225c::t_d32b6d8329baf2 130-134,137
+  s_e9ed806a3d225c::t_e52e3a2c30d685 135-136
+  s_e9ed806a3d225c::t_4768e6d3434cc0 22-26,29,36-38
+  s_e9ed806a3d225c::t_3a44da9cafe567 154
+  s_e9ed806a3d225c::t_6a817e0f598daf 28,31-35,47-50,109-112,115-116
+  s_e9ed806a3d225c::t_b967c9899282ed 1-21,27,30,39-46,51-108,113-114,117-129,138-153,155-199
+app/models/form_field.rb
+  s_e9ed806a3d225c::t_f53176b49f5d55 3-18
+test/controllers/api/v1/participants_controller_test.rb
+  s_e9ed806a3d225c::t_ab3afd27ac065a 503-576,580-581
+  s_e9ed806a3d225c::t_974a6cd83db00f 577-579
+  s_e9ed806a3d225c::t_76f3bc68f2f4d9 118-168
+  s_e9ed806a3d225c::t_6adde8bb003ccc 96-117,169-189
+test/controllers/api/v1/uploads_controller_test.rb
+  s_e9ed806a3d225c::t_3a1cd2a19cb10c 55-103
+test/controllers/api/v1/standalone_forms_controller_test.rb
+  s_e9ed806a3d225c::t_38d715563b4d96 289-327
+  s_e9ed806a3d225c::t_0377d68eaa18b1 1-44,49,51-60,62-222,226-228,230-243,247-248,328-331,356-357
+  s_e9ed806a3d225c::t_12b1794f69eeb4 45-48,50,61,223-225,229,244-246,332-355
+  s_e9ed806a3d225c::t_5c64e572b919c5 249-288
+app/models/participant.rb
+  s_e9ed806a3d225c::t_48ebe29bf59b4d 96-100
+  s_e9ed806a3d225c::t_155f38cafe5bc1 73-95,101-107
+app/models/ticket_item.rb
+  s_e9ed806a3d225c::t_dfc50e65d1034c 149-151
+  s_e9ed806a3d225c::t_bdb4811aaae664 211-216
+  s_e9ed806a3d225c::t_3bc6e30799f897 166-168
+test/models/ticket_item_test.rb
+  s_e9ed806a3d225c::t_39e28afe4e9e25 61-64,70
+test/controllers/api/v1/forms_controller_test.rb
+  s_e9ed806a3d225c::t_ff5d3c051fdc8b 74-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ee7405918b98d842d8c136b3d9d1156ef2420287",
+  "prompts": {},
+  "sessions": {
+    "s_48a3d075bd0133": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb01a44c-eda1-4b04-97da-246e51ecce9e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    },
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
