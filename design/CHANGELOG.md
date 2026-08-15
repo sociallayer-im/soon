@@ -2,6 +2,150 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-15 — forms stand on their own; a failed registration can be undone
+
+Three related changes to registration and forms. Not deployed.
+
+### Backing out of a registration that never completed
+
+The two states a registration can get stuck in were both dead ends. An order
+abandoned at the payment step held its unit and its participant row until the
+sweeper expired it 35 minutes later, while `rsvp` refused a second attempt
+("you already have an unpaid order for this ticket") — so the buyer could
+neither finish nor start over. An application awaiting approval had no
+withdraw path at all, and a *rejected* applicant could not re-apply:
+`participants#create` refused any existing row that was not `cancelled`, even
+though `Participant::TRANSITIONS` has allowed `declined → pending` all along.
+It was the guard, not the state machine, that made rejection permanent.
+
+- `cancel_unpaid_item` now accepts a bare `ticket_item_id`. The old
+  chain/product_id/item_id triple is sails' vocabulary and **cannot address a
+  card order at all**, because those have no `chain` — which is why the UI had
+  no way to cancel a Stripe or WeChat order and never offered one.
+- The ownership check moved ahead of the status check in the same action: the
+  old order answered `"only for pending ticket_item"` for *someone else's*
+  order, disclosing its status to a stranger.
+- `participants#create` lets a `declined` applicant re-apply, reusing the row.
+
+Cancelling already released the unit, refunded the coupon usage and withdrew
+the participant when it was their last live order (`TicketItem#close!` →
+`settle_participant!`), so nothing about the cancel path itself needed
+changing — only the ability to reach it. A **paid** order is deliberately
+untouched: giving that back is a refund, which is the organizer's action.
+
+### Forms without an event
+
+`events.form_id` points AT a form, so a `Form` never actually depended on an
+`Event` — only the endpoints did. `StandaloneFormsController` adds the rest:
+create/edit/delete, a public `GET /forms/:slug` for sharing, submit, and the
+two lists the hub page is built from (forms I created, forms I filled in).
+
+- **Re-submitting EDITS the existing submission** rather than filing a second
+  one — `form_submissions` is unique on `(form_id, user_id)`, so it always
+  was one row per person; now that is a feature the person can use. An edit to
+  an already-decided submission returns it to `pending`: an approval is a
+  decision about specific answers, and letting them change underneath it would
+  leave the organizer endorsing something they never read.
+- An unpublished form is a draft — invisible to everyone but its author, so a
+  link shared early leaks nothing.
+- **Submitting to an event's registration form through `/forms/:slug` is
+  refused.** That path files a `FormSubmission` and no `Participant`, so the
+  application would be invisible on the event's applicant list and impossible
+  to approve — and the form's slug is now public on the event page, so it was
+  a reachable second front door. `FormBlueprint`'s `:extended` view carries
+  `event_id` for the same reason: the fill page has to know before it offers a
+  submit button it cannot honour.
+- Deleting a form an event still points at is refused; that would take the
+  event's questions and every applicant's answers with it.
+- The field-upsert logic moved to `FormBuilder`, shared with
+  `forms#save_event_form`. Two controllers writing form fields is how a field
+  type ends up supported on one page and not the other.
+
+### Two counter/foreign-key bugs the review turned up
+
+Neither was introduced here; both were reachable before and became much easier
+to reach with a cancel button and a form editor in front of them.
+
+- **`events.participant_count` was maintained per ORDER**, in
+  `TicketItem#release_resources!`, while it is only ever incremented when a
+  participant becomes *seated*. So abandoning a second order for an event you
+  already attend dropped your seat from the count, and cancelling an order that
+  never held a seat (a `need_approval` buyer, still pending) handed one back —
+  taking it from whoever else was counted. The counter now moves in
+  `Participant#transition!` and nowhere else, which is also where the attendee
+  list's definition of a seat lives. The create/re-join paths still adjust it
+  directly, and that is safe for one specific reason: the only rows they may
+  reuse are `cancelled` and `declined`, neither of which holds a seat.
+
+  A lost Stripe dispute took the same wrong path — it decremented the count
+  while leaving the participant `attending`. It now settles the participant, so
+  it really is "the same outcome as a full refund" the comment already claimed.
+
+- **`form_answers.form_field_id` is a foreign key with no cascade**, and both
+  the field-list upsert and `Form`'s `dependent: :destroy` order deleted fields
+  while answers still pointed at them. Removing a question from an event form
+  after the first application arrived raised `ForeignKeyViolation` — a 500 that
+  lost the organizer's whole edit — and deleting an answered form failed the
+  same way. Removing a question now removes its answers (they cannot be kept:
+  the constraint forbids it, and an orphaned answer has nothing left to label
+  it), and `form_submissions` is declared before `form_fields` so it is
+  destroyed first.
+
+### Second review pass
+
+- **Duplicate answers were unbounded.** There is no unique index on
+  `(form_submission_id, form_field_id)`, and both writers looped over whatever
+  the client sent — so repeating one `field_id` wrote a row per repetition, all
+  but one of which nothing would ever display. `FormBuilder.record_answers!`
+  now keeps the last answer per field and drops ids that are not on the form;
+  both the event application and standalone submit go through it.
+- **The three form lists are paginated** (`render_collection`, like every other
+  list here). A form shared as a public link has no upper bound on responses,
+  and the author's view rendered every one of them with its user and answers in
+  one document. `listFormResponses` returns `total` alongside the rows so a
+  truncated list says so instead of reading as the whole set.
+- **Withdrawing twice at once no longer 500s.** `participants#destroy` rescues
+  `Participant::InvalidTransition` as success — it is a double-click on a
+  button that reloads the page, and the other request already did the work.
+
+### Third review pass
+
+- **Re-applying now clears the rejection from the form submission too.** The
+  `declined → pending` change moved the participant but not the
+  `FormSubmission` the organizer actually reads, so their list would have shown
+  "rejected" beside an applicant who was back under review. An application with
+  no answers still creates no submission — an empty row is not a response.
+- **`POST /upload/file` is capped at 10 MB, not 20.** Neither Traefik nor
+  Thruster has a body limit configured, but 10 MB is the size `#image` has
+  actually been running at, and the failure mode above it is a proxy error
+  rather than this controller's 422. Raise it after measuring through the
+  deployed stack.
+- **WeChat Pay detection is an exclude-list, not a mobile allow-list.** Refusing
+  anything that does not look like a phone would block a real buyer on an
+  unrecognised UA, and there is no recourse from that; allowing one costs a
+  single `unavailable` round trip, which cancels the order and shows the same
+  prompt. Only WeChat's two self-identifying desktop clients are refused
+  up front.
+
+### Image and file questions
+
+`FormField::FIELD_TYPES` gains `image` and `file`. Both store the uploaded URL
+in the answer's `value`, exactly like `text` — the upload happens first and the
+form only ever carries the link, so nothing about a submission is binary and no
+attachment table is involved.
+
+`POST /upload/file` is the document rail: a wider type list, a 20 MB ceiling,
+and the original extension appended to the content-hashed key. Images still go
+through `POST /upload/image` unchanged, keys still bare hashes, so the ~10k
+existing `datastore.sola.day/<hash>` values stay in their namespace.
+
+The document allow-list deliberately **excludes `text/html`, SVG and anything
+else the browser will execute**: the bucket is served from a domain that also
+serves our own assets, so a stored `.html` there is stored XSS against the
+platform, not a file upload. `ObjectStore.extension_for` whitelists the suffix
+for the same reason — the key becomes part of a URL, and an attacker-chosen
+extension is an attacker-chosen path.
+
 ## 2026-08-15 — soon becomes an OAuth 2.0 / OpenID Connect provider
 
 Third parties can now offer "Login with Social Layer" and read a user's

@@ -184,13 +184,20 @@ class Api::V1::TicketsController < Api::BaseController
   end
 
   # POST /api/v1/tickets/cancel_unpaid_item
+  #
+  # Abandoning a registration that never completed. Cancelling releases the
+  # held unit and (if it was their last live order) withdraws the participant,
+  # which is what lets the person sign up again afterwards — rsvp treats a
+  # cancelled participant as a fresh one.
   def cancel_unpaid_item
     ticket_item = find_ticket_item_by_order
     return render_error("ticket_item not found") unless ticket_item
-    return render json: { result: "ok", message: "only for pending ticket_item" } unless ticket_item.status == "pending"
+    # Ownership BEFORE status: the old order answered "only for pending" for
+    # someone else's order, which told a stranger its status.
     return render_error("not allowed", status: :forbidden) unless ticket_item.user_id == current_user.id
+    return render json: { result: "ok", message: "only for pending ticket_item" } unless ticket_item.status == "pending"
 
-    ticket_item.cancel
+    ticket_item.cancel(actor: current_user)
     render json: { ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
@@ -595,7 +602,13 @@ class Api::V1::TicketsController < Api::BaseController
     event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[manager owner]))
   end
 
+  # `ticket_item_id` is the direct form; the chain/product_id/item_id triple is
+  # sails' vocabulary, kept because deployed clients still send it. The triple
+  # cannot address a card order at all — those have no `chain` — so anything
+  # that has to cancel a Stripe or WeChat order uses the direct form.
   def find_ticket_item_by_order
+    return TicketItem.find_by(id: params[:ticket_item_id]) if params[:ticket_item_id].present?
+
     TicketItem.find_by(chain: params[:chain], event_id: params[:product_id], id: params[:item_id])
   end
 

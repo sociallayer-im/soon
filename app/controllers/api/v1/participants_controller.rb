@@ -42,9 +42,13 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     existing = @event.participants.find_by(user_id: current_user.id)
     # Re-joining after withdrawing REUSES the soft-deleted row — (user_id,
-    # event_id) is unique, so a second insert would fail. Anything else that
-    # already exists is still a duplicate join and rejected as before.
-    if existing && !existing.cancelled?
+    # event_id) is unique, so a second insert would fail. A rejected applicant
+    # may re-apply for the same reason a withdrawn one may re-join: neither
+    # holds a seat, and "declined" is not meant to be a permanent ban — the
+    # transition table has allowed declined → pending/attending all along, it
+    # was only this guard that made it unreachable. Anything else that already
+    # exists is still a duplicate join and rejected as before.
+    if existing && !existing.cancelled? && existing.status != "declined"
       return render_error("User can only participate once per event")
     end
 
@@ -70,16 +74,28 @@ class Api::V1::ParticipantsController < Api::BaseController
       participant.save!
       @event.increment!(:participant_count) if status == "attending"
 
-      if @event.form_id && params[:form_answers].present?
-        valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
-        submission = FormSubmission.find_or_initialize_by(form_id: @event.form_id, user_id: current_user.id)
-        submission.status = "pending"
-        submission.submitted_at = Time.current
-        submission.save!
-        FormAnswer.where(form_submission_id: submission.id).delete_all
-        Array(params[:form_answers]).each do |answer|
-          next unless valid_field_ids.include?(answer[:field_id].to_s)
-          FormAnswer.create!(form_submission_id: submission.id, form_field_id: answer[:field_id], value: answer[:value])
+      if @event.form_id
+        # The submission's status has to follow the application's, or the
+        # organizer's list keeps showing the old verdict. This matters now that
+        # a REJECTED applicant may apply again: without it their submission
+        # would still read "rejected" while the participant is back to
+        # "pending", and the two views of one application would disagree.
+        #
+        # A submission is only created when there are answers, though — an
+        # empty row for a form nobody filled in is not a response.
+        submission = FormSubmission.find_by(form_id: @event.form_id, user_id: current_user.id)
+        if params[:form_answers].present?
+          submission ||= FormSubmission.new(form_id: @event.form_id, user_id: current_user.id)
+          submission.submitted_at = Time.current
+        end
+
+        if submission
+          submission.status = "pending"
+          submission.save!
+          if params[:form_answers].present?
+            FormBuilder.record_answers!(submission, params[:form_answers],
+                                        FormField.where(form_id: @event.form_id).pluck(:id))
+          end
         end
       end
     end
@@ -103,9 +119,8 @@ class Api::V1::ParticipantsController < Api::BaseController
       return render_error(err)
     end
 
+    # transition! moves participant_count itself — the seat follows the status.
     participant.transition!(new_status)
-    @event.increment!(:participant_count) if will_be_seated && !was_seated
-    @event.decrement!(:participant_count) if was_seated && !will_be_seated && @event.participant_count.to_i > 0
     render json: ParticipantBlueprint.render(participant)
   rescue Participant::InvalidTransition => e
     render_error(e.message)
@@ -129,18 +144,20 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
     return head :no_content if participant.status == "cancelled" # idempotent
 
-    was_seated = participant.seated?
-    released = false
     ActiveRecord::Base.transaction do
-      released = release_orders!(participant)
+      release_orders!(participant)
       # Cancelling the last live order already withdraws the participant
       # (TicketItem#settle_participant!), so only transition if it didn't.
+      # Either way the seat is given back exactly once, by whichever
+      # transition! actually ran.
       participant.reload
       participant.transition!(:cancelled) unless participant.cancelled?
     end
-    # release_resources! already gave the seat back (and the count with it) —
-    # decrementing again here would double-count.
-    @event.decrement!(:participant_count) if was_seated && !released && @event.participant_count.to_i > 0
+    head :no_content
+  rescue Participant::InvalidTransition
+    # Two withdrawals in flight at once — a double-click on the cancel button,
+    # which is a thing people do to a button that reloads the page. The other
+    # request already did it, so this one has nothing to report but success.
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -155,7 +172,6 @@ class Api::V1::ParticipantsController < Api::BaseController
     return render_error("participant is not pending") unless participant.status == "pending"
 
     participant.transition!(:attending)
-    @event.increment!(:participant_count)
     sync_form_submission!(participant, "approved")
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
@@ -207,30 +223,26 @@ class Api::V1::ParticipantsController < Api::BaseController
                   .update_all(status: status, updated_at: Time.current)
   end
 
-  # Hands back what the withdrawing participant was holding. Returns true if
-  # inventory was released, so the caller doesn't decrement participant_count
-  # twice (release_resources! already covers it).
+  # Hands back the ticket units and coupon usage the withdrawing participant
+  # was holding. The seat is not this method's business — it follows the
+  # participant's own status (Participant#sync_event_seat!).
   #
   # A PAID order deliberately stays `succeeded` and keeps its money: an
   # attendee withdrawing is not a refund, and the event owner must still be
   # able to refund it afterwards from the order list — which is why the
   # participant link is left intact too.
   def release_orders!(participant)
-    released = false
     TicketItem.where(event_id: @event.id, participant_id: participant.id).each do |item|
       case item.status
       when "pending"
         item.cancel # marks cancelled and releases the hold
-        released = true
       when "succeeded"
         # Free/comped: nothing to refund, so retire the order outright. Paid:
         # leave it succeeded and refundable.
         item.transition!(:cancelled) if item.amount.to_i.zero?
         item.release_resources!
-        released = true
       end
     end
-    released
   end
 
   def set_event

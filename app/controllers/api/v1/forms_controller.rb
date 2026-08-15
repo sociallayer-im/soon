@@ -20,33 +20,11 @@ class Api::V1::FormsController < Api::BaseController
       @event.update_column(:form_id, form.id) unless @event.form_id == form.id
       @event.update_column(:require_approval, true) unless @event.require_approval
 
-      incoming_ids = Array(params[:fields]).map { |f| f[:id].presence }.compact
-      FormField.where(form_id: form.id).where.not(id: incoming_ids).delete_all
-
-      Array(params[:fields]).each_with_index do |field_params, index|
-        raise ActiveRecord::RecordInvalid.new(form) if field_params[:label].blank?
-
-        field_type = field_params[:field_type].presence || "text"
-        options = field_type == "select" ? Array(field_params[:options]) : []
-        attrs = {
-          label: field_params[:label],
-          field_type: field_type,
-          required: ActiveModel::Type::Boolean.new.cast(field_params[:required]) || false,
-          for_admin: ActiveModel::Type::Boolean.new.cast(field_params[:for_admin]) || false,
-          position: field_params[:position].presence || index,
-          options: options
-        }
-        if field_params[:id].present?
-          field = FormField.find_by(id: field_params[:id], form_id: form.id)
-          field ? field.update!(attrs) : form.form_fields.create!(attrs)
-        else
-          form.form_fields.create!(attrs)
-        end
-      end
+      FormBuilder.apply_fields!(form, params[:fields])
     end
 
     render json: FormBlueprint.render(form.reload, view: :extended)
-  rescue ActiveRecord::RecordInvalid
+  rescue FormBuilder::Error, ActiveRecord::RecordInvalid
     render_error("field label cannot be blank")
   end
 

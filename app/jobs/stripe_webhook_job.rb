@@ -65,9 +65,14 @@ class StripeWebhookJob < ApplicationJob
       if object["status"] == "won"
         item.transition!(:succeeded, source: "webhook")
       else
-        # Lost/conceded: the funds are gone — same outcome as a full refund.
+        # Lost/conceded: the funds are gone — same outcome as a full refund,
+        # which means the seat goes back too, not just the inventory. It never
+        # did: release_resources! decremented the count while the participant
+        # stayed "attending", so the attendee list and the counter disagreed.
+        holder = item.participant
         item.transition!(:refunded, source: "webhook", reason: "dispute lost")
         item.release_resources!
+        item.settle_participant!(holder)
       end
       # payment_intent.payment_failed: buyer can retry on the same session —
       # no state change, the event is recorded for the audit trail only.

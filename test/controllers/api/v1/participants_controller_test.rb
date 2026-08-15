@@ -93,6 +93,100 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "a rejected applicant may apply again" do
+    owner = create_user
+    applicant = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, require_approval: true)
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
+    participant = Participant.find(json_response["id"])
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "declined", participant.reload.status
+
+    # "declined" is a decision on one application, not a ban: the transition
+    # table has always allowed declined → pending, and this is the path that
+    # uses it.
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
+    assert_response :created
+    assert_equal "pending", json_response["status"]
+    assert_equal participant.id, json_response["id"], "the row is reused — (user, event) is unique"
+    assert_equal 1, Participant.where(event: event, user: applicant).count
+  end
+
+  test "re-applying clears the rejection from the form submission too" do
+    owner = create_user
+    applicant = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    form = create_form(created_by_id: owner.id)
+    field = create_form_field(form: form)
+    event.update!(form_id: form.id)
+
+    post "/api/v1/events/#{event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "first try" }] },
+      headers: auth_headers(applicant), as: :json
+    participant = Participant.find(json_response["id"])
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    assert_equal "rejected", FormSubmission.find_by(form_id: form.id, user_id: applicant.id).status
+
+    post "/api/v1/events/#{event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "second try" }] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :created
+
+    submission = FormSubmission.find_by(form_id: form.id, user_id: applicant.id)
+    # The two views of one application must not disagree: the organizer's
+    # submission list would otherwise still show "rejected" next to a
+    # participant who is back under review.
+    assert_equal "pending", submission.status
+    assert_equal ["second try"], submission.form_answers.map(&:value)
+  end
+
+  test "re-applying with no answers still clears the rejection, without inventing a response" do
+    owner = create_user
+    applicant = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    # No REQUIRED fields, so an application may legitimately carry no answers.
+    form = create_form(created_by_id: owner.id)
+    create_form_field(form: form, required: false)
+    event.update!(form_id: form.id)
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant), as: :json
+    participant = Participant.find(json_response["id"])
+    assert_nil FormSubmission.find_by(form_id: form.id, user_id: applicant.id),
+      "no answers means no response — an empty row is not a submission"
+
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant), as: :json
+    assert_response :created
+    assert_equal "pending", participant.reload.status
+    assert_nil FormSubmission.find_by(form_id: form.id, user_id: applicant.id)
+  end
+
+  test "an applicant can withdraw while under review and then apply again" do
+    owner = create_user
+    applicant = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, require_approval: true)
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
+    participant = Participant.find(json_response["id"])
+    assert_equal "pending", participant.status
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(applicant)
+    assert_response :no_content
+    assert_equal "cancelled", participant.reload.status
+    # No seat was held while pending, so withdrawing must not give one back.
+    assert_equal 0, event.reload.participant_count.to_i
+
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
+    assert_response :created
+    assert_equal "pending", json_response["status"]
+  end
+
   test "index lists participants for an event" do
     owner = create_user
     attendee = create_user
@@ -404,6 +498,85 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
       "abandoning one checkout must not drop an attendance already paid for"
     assert_equal "succeeded", participant.payment_status,
       "payment_status summarises the orders — a paid one is still there"
+  end
+
+  # ---- participant_count follows the SEAT, never the order ----
+  #
+  # The counter used to move in TicketItem#release_resources!, which fires once
+  # per order. These three are the shapes that broke: more orders than seats,
+  # an order that never held a seat, and a seat with no order behind it.
+
+  test "abandoning a second order does not take away a seat the buyer still holds" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    free = create_ticket(event: event, quantity: 5)
+    paid = create_ticket(event: event, quantity: 5)
+    pm = create_payment_method(item: paid, chain: "stripe", price: 1000)
+
+    post "/api/v1/events/#{event.id}/tickets/#{free.id}/rsvp", headers: auth_headers(buyer)
+    assert_equal 1, event.reload.participant_count
+
+    post "/api/v1/events/#{event.id}/tickets/#{paid.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    second = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_equal 1, event.reload.participant_count, "a second order is not a second seat"
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { ticket_item_id: second.id }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal "attending", Participant.find_by(event: event, user: buyer).status
+    assert_equal 1, event.reload.participant_count,
+      "they are still attending on the other order, so the seat is still taken"
+  end
+
+  test "cancelling an order that never held a seat leaves the count alone" do
+    owner = create_user
+    attendee = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    # Somebody else is genuinely seated, so a stray decrement has something to
+    # steal — with an empty event the `> 0` floor hides the bug.
+    create_participant(event: event, user: attendee, status: "attending")
+    event.update!(participant_count: 1)
+
+    gated = create_ticket(event: event, quantity: 5, need_approval: true)
+    pm = create_payment_method(item: gated, chain: "stripe", price: 1000)
+    post "/api/v1/events/#{event.id}/tickets/#{gated.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_equal "pending", Participant.find_by(event: event, user: buyer).status
+    assert_equal 1, event.reload.participant_count, "an unapproved buyer holds no seat"
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { ticket_item_id: item.id }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal 1, event.reload.participant_count,
+      "they never had a seat, so cancelling must not hand one back — least of all somebody else's"
+  end
+
+  test "the count survives a full withdraw and re-register cycle" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    ticket = create_ticket(event: event, quantity: 5)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    participant = Participant.find_by(event: event, user: buyer)
+    assert_equal 1, event.reload.participant_count
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_equal 0, event.reload.participant_count
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal 1, event.reload.participant_count
+    # 5 → 4 on the first RSVP, back to 5 on withdrawal, 4 again now: the
+    # abandoned attempt left no unit stranded.
+    assert_equal 4, ticket.reload.quantity
   end
 
   test "approve and reject advance the application form submission too" do

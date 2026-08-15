@@ -72,8 +72,26 @@ Rails.application.routes.draw do
         end
       end
 
-      # Image upload (Cloudflare Images)
+      # Uploads to the datastore.sola.day bucket (see ObjectStore). "file" is
+      # the document rail used by image/file form fields; "image" is unchanged.
       post "upload/image", to: "uploads#image"
+      post "upload/file",  to: "uploads#file"
+
+      # Standalone forms — a form with no event behind it. The event-attached
+      # form lives at /events/:event_id/form and is a different controller;
+      # these two never address the same URL.
+      #
+      # `forms/submissions` is declared BEFORE the :slug member routes, or it
+      # would be swallowed as a form whose slug is "submissions".
+      get  "forms/submissions",              to: "standalone_forms#my_submissions"
+      get  "forms",                          to: "standalone_forms#index"
+      post "forms",                          to: "standalone_forms#create"
+      get    "forms/:slug",                  to: "standalone_forms#show"
+      patch  "forms/:slug",                  to: "standalone_forms#update"
+      delete "forms/:slug",                  to: "standalone_forms#destroy"
+      get  "forms/:slug/submissions",        to: "standalone_forms#submissions"
+      post "forms/:slug/submissions",        to: "standalone_forms#submit"
+      get  "forms/:slug/my_submission",      to: "standalone_forms#my_submission"
 
       # Public calendar feeds (subscribable in Apple Calendar / Google via webcal).
       # `.ics` suffix optional so subscription URLs can end in .ics.

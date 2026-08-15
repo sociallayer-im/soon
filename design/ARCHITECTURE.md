@@ -178,7 +178,7 @@ resource — not an inconsistency to "fix":
 | Model | Key columns | Notes |
 |---|---|---|
 | `Form` | `title`, `description`, `slug` (unique, auto-defaults to `id`), `published`, `submission_message`, `created_by_id` | Attached to an `Event` via `events.form_id` (one form per event) |
-| `FormField` | `form_id`, `label`, `field_type` (text\|select), `required`, `for_admin` (excluded from the required-field gate), `position`, `options` jsonb | Ordered by `position` |
+| `FormField` | `form_id`, `label`, `field_type` (text\|select\|image\|file), `required`, `for_admin` (excluded from the required-field gate), `position`, `options` jsonb | Ordered by `position`. `image`/`file` store the uploaded URL in the answer's `value` like any other text — see `POST /upload/file` |
 | `FormSubmission` | `form_id`, `user_id`, `status` (pending, no other value currently written), `starred`, `admin_note`, `submitted_at` | Unique on `(form_id, user_id)` — one submission per user per form, upserted on resubmit |
 | `FormAnswer` | `form_submission_id`, `form_field_id`, `value` | Wholesale-replaced on every resubmit (delete-then-recreate, not diffed) |
 

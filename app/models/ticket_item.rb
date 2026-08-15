@@ -146,10 +146,9 @@ class TicketItem < ApplicationRecord
 
   private
 
-  # Shared teardown for cancel/timeout: releases the reserved ticket unit,
-  # refunds the coupon usage consumed at RSVP, and undoes the participant_count
-  # bump so a capacity-limited event doesn't drift toward "full" on abandoned
-  # checkouts.
+  # Shared teardown for cancel/timeout: releases the reserved ticket unit and
+  # refunds the coupon usage consumed at RSVP. The seat is NOT given back here
+  # — that follows the participant's status, in Participant#sync_event_seat!.
   def close!(new_status, source: "system", actor: nil)
     transaction do
       closing_participant = participant
@@ -164,8 +163,9 @@ class TicketItem < ApplicationRecord
   end
 
   # Keeps the participant's summary in step with its orders, and withdraws
-  # them only if nothing live is left.
-  def settle_participant!(target = participant)
+  # them only if nothing live is left. Public because a lost dispute has the
+  # same outcome as a full refund and settles from the webhook.
+  public def settle_participant!(target = participant)
     return unless target
 
     live = TicketItem.where(participant_id: target.id, status: %w[pending succeeded partially_refunded disputed])
@@ -208,12 +208,17 @@ class TicketItem < ApplicationRecord
   # never inferred from status. A second close/expire/refund path arriving
   # later becomes a no-op instead of double-crediting quantity or the coupon.
   # Public: the sweeper and the refund finalizer call it directly.
+  #
+  # Order-scoped only: the ticket unit and the coupon usage belong to THIS
+  # order. The event's seat does not — one person can hold several orders, and
+  # an order can exist for someone who was never seated, so decrementing here
+  # took a seat away that this order never occupied. That now lives on the
+  # participant (Participant#sync_event_seat!).
   public def release_resources!
     return if released_at
 
     transaction do
       update!(released_at: Time.current)
-      event&.decrement!(:participant_count) if event && event.participant_count.to_i > 0
       coupon&.decrement!(:order_usage_count) if coupon && coupon.order_usage_count.to_i > 0
     end
     ticket.release!

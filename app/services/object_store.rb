@@ -44,11 +44,18 @@ class ObjectStore
   end
 
   # io: an IO/UploadedFile-like object; returns the public URL (String).
-  def self.upload(io:, content_type:)
+  #
+  # `filename` is optional and only its extension is used, appended to the
+  # hashed key. Images deliberately pass nothing, so their keys stay in the
+  # exact bare-hash namespace the ~10k existing values use; a document needs
+  # the suffix because a browser asked to open a bare hash over a custom
+  # domain has nothing but the Content-Type to go on, and no sensible name to
+  # save it under.
+  def self.upload(io:, content_type:, filename: nil)
     raise Error, "object storage is not configured" unless configured?
 
     body = io.read
-    key = Digest::SHA256.hexdigest(body)[0...KEY_LENGTH]
+    key = Digest::SHA256.hexdigest(body)[0...KEY_LENGTH] + extension_for(filename)
 
     # content_type is set deliberately: sails omitted it, so every pre-existing
     # object is served as application/octet-stream. Browsers render those in an
@@ -59,6 +66,13 @@ class ObjectStore
     "#{public_url.chomp('/')}/#{key}"
   rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
     raise Error, "upload failed: #{e.message}"
+  end
+
+  # Whitelisted rather than passed through: the key becomes part of a URL, and
+  # an attacker-chosen "extension" is an attacker-chosen path.
+  def self.extension_for(filename)
+    ext = File.extname(filename.to_s).downcase
+    ext.match?(/\A\.[a-z0-9]{1,8}\z/) ? ext : ""
   end
 
   def self.client

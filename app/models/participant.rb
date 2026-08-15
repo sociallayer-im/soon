@@ -70,7 +70,41 @@ class Participant < ApplicationRecord
       raise InvalidTransition, "participant #{id}: #{status} → #{to}"
     end
     attrs[:cancelled_at] = to == "cancelled" ? Time.current : nil
-    update!(attrs.merge(status: to))
+    was_seated = seated?
+    transaction do
+      update!(attrs.merge(status: to))
+      sync_event_seat!(was_seated)
+    end
+  end
+
+  # `events.participant_count` counts SEATED participants, so it moves when and
+  # only when this row's seatedness does — which is here.
+  #
+  # It used to be maintained by whoever happened to trigger the change, and one
+  # of those was TicketItem#release_resources!, which fires per ORDER. Someone
+  # holding two orders for one event lost their seat from the count by
+  # abandoning the second one, and an order that never held a seat (a
+  # need_approval buyer, still pending) gave one back on cancel — taking it
+  # from whoever else was counted. Tying the counter to the status that defines
+  # it is what makes those unrepresentable.
+  #
+  # The create/re-join paths (participants#create, tickets#rsvp) still adjust
+  # it themselves, because they assign_attributes rather than transition!.
+  # That is safe for one specific reason: the only rows they may reuse are
+  # `cancelled` and `declined`, neither of which holds a seat, so their
+  # increment can never double-count. Anything else must go through here.
+  #
+  # Private: it takes the PREVIOUS seatedness as an argument, which only
+  # transition! is in a position to know. Called from anywhere else it would
+  # silently move the counter by an arbitrary amount.
+  private def sync_event_seat!(was_seated)
+    return if was_seated == seated?
+
+    if seated?
+      event.increment!(:participant_count)
+    elsif event.participant_count.to_i > 0
+      event.decrement!(:participant_count)
+    end
   end
 
   # Recomputes payment_status from the orders it summarises, so it can never

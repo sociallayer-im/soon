@@ -52,4 +52,53 @@ class Api::V1::UploadsControllerTest < ActionDispatch::IntegrationTest
     assert_response :bad_gateway
     assert_match "upload failed", json_response["error"]
   end
+
+  test "file upload requires authentication" do
+    post "/api/v1/upload/file", params: { file: fixture_file_upload("cv.pdf", "application/pdf") }
+    assert_response :unauthorized
+  end
+
+  test "file stores a document and returns its URL with the original name" do
+    user = create_user
+    delivered = nil
+    stub = ->(io:, content_type:, filename: nil) {
+      delivered = { content_type: content_type, filename: filename }
+      "https://datastore.sola.day/0123456789abcdef.pdf"
+    }
+
+    ObjectStore.stub :upload, stub do
+      post "/api/v1/upload/file",
+        params: { file: fixture_file_upload("cv.pdf", "application/pdf") },
+        headers: auth_headers(user)
+    end
+
+    assert_response :success
+    assert_equal "https://datastore.sola.day/0123456789abcdef.pdf", json_response["url"]
+    # The name travels beside the URL: the key is a content hash, so the link
+    # alone says nothing about what the organizer is opening.
+    assert_equal "cv.pdf", json_response["filename"]
+    assert_equal "application/pdf", delivered[:content_type]
+    assert_equal "cv.pdf", delivered[:filename]
+  end
+
+  test "file rejects a type the browser would execute on our own domain" do
+    user = create_user
+    %w[text/html image/svg+xml application/javascript].each do |type|
+      post "/api/v1/upload/file",
+        params: { file: fixture_file_upload("cv.pdf", type) },
+        headers: auth_headers(user)
+      assert_response :unprocessable_entity, "#{type} must not be storable"
+      assert_match "unsupported", json_response["error"]
+    end
+  end
+
+  test "extension_for only accepts a short alphanumeric suffix" do
+    assert_equal ".pdf", ObjectStore.extension_for("cv.pdf")
+    assert_equal ".PDF".downcase, ObjectStore.extension_for("CV.PDF")
+    assert_equal "", ObjectStore.extension_for("cv")
+    assert_equal "", ObjectStore.extension_for(nil)
+    # Anything that could steer the key out of its namespace is dropped.
+    assert_equal "", ObjectStore.extension_for("cv.../../etc/passwd")
+    assert_equal "", ObjectStore.extension_for("cv.a b")
+  end
 end

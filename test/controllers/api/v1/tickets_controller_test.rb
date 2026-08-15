@@ -605,6 +605,86 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", ticket_item.reload.status
   end
 
+  test "cancel_unpaid_item accepts a bare ticket_item_id, which is the only way to reach a card order" do
+    ticket = create_ticket(event: @event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { ticket_item_id: ticket_item.id }, headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal "cancelled", ticket_item.reload.status
+  end
+
+  test "cancel_unpaid_item does not tell a stranger the status of someone else's order" do
+    ticket = create_ticket(event: @event)
+    buyer = create_user
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer) # free → succeeded
+    ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { ticket_item_id: ticket_item.id }, headers: auth_headers(create_user)
+    assert_response :forbidden
+  end
+
+  test "cancelling an unpaid order lets the buyer start over on the same ticket" do
+    ticket = create_ticket(event: @event, quantity: 1)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    first_item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_equal 0, ticket.reload.quantity
+
+    # While that order is live, a second one is refused — one seat, one hold.
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_match "already have an unpaid order", json_response["error"]
+
+    post "/api/v1/tickets/cancel_unpaid_item",
+      params: { ticket_item_id: first_item.id }, headers: auth_headers(buyer)
+    assert_response :success
+    # The abandoned attempt gives everything back: the unit, the seat, and the
+    # participant row — which is precisely what makes the retry below legal.
+    assert_equal 1, ticket.reload.quantity
+    assert_equal "cancelled", Participant.find_by(event: @event, user: buyer).status
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    assert_response :success
+    second_item = TicketItem.find(json_response["ticket_item"]["id"])
+    assert_not_equal first_item.id, second_item.id
+    assert_equal "pending", second_item.status
+    # Still one participant row, reused — (user, event) is unique.
+    assert_equal 1, Participant.where(event: @event, user: buyer).count
+    assert_equal "attending", Participant.find_by(event: @event, user: buyer).status
+  end
+
+  test "withdrawing from a free ticket event lets the person register again" do
+    ticket = create_ticket(event: @event, quantity: 2)
+    buyer = create_user
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    participant = Participant.find_by(event: @event, user: buyer)
+    assert_equal "attending", participant.status
+    assert_equal 1, ticket.reload.quantity
+
+    delete "/api/v1/events/#{@event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :no_content
+    assert_equal "cancelled", participant.reload.status
+    assert_equal 2, ticket.reload.quantity, "a free order retired on withdrawal gives its unit back"
+
+    post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    assert_equal "attending", participant.reload.status
+  end
+
   # ---------------------------------------------------------------- set_payment_status
 
   test "set_payment_status requires the correct NEXT_TOKEN" do

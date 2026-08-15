@@ -71,6 +71,35 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
     assert form.form_fields.exists?(label: "Brand new field")
   end
 
+  test "save_event_form can remove a question people have already answered" do
+    applicant = create_user
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Why?" }, { label: "Dietary needs" }] },
+      headers: auth_headers(@owner), as: :json
+    form = @event.reload.form
+    why, diet = form.form_fields.order(:position).to_a
+
+    post "/api/v1/events/#{@event.id}/participants",
+      params: { form_answers: [
+        { field_id: why.id, value: "curious" },
+        { field_id: diet.id, value: "none" }
+      ] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :created
+
+    # form_answers.form_field_id is a foreign key with no cascade, so deleting
+    # the field alone raised ForeignKeyViolation — an organizer tidying up
+    # their form after applications started got a 500 and lost the whole edit.
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ id: why.id, label: "Why?" }] },
+      headers: auth_headers(@owner), as: :json
+    assert_response :success
+    assert_equal ["Why?"], json_response["fields"].map { |f| f["label"] }
+
+    submission = FormSubmission.find_by(form_id: form.id, user_id: applicant.id)
+    assert_equal ["curious"], submission.form_answers.map(&:value)
+  end
+
   test "save_event_form defaults position to array index and field_type to text" do
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [

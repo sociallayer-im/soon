@@ -58,13 +58,16 @@ class TicketItemTest < ActiveSupport::TestCase
     assert item.released_at.present?
     assert_equal 6, @ticket.reload.quantity
     assert_equal 0, coupon.reload.order_usage_count
-    assert_equal 0, @event.reload.participant_count
+    # The seat is NOT this method's to give back: it belongs to the
+    # participant's status, and one person can hold several orders. Releasing
+    # per order took a seat away that the order never occupied.
+    assert_equal 1, @event.reload.participant_count
 
     # A second release path (late webhook, sweeper overlap) is a no-op.
     item.release_resources!
     assert_equal 6, @ticket.reload.quantity
     assert_equal 0, coupon.reload.order_usage_count
-    assert_equal 0, @event.reload.participant_count
+    assert_equal 1, @event.reload.participant_count
   end
 
   test "cancel releases resources and a later timeout raises instead of double-releasing" do
