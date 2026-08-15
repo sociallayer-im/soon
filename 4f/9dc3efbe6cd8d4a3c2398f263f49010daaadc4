@@ -1,0 +1,30 @@
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_dd87e6d18d7f8b 30-36,38-39
+test/services/event_calendar_test.rb
+  s_e9ed806a3d225c::t_cfdb76ebc35c8b 27,31-42
+  s_e9ed806a3d225c::t_e9cb588ff95a47 43-44
+app/services/event_calendar.rb
+  s_e9ed806a3d225c::t_481a21e6448d9b 105-114,116
+config/environments/production.rb
+  s_e9ed806a3d225c::t_718655da309d00 60
+app/mailers/application_mailer.rb
+  s_e9ed806a3d225c::t_2279588cf07adf 7-11,14-16
+ginger.yml
+  s_e9ed806a3d225c::t_3bc623e8116704 91-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4f9dc3efbe6cd8d4a3c2398f263f49010daaadc4",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
