@@ -8,9 +8,11 @@ Third parties can now offer "Login with Social Layer" and read a user's
 identity, communities, events and badges with that user's consent. Full design,
 decisions and pre-deploy review: `design/OAUTH_PROVIDER_PLAN.md`.
 
-Deployed to SG as `91beea0` (frontend `seastar-app@06a6f55`). **CN is not
-deployed** — its key and issuer are staged in `.env.cn.production` and
-`ginger.cn.yml` but nothing has shipped.
+Deployed to SG as `91beea0` and to CN as `47525b5`, both with frontend
+`seastar-app@06a6f55`. The two issuers were verified distinct after the fact by
+comparing their JWKS: SG signs with `kid fb26999bbd2a2718`, CN with
+`kid 23276851cacdfda3`. That comparison is the check worth repeating if either
+key is ever rotated — a copied key is invisible in every other symptom.
 
 ### Two issuers, never one
 
