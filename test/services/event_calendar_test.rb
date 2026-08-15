@@ -23,10 +23,23 @@ class EventCalendarTest < ActiveSupport::TestCase
 
   test "UID is stable and DTSTAMP is UTC (Z-suffixed)" do
     ics = EventCalendar.for_event(@event)
-    host = ApplicationMailer::WEB_URL.sub(%r{\Ahttps?://}, "")
 
-    assert_includes ics, "UID:event-#{@event.id}@#{host}"
+    assert_includes ics, "UID:event-#{@event.id}@#{EventCalendar::ICAL_UID_HOST}"
     assert_match(/DTSTAMP:\d{8}T\d{6}Z/, ics)
+  end
+
+  # The UID used to be derived from WEB_URL, so the 2026-08-15 move of the
+  # frontend to sola.day would have rewritten the UID of every event already
+  # sitting in someone's subscribed calendar — which a client reads as a brand
+  # new event while keeping the old one, i.e. the whole calendar doubles. This
+  # pins the decoupling: the link URLs follow WEB_URL, the identifier does not.
+  test "UID does not follow WEB_URL" do
+    ics = EventCalendar.for_event(@event)
+    web_host = ApplicationMailer::WEB_URL.sub(%r{\Ahttps?://}, "")
+
+    assert_includes ics, "URL;VALUE=URI:#{ApplicationMailer::WEB_URL}/event/detail/#{@event.id}"
+    refute_includes ics, "UID:event-#{@event.id}@#{web_host}"
+    assert_equal "app.sola.day", EventCalendar::ICAL_UID_HOST
   end
 
   test "SEQUENCE increases after an edit" do

@@ -57,7 +57,7 @@ Rails.application.configure do
   # config.action_mailer.raise_delivery_errors = false
 
   # Set host to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "app.sola.day") }
+  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "sola.day") }
 
   # Deliver through Resend (see config/initializers/resend.rb for the api key).
   config.action_mailer.delivery_method = :resend

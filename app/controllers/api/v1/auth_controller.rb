@@ -27,8 +27,16 @@ class Api::V1::AuthController < Api::BaseController
   # #verify_wallet) and any domain string would be accepted.
   # The default matters: SG's ginger.yml did not inject this variable for a
   # while, so production ran on whatever was written here.
+  # sola.day joined this list on 2026-08-15 when it became the canonical
+  # frontend host. app.sola.day stays: it 308s to sola.day, but a wallet
+  # signature captured just before the redirect still carries the old domain.
+  # The two group subdomains are separate origins as far as a wallet is
+  # concerned — signing in from infinitacity.sola.day fills the SIWE `domain`
+  # field with that host, so omitting them makes wallet sign-in fail there and
+  # nowhere else. Any future group subdomain has to be added here too.
   ALLOWED_SIWE_DOMAINS = ENV.fetch("ALLOWED_SIWE_DOMAINS",
-    "app.sola.day,auth.sola.day,id.sola.day,www.juluo.xyz,auth.juluo.xyz,id.juluo.xyz")
+    "sola.day,app.sola.day,auth.sola.day,id.sola.day,infinitacity.sola.day,edgeesmeralda.sola.day," \
+    "juluo.xyz,www.juluo.xyz,auth.juluo.xyz,id.juluo.xyz")
     .split(",").map(&:strip).map(&:downcase).reject(&:blank?).freeze
   # Bare hostname, optionally with a :port — matches how wagmi/viem's
   # `window.location.host` fills the SIWE domain field in local dev.

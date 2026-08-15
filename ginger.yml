@@ -88,6 +88,13 @@ secrets:
     # Was NOT injected before, so SG silently ran on the controller's hardcoded
     # default and the value in .env.production had no effect.
     - ALLOWED_SIWE_DOMAINS
+    # Same trap: both were present in .env.production but not injected, so SG
+    # ran on the code defaults instead. Injected as of the 2026-08-15 sola.day
+    # cutover so the file is actually authoritative. WEB_URL is every outbound
+    # mail link; APP_HOST is action_mailer's default_url_options host.
+    # MAIL_FROM stays uninjected on purpose — see ApplicationMailer::FROM.
+    - WEB_URL
+    - APP_HOST
     - RESEND_API_KEY
     # Image uploads go to the R2 bucket behind datastore.sola.day, where every
     # pre-existing image already lives — see app/services/object_store.rb.

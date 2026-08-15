@@ -102,9 +102,18 @@ class EventCalendar
     Icalendar::Values::DateTime.new(time.utc, "tzid" => "UTC")
   end
 
+  # An iCalendar UID must never change for the life of an event (RFC 5545 3.8.4.7)
+  # — a subscribed client treats a new UID as a NEW event and keeps the old one,
+  # so every event in every subscribed calendar would silently double.
+  #
+  # This used to be derived from WEB_URL, which made the UID hostage to a
+  # frontend domain change. It is pinned to app.sola.day because that is what
+  # every UID already in someone's calendar says; it is an opaque identifier
+  # here, not a URL, and nothing dereferences it. Do not "fix" it to sola.day.
+  ICAL_UID_HOST = "app.sola.day".freeze
+
   def self.uid_for(event)
-    host = ApplicationMailer::WEB_URL.sub(%r{\Ahttps?://}, "")
-    "event-#{event.id}@#{host}"
+    "event-#{event.id}@#{ICAL_UID_HOST}"
   end
 
   def self.event_url(event)
