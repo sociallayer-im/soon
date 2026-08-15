@@ -81,6 +81,12 @@ secrets:
     - WEB_URL
     - APP_HOST
     - ALLOWED_SIWE_DOMAINS
+    # OAuth provider. This key is deliberately NOT the one in ginger.yml —
+    # sola.day and juluo.xyz are two independent authorization servers, and a
+    # shared key would let either issuer's id_token validate against the
+    # other's JWKS.
+    - OAUTH_ISSUER
+    - OAUTH_RSA_PRIVATE_KEY
     # Read by `rails wechat_pay:install`, which stores them on the merchant
     # row. Nothing reads them at request time — see WechatPaySetting.
     - WECHAT_PAY_MCHID

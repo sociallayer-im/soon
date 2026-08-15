@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_14_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_120004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -617,6 +617,84 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_14_100000) do
     t.index ["user_id"], name: "index_memberships_on_user_id"
   end
 
+  create_table "oauth_access_tokens", id: :string, force: :cascade do |t|
+    t.string "application_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "revoked_at"
+    t.string "scopes", default: [], null: false, array: true
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["application_id"], name: "index_oauth_access_tokens_on_application_id"
+    t.index ["token_digest"], name: "index_oauth_access_tokens_on_token_digest", unique: true
+    t.index ["user_id", "application_id"], name: "index_oauth_access_tokens_on_user_id_and_application_id"
+  end
+
+  create_table "oauth_applications", id: :string, force: :cascade do |t|
+    t.string "allowed_scopes", default: [], null: false, array: true
+    t.string "client_id", null: false
+    t.string "client_secret_digest"
+    t.boolean "confidential", default: true, null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "group_id"
+    t.string "homepage_url"
+    t.string "logo_url"
+    t.string "name", null: false
+    t.string "owner_id", null: false
+    t.string "redirect_uris", default: [], null: false, array: true
+    t.datetime "reviewed_at"
+    t.string "status", default: "draft", null: false
+    t.boolean "trusted", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.index ["client_id"], name: "index_oauth_applications_on_client_id", unique: true
+    t.index ["group_id"], name: "index_oauth_applications_on_group_id"
+    t.index ["owner_id"], name: "index_oauth_applications_on_owner_id"
+  end
+
+  create_table "oauth_authorization_codes", id: :string, force: :cascade do |t|
+    t.string "application_id", null: false
+    t.string "code_challenge", null: false
+    t.string "code_challenge_method", default: "S256", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "nonce"
+    t.string "redirect_uri", null: false
+    t.string "scopes", default: [], null: false, array: true
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "used_at"
+    t.string "user_id", null: false
+    t.index ["application_id"], name: "index_oauth_authorization_codes_on_application_id"
+    t.index ["token_digest"], name: "index_oauth_authorization_codes_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_oauth_authorization_codes_on_user_id"
+  end
+
+  create_table "oauth_grants", id: :string, force: :cascade do |t|
+    t.string "application_id", null: false
+    t.datetime "created_at", null: false
+    t.string "scopes", default: [], null: false, array: true
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id", "application_id"], name: "index_oauth_grants_on_user_id_and_application_id", unique: true
+  end
+
+  create_table "oauth_refresh_tokens", id: :string, force: :cascade do |t|
+    t.string "access_token_id", null: false
+    t.string "application_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "family_id", null: false
+    t.datetime "revoked_at"
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["access_token_id"], name: "index_oauth_refresh_tokens_on_access_token_id"
+    t.index ["family_id"], name: "index_oauth_refresh_tokens_on_family_id"
+    t.index ["token_digest"], name: "index_oauth_refresh_tokens_on_token_digest", unique: true
+  end
+
   create_table "participants", id: :string, force: :cascade do |t|
     t.string "badge_id"
     t.datetime "cancelled_at"
@@ -999,6 +1077,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_14_100000) do
   add_foreign_key "markers", "users", column: "owner_id"
   add_foreign_key "memberships", "groups"
   add_foreign_key "memberships", "users"
+  add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
+  add_foreign_key "oauth_access_tokens", "users"
+  add_foreign_key "oauth_applications", "groups"
+  add_foreign_key "oauth_applications", "users", column: "owner_id"
+  add_foreign_key "oauth_authorization_codes", "oauth_applications", column: "application_id"
+  add_foreign_key "oauth_authorization_codes", "users"
+  add_foreign_key "oauth_grants", "oauth_applications", column: "application_id"
+  add_foreign_key "oauth_grants", "users"
+  add_foreign_key "oauth_refresh_tokens", "oauth_access_tokens", column: "access_token_id"
+  add_foreign_key "oauth_refresh_tokens", "oauth_applications", column: "application_id"
+  add_foreign_key "oauth_refresh_tokens", "users"
   add_foreign_key "participants", "badges"
   add_foreign_key "participants", "events"
   add_foreign_key "participants", "fed_actors", on_delete: :cascade

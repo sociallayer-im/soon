@@ -103,5 +103,11 @@ secrets:
     - AWS_HOST
     - AWS_BUCKET
     - S3_URL
+    # OAuth provider. Both are required together: a key in secrets.inject with
+    # no value in .env fails the deploy outright ("secrets.inject keys not
+    # set"), and a value with no inject entry is silently ignored — the trap
+    # ALLOWED_SIWE_DOMAINS and WEB_URL were both caught by.
+    - OAUTH_ISSUER
+    - OAUTH_RSA_PRIVATE_KEY
 
 retain_containers: 5

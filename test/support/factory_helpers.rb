@@ -160,4 +160,31 @@ module FactoryHelpers
   def create_activity(initiator:, receiver: nil, action: "badge/transfer", **attrs)
     Activity.create!({ initiator: initiator, receiver: receiver, action: action }.merge(attrs))
   end
+
+  # Returns [application, raw_client_secret]. The secret is nil for public
+  # clients, which is the whole point of that distinction — see
+  # OauthApplication#create_with_secret.
+  def create_oauth_application(owner: nil, **attrs)
+    n = unique_suffix
+    OauthApplication.create_with_secret({
+      owner: owner || create_user,
+      name: "testapp_#{n}",
+      redirect_uris: [ "https://client.example.com/callback" ],
+      allowed_scopes: %w[openid profile email],
+      status: "active"
+    }.merge(attrs))
+  end
+
+  # Installs a signing key for the duration of the block. Reuses the shared
+  # process-wide keypair — OauthConfig memoizes, so it must be reset on both
+  # sides or a later test inherits this one's key.
+  def with_oauth_signing_key
+    previous = ENV["OAUTH_RSA_PRIVATE_KEY"]
+    ENV["OAUTH_RSA_PRIVATE_KEY"] = FactoryHelpers.rsa_key.to_pem
+    OauthConfig.reset!
+    yield
+  ensure
+    ENV["OAUTH_RSA_PRIVATE_KEY"] = previous
+    OauthConfig.reset!
+  end
 end

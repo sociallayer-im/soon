@@ -25,6 +25,12 @@ class Group < ApplicationRecord
   has_many :badge_classes, dependent: :destroy
   has_many :tickets, dependent: :nullify
 
+  # An app registered under a group. Nullified rather than destroyed when the
+  # group goes away: it still has a real user as `owner`, and deleting a
+  # community should not silently break a live third-party integration. Without
+  # any `dependent:` this FK would simply block the group's deletion.
+  has_many :oauth_applications, dependent: :nullify
+
   # `name` is the group's unique slug (the handle concept) — it appears in URLs
   # (/group/<name>) so it must be well-formed and unique. Unlike user names,
   # group slugs also allow hyphens ("edge-city").

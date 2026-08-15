@@ -10,6 +10,16 @@ Rails.application.routes.draw do
   # Api::V1::CalendarsController#legacy_group.
   get "group/icalendar", to: "api/v1/calendars#legacy_group"
 
+  # OIDC pins these to the root of the issuer origin — a relying party fetches
+  # /.well-known/openid-configuration and expects to find everything else from
+  # there. They cannot move under /api/v1.
+  get ".well-known/openid-configuration", to: "well_known#openid_configuration"
+  get ".well-known/jwks.json",            to: "well_known#jwks"
+  # The browser entry point a generic OIDC library navigates to; 302s to the
+  # consent page in the web app. The JSON authorize endpoints the consent page
+  # itself calls are under /api/v1/oauth.
+  get "oauth/authorize", to: "well_known#authorize_redirect"
+
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
@@ -33,6 +43,31 @@ Rails.application.routes.draw do
       post "auth/bind_email",     to: "auth#bind_email"
       # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.
       post "auth/bind_wechat",    to: "auth#bind_wechat"
+
+      # OAuth 2.0 / OIDC provider. See design/OAUTH_PROVIDER_PLAN.md.
+      # The core endpoints authenticate by client credentials or OAuth bearer
+      # token, not by a sola session, so OauthController skips authenticate!.
+      get  "oauth/authorize", to: "oauth#authorize_info"
+      post "oauth/authorize", to: "oauth#authorize_decision"
+      post "oauth/token",     to: "oauth#token"
+      get  "oauth/userinfo",  to: "oauth#userinfo"
+      post "oauth/revoke",    to: "oauth#revoke"
+
+      # Developer portal and the user's own consent management (session JWT).
+      resources :oauth_applications, path: "oauth/applications" do
+        member do
+          post :rotate_secret
+        end
+      end
+      resources :oauth_grants, path: "oauth/grants", only: %i[index destroy]
+
+      # Platform admins only — gated on users.admin.
+      resources :oauth_admin_applications, path: "oauth/admin/applications", only: %i[index show] do
+        member do
+          post :review
+          post :disable
+        end
+      end
 
       # Image upload (Cloudflare Images)
       post "upload/image", to: "uploads#image"

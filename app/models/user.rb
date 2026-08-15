@@ -14,6 +14,21 @@ class User < ApplicationRecord
   has_many :owned_badges, class_name: "Badge", foreign_key: "owner_id", dependent: :destroy
   has_many :created_badges, class_name: "Badge", foreign_key: "creator_id", dependent: :destroy
 
+  # OAuth. Every one of these carries a live FK to users, so without
+  # `dependent:` a UserMerger run on anyone who has ever authorized an app dies
+  # with ActiveRecord::InvalidForeignKey — the same trap that service already
+  # documents for fed_participations.
+  #
+  # Consents and credentials are destroyed rather than repointed on purpose: a
+  # merge must not hand a third party access to the surviving account. The
+  # applications the user *owns* are repointed instead (UserMerger), since a
+  # developer's clients should follow the developer.
+  has_many :oauth_applications, foreign_key: "owner_id", dependent: :destroy
+  has_many :oauth_grants, dependent: :destroy
+  has_many :oauth_access_tokens, dependent: :destroy
+  has_many :oauth_refresh_tokens, dependent: :destroy
+  has_many :oauth_authorization_codes, dependent: :destroy
+
   normalizes :email, with: ->(e) { e.strip.downcase }
   normalizes :eth,   with: ->(a) { a.strip.downcase }
 

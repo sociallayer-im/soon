@@ -62,6 +62,10 @@ class UserMerger
       repoint("group_invites", "receiver_id")
       repoint("group_invites", "sender_id")
       repoint("forms", "created_by_id")
+      # A developer's OAuth clients follow the developer. Their *consents* and
+      # tokens do not — those are destroyed with `from` (see User), because a
+      # merge must not hand a third party access to the surviving account.
+      repoint("oauth_applications", "owner_id")
       Ticketing::Activity.where(actor_user_id: @from.id).update_all(actor_user_id: @into.id)
 
       Domain.where(item_type: "User", item_id: @from.id).update_all(item_id: @into.id)
