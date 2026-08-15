@@ -2,6 +2,64 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-15 — sola.day becomes the canonical frontend host
+
+The international frontend moved from `app.sola.day` to the bare apex
+`sola.day`. `soon`'s side of that is three variables and one decoupling; the
+redirect itself lives in `seastar-app`'s middleware.
+
+### `WEB_URL` / `APP_HOST` now point at sola.day — and are actually injected
+
+Both were already present in `.env.production` but missing from `ginger.yml`'s
+`secrets.inject` list, so SG had been running on the hardcoded defaults in
+`ApplicationMailer` and `config/environments/production.rb` the whole time and
+edits to that file did nothing. This is the identical trap
+`ALLOWED_SIWE_DOMAINS` was found in earlier. Both are injected now, so the file
+is authoritative.
+
+`WEB_URL` is every link in every outbound mail. `APP_HOST` is
+`action_mailer.default_url_options`.
+
+**`MAIL_FROM` deliberately did NOT move.** The sending domain is a DNS fact,
+not a branding choice: SPF, DKIM and MX for it are published under
+`send.app.sola.day` in the sola.day Cloudflare zone, while `sola.day`'s own MX
+points at Google Workspace. Changing the from-address without first verifying a
+new sending domain in Resend fails SPF on every message.
+
+### iCalendar UIDs decoupled from `WEB_URL`
+
+`EventCalendar.uid_for` derived the UID host from `WEB_URL`, so this domain
+move would have silently rewritten the UID of every event already sitting in
+someone's subscribed calendar. A client treats a changed UID as a *new* event
+and keeps the old one — every subscribed calendar would have doubled, and
+nothing would have pointed at the cause.
+
+An iCalendar UID must be stable for the life of the event (RFC 5545 3.8.4.7),
+so it is now `EventCalendar::ICAL_UID_HOST`, pinned to `app.sola.day` because
+that is what the UIDs already in people's calendars say. It is an opaque
+identifier, not a URL — nothing dereferences it. Do not "fix" it to sola.day.
+Two tests lock this: one asserts the UID uses the constant, the other asserts
+it does *not* follow `WEB_URL` while the `URL:` property does.
+
+### SIWE allowlist
+
+`ALLOWED_SIWE_DOMAINS` gains `sola.day`, the two group subdomains
+(`infinitacity`, `edgeesmeralda`) and `juluo.xyz`.
+
+A wallet fills the SIWE `domain` field from the origin it is signing on, so
+**every group subdomain is a distinct entry**. Omitting one makes wallet
+sign-in fail on that subdomain and nowhere else — a failure that looks like a
+wallet problem, not a config one. Any future group subdomain has to be added
+here as well as to `seastar-app`'s `ginger.yml`.
+
+`app.sola.day` stays in the list: it 308s to sola.day now, but a signature
+captured in the moment before the redirect still carries the old domain.
+
+⚠️ **The CN half is not deployed.** `juluo.xyz` was added to
+`.env.cn.production`, but no CN deploy has been run, so the live CN backend
+still rejects a SIWE signature carrying a bare `juluo.xyz` domain. It needs
+`ginger deploy -c ginger.cn.yml`.
+
 ## 2026-08-14 — Google sign-in verified server-side, phone-whitelist tickets, admin user merge
 
 Three unrelated changes landed together in one session.
