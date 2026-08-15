@@ -1,0 +1,30 @@
+design/OAUTH_PROVIDER_PLAN.md
+  s_e9ed806a3d225c::t_bb030aa88d4a46 374-398
+app/models/oauth_refresh_token.rb
+  s_e9ed806a3d225c::t_15851bd74cf41b 36-38,43
+app/controllers/api/v1/oauth_controller.rb
+  s_e9ed806a3d225c::t_bc3fd4a1cde578 12-15,265-273,299-301
+  s_e9ed806a3d225c::t_15851bd74cf41b 193-201
+  s_e9ed806a3d225c::t_14e6592808419c 302-303
+config/routes.rb
+  s_e9ed806a3d225c::t_427b7cf1801058 53-54,56
+test/controllers/api/v1/oauth_controller_test.rb
+  s_e9ed806a3d225c::t_15851bd74cf41b 363-382
+  s_e9ed806a3d225c::t_ec9791117ae0d3 436-459
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ce665cb76c70aaa3dfea99cecadfa0cf082373eb",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
