@@ -1,0 +1,55 @@
+test/controllers/api/v1/forms_controller_test.rb
+  s_e9ed806a3d225c::t_1046236a0d9910 103-198
+app/controllers/api/v1/forms_controller.rb
+  s_e9ed806a3d225c::t_c1be3d0d9cb9dc 35-37
+  s_e9ed806a3d225c::t_93ec267bf4533a 17-24
+  s_e9ed806a3d225c::t_f9281748fc8acd 79-130,133-138
+  s_e9ed806a3d225c::t_64f8734a15e7c5 139
+test/controllers/api/v1/standalone_forms_controller_test.rb
+  s_e9ed806a3d225c::t_c5894f973b8d64 249-341,359-373,419-427
+  s_e9ed806a3d225c::t_9496c32c07e54f 342-358
+  s_e9ed806a3d225c::t_c1be3d0d9cb9dc 406-418
+  s_e9ed806a3d225c::t_c3af6aca77fcbc 374-405
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_f2a736cc962029 109-113,115-116
+  s_e9ed806a3d225c::t_93c69237407749 114
+design/CHANGELOG.md
+  s_e9ed806a3d225c::t_1f10143dca53b0 5-76,93-100
+  s_e9ed806a3d225c::t_85a020ee75915f 77-92
+app/services/form_builder.rb
+  s_e9ed806a3d225c::t_c1be3d0d9cb9dc 35-43
+  s_e9ed806a3d225c::t_accfa71271e6d2 92-94
+app/models/form_field.rb
+  s_e9ed806a3d225c::t_d13474e3c40596 14-18
+  s_e9ed806a3d225c::t_b5c88ff5a2b112 19-27
+config/routes.rb
+  s_e9ed806a3d225c::t_f9281748fc8acd 162-163
+app/controllers/api/v1/standalone_forms_controller.rb
+  s_e9ed806a3d225c::t_cac820b506173b 17-20,111-122,128,184-190,197-199
+  s_e9ed806a3d225c::t_b545e886ec7a17 64,76,88
+app/blueprints/form_blueprint.rb
+  s_e9ed806a3d225c::t_b545e886ec7a17 22-29
+  s_e9ed806a3d225c::t_93ec267bf4533a 10-11
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_e729df13510322 36-43,46
+db/migrate/20260816120000_add_public_submissions_to_forms.rb
+  s_e9ed806a3d225c::t_a10fd024ec1bdb 1-9
+db/schema.rb
+  s_e9ed806a3d225c::t_3146a29e6f1841 13,406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c51c080c1cae72572a5564f5ca5aaa792c06881f",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
