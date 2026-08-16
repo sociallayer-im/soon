@@ -33,9 +33,17 @@ class Api::V1::AuthController < Api::BaseController
   # The two group subdomains are separate origins as far as a wallet is
   # concerned — signing in from infinitacity.sola.day fills the SIWE `domain`
   # field with that host, so omitting them makes wallet sign-in fail there and
-  # nowhere else. Any future group subdomain has to be added here too.
+  # nowhere else. Any future group subdomain has to be added here too — and
+  # note sonic.sola.town is not a sola.day subdomain at all but a separate
+  # apex, so nothing about the existing entries would have covered it.
+  #
+  # This default and ALLOWED_SIWE_DOMAINS in each .env.*.production have to be
+  # kept in step. The env var wins in production, so editing only this list
+  # changes dev and test and nothing else; editing only the env leaves the
+  # fallback wrong for any deployment that loses the variable.
   ALLOWED_SIWE_DOMAINS = ENV.fetch("ALLOWED_SIWE_DOMAINS",
     "sola.day,app.sola.day,auth.sola.day,id.sola.day,infinitacity.sola.day,edgeesmeralda.sola.day," \
+    "sonic.sola.town," \
     "juluo.xyz,www.juluo.xyz,auth.juluo.xyz,id.juluo.xyz")
     .split(",").map(&:strip).map(&:downcase).reject(&:blank?).freeze
   # Bare hostname, optionally with a :port — matches how wagmi/viem's

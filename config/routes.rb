@@ -159,6 +159,8 @@ Rails.application.routes.draw do
         post   "form",             to: "forms#save_event_form"
         delete "form",             to: "forms#clear_event_form"
         get    "form/submission",  to: "forms#get_submission"
+        get    "form/my_submission", to: "forms#my_submission"
+        patch  "form/submission",  to: "forms#update_submission"
         get    "form/submissions", to: "forms#list_submissions"
 
         resources :tickets, only: %i[index create]

@@ -7,7 +7,8 @@ class FormBlueprint < Blueprinter::Base
   identifier :id
   # slug is what a shareable /form/<slug> link is built from; without it the
   # standalone pages can only address a form by its opaque id.
-  fields :title, :description, :published, :slug, :submission_message, :created_at
+  fields :title, :description, :published, :slug, :submission_message,
+         :public_submissions, :created_at
 
   view :extended do
     association :form_fields, blueprint: FormFieldBlueprint, name: :fields
@@ -17,6 +18,14 @@ class FormBlueprint < Blueprinter::Base
     # page needs to know before it offers a submit button it cannot honour.
     field :event_id do |form|
       Event.where(form_id: form.id).pick(:id)
+    end
+
+    # Whether the CALLER may edit it. Now that a form's responses can be public,
+    # the responses page has readers who are signed in and are not the author;
+    # without this it offered them an "Edit form" link that only fails when
+    # followed. Passed in rather than derived here — a blueprint has no caller.
+    field :can_edit do |_form, options|
+      options[:can_edit] == true
     end
   end
 

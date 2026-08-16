@@ -106,6 +106,14 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "verify_wallet accepts sonic.sola.town, which is a separate apex not a sola.day subdomain" do
+    key = Eth::Key.new
+    message, signature = signed_siwe_message(key, mint_nonce, domain: "sonic.sola.town")
+    post "/api/v1/auth/verify_wallet", params: { message: message, signature: signature }
+    assert_response :success
+    assert json_response["token"].present?, "a real session, not just a 200"
+  end
+
   test "verify_wallet rejects a message whose domain is not an allowlisted frontend" do
     key = Eth::Key.new
     message, signature = signed_siwe_message(key, mint_nonce, domain: "evil-phishing-site.com")

@@ -32,6 +32,15 @@ class FormBuilder
       raise Error, "field label cannot be blank" if field_params[:label].blank?
 
       attrs = attributes_for(field_params, index)
+      # A multi_select answer is its options joined by MULTI_VALUE_SEPARATOR,
+      # so an option containing that character could not be read back apart
+      # from two options. Refused rather than silently rewritten: the author
+      # can see the error and pick different wording, and mangling their text
+      # behind their back is how a choice list ends up not matching the answers
+      # already stored against it.
+      if attrs[:options].any? { |o| o.to_s.include?(FormField::MULTI_VALUE_SEPARATOR) }
+        raise Error, "an option cannot contain '#{FormField::MULTI_VALUE_SEPARATOR}'"
+      end
       existing = field_params[:id].presence && FormField.find_by(id: field_params[:id], form_id: form.id)
       existing ? existing.update!(attrs) : form.form_fields.create!(attrs)
     end
@@ -80,9 +89,9 @@ class FormBuilder
       required: ActiveModel::Type::Boolean.new.cast(field_params[:required]) || false,
       for_admin: ActiveModel::Type::Boolean.new.cast(field_params[:for_admin]) || false,
       position: field_params[:position].presence || index,
-      # Only a select has choices; carrying them on a text or upload field
-      # would let a stale client resurrect options after a type change.
-      options: field_type == "select" ? Array(field_params[:options]) : []
+      # Only the choice types carry options; keeping them on a text or upload
+      # field would let a stale client resurrect a list after a type change.
+      options: FormField::OPTION_TYPES.include?(field_type) ? Array(field_params[:options]) : []
     }
   end
 end

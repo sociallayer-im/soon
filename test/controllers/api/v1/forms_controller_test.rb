@@ -100,6 +100,102 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
     assert_equal ["curious"], submission.form_answers.map(&:value)
   end
 
+  # ---- editing my own application ----
+
+  test "an applicant under review can correct their answers" do
+    applicant = create_user
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Why?", required: true }] },
+      headers: auth_headers(@owner), as: :json
+    field = @event.reload.form.form_fields.first
+
+    post "/api/v1/events/#{@event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "first go" }] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :created
+
+    # This is what the "edit my application" dialog does. It used to POST to
+    # participants#create, which refuses anyone already participating — so
+    # every save came back "User can only participate once per event" and the
+    # answers never changed.
+    patch "/api/v1/events/#{@event.id}/form/submission",
+      params: { form_answers: [{ field_id: field.id, value: "corrected" }] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :success
+    assert_equal ["corrected"], json_response["answers"].map { |a| a["value"] }
+    assert_equal 1, FormSubmission.where(form_id: @event.form_id).count
+  end
+
+  test "editing is refused once the organizer has decided" do
+    applicant = create_user
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Why?" }] },
+      headers: auth_headers(@owner), as: :json
+    field = @event.reload.form.form_fields.first
+
+    post "/api/v1/events/#{@event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "first go" }] },
+      headers: auth_headers(applicant), as: :json
+    participant = Participant.find(json_response["id"])
+    post "/api/v1/events/#{@event.id}/participants/#{participant.id}/approve",
+      headers: auth_headers(@owner)
+    assert_response :success
+
+    # Those answers are what the approval was given for; changing them under it
+    # would leave the organizer endorsing something nobody read.
+    patch "/api/v1/events/#{@event.id}/form/submission",
+      params: { form_answers: [{ field_id: field.id, value: "bait and switch" }] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :unprocessable_entity
+    assert_match "already been reviewed", json_response["error"]
+    assert_equal ["first go"],
+      FormSubmission.find_by(form_id: @event.form_id, user_id: applicant.id).form_answers.map(&:value)
+  end
+
+  test "editing is refused to someone who never applied, and enforces required fields" do
+    stranger = create_user
+    applicant = create_user
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Why?", required: true }] },
+      headers: auth_headers(@owner), as: :json
+    field = @event.reload.form.form_fields.first
+
+    patch "/api/v1/events/#{@event.id}/form/submission",
+      params: { form_answers: [{ field_id: field.id, value: "hello" }] },
+      headers: auth_headers(stranger), as: :json
+    assert_response :unprocessable_entity
+    assert_match "not applied", json_response["error"]
+
+    post "/api/v1/events/#{@event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "first go" }] },
+      headers: auth_headers(applicant), as: :json
+    patch "/api/v1/events/#{@event.id}/form/submission",
+      params: { form_answers: [{ field_id: field.id, value: "" }] },
+      headers: auth_headers(applicant), as: :json
+    assert_response :unprocessable_entity
+    assert_match "Why?", json_response["error"]
+  end
+
+  test "my_submission reads back my own answers without me knowing my user id" do
+    applicant = create_user
+    post "/api/v1/events/#{@event.id}/form",
+      params: { title: "RSVP", fields: [{ label: "Why?" }] },
+      headers: auth_headers(@owner), as: :json
+    field = @event.reload.form.form_fields.first
+
+    get "/api/v1/events/#{@event.id}/form/my_submission", headers: auth_headers(applicant)
+    assert_response :success
+    assert_nil json_response["submission"]
+
+    post "/api/v1/events/#{@event.id}/participants",
+      params: { form_answers: [{ field_id: field.id, value: "because" }] },
+      headers: auth_headers(applicant), as: :json
+
+    get "/api/v1/events/#{@event.id}/form/my_submission", headers: auth_headers(applicant)
+    assert_response :success
+    assert_equal ["because"], json_response["answers"].map { |a| a["value"] }
+  end
+
   test "save_event_form defaults position to array index and field_type to text" do
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [

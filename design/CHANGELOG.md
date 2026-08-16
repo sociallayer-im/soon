@@ -2,6 +2,102 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-16 — public responses, more question types, and a form the editor could not see
+
+Not deployed. **Has a migration** (`forms.public_submissions`), so unlike the
+last release a rollback here does not undo the schema — the column is additive
+and defaults to false, so an older image runs fine against it.
+
+### Responses can be published
+
+`forms.public_submissions` opens `GET /forms/:slug/submissions` to everyone.
+Opt-in and defaulted false, because backfilling `true` would publish answers
+people gave a private form.
+
+The flag belongs to the **form**, event-attached or not: an event's
+registration answers are as publishable as a survey's if whoever wrote the
+questions says so, and both editors offer the same switch. An unpublished form
+keeps its answers private however the flag is set — a draft is not something a
+stranger is meant to reach at all.
+
+What a public reader sees is the same `UserBlueprint` the attendee list uses:
+name, handle, avatar. Never email or phone, which is what makes opening it up
+possible. `FormBlueprint` also gained `can_edit`, computed for the CALLER: a
+public form has readers who are signed in and are not the author, and without
+it the responses page offered them an editor link that only failed when
+followed.
+
+### More question types
+
+`textarea`, `date`, `url` and `multi_select`. All of them store a string in the
+answer's `value` like every other type — a `multi_select` answer is its chosen
+options joined by `|`, so there is no answer-per-choice row and an existing
+single-select answer is already a valid multi_select answer of one. Nothing
+parses or validates a date or a URL: a format the browser and the server
+disagreed about would fail a submission the respondent has no way to fix.
+
+`select` and `multi_select` are now `FormField::OPTION_TYPES`, the two types
+that carry `options` — previously the check was a bare `== "select"` in the
+field-upsert, which would have silently dropped a multi_select's choices.
+
+### An image answer is rendered, not linked
+
+Image questions accept SVG, which is what an `<img>` is a safe place for —
+scripts in it never run there. A link to the same file is not: following it
+loads the SVG as a top-level document on the domain that also serves our own
+assets, the one context where it does execute. So an image answer now renders
+the picture and does not link to the raw file.
+
+Relatedly, `useUploadImage` had been labelling every upload `image/png`
+regardless of what it was. The round trip only re-packages the bytes, so a
+JPEG, a GIF and an SVG were all stored under a content type none of them had.
+Browsers sniff their way through that inside an `<img>`, which is why it went
+unnoticed — but an SVG does not survive it.
+
+### The event editor could not see the event's own form
+
+`/event/edit/:id` never fetched the form. `eventDraft.form` was always
+undefined, so the application-form section rendered as **off on an event that
+had one** — an organizer opening the page saw their questions gone. Rebuilding
+them from scratch then replaced the originals, and since the field upsert now
+deletes the answers to a removed question (it previously raised
+ForeignKeyViolation instead), that turned a 500 into silent data loss. The edit
+loader fetches the form, and `form`/`form_id` are typed on `EventDraftType`
+rather than read off `any`.
+
+### Editing your own application
+
+The dialog existed, inside the participants tab — which `showParticipants`
+hides on any ticketed event for everyone but the organizer. So on exactly the
+events people pay to apply to, an applicant could not reach their own answers.
+It is now on the event page beside the registration status: editable while
+under review, read-only once the organizer has decided, because by then the
+answers are what they decided on.
+
+### Editing your own application never worked
+
+Found while reviewing the button that surfaces it. The dialog POSTed to
+`participants#create`, which **refuses anyone already participating** — so
+every save came back `"User can only participate once per event"` and the
+answers never changed. It had been that way as long as the dialog has existed;
+putting a more reachable button in front of it would only have made a broken
+feature easier to find.
+
+`PATCH /events/:event_id/form/submission` updates the caller's own answers,
+and `GET /events/:event_id/form/my_submission` reads them back without the
+caller having to resolve their own user id first (`#get_submission` takes one
+and is the organizer's lookup). Refused once the organizer has decided:
+withdrawing and applying again is the path after that, and it is honest about
+what it does.
+
+### `sonic.sola.town` is an allowed SIWE domain
+
+Not a `sola.day` subdomain but a separate apex, so nothing about the existing
+entries covered it. Added to the committed default AND to
+`ALLOWED_SIWE_DOMAINS` in both `.env.production` files — the env wins in
+production, so editing one without the other either changes nothing that
+matters or leaves the fallback wrong.
+
 ## 2026-08-15 — forms stand on their own; a failed registration can be undone
 
 Three related changes to registration and forms. Not deployed.

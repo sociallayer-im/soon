@@ -246,6 +246,185 @@ class Api::V1::StandaloneFormsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @responder.id, json_response["data"].first["user_id"]
   end
 
+  # ---- publishing the answers ----
+
+  test "submissions stay private by default, even from a signed-in stranger" do
+    form = create_published_form
+    assert_not form.public_submissions, "opt-in: an existing form cannot start publishing answers"
+
+    post "/api/v1/forms/#{form.slug}/submissions",
+      params: { answers: [{ field_id: form.form_fields.first.id, value: "Ada" }] },
+      headers: auth_headers(@responder), as: :json
+
+    get "/api/v1/forms/#{form.slug}/submissions"
+    assert_response :forbidden
+    get "/api/v1/forms/#{form.slug}/submissions", headers: auth_headers(@responder)
+    assert_response :forbidden
+  end
+
+  test "public_submissions opens the answers to everyone, signed out included" do
+    form = create_published_form
+    post "/api/v1/forms/#{form.slug}/submissions",
+      params: { answers: [{ field_id: form.form_fields.first.id, value: "Ada" }] },
+      headers: auth_headers(@responder), as: :json
+
+    patch "/api/v1/forms/#{form.slug}", params: { public_submissions: true },
+      headers: auth_headers(@author), as: :json
+    assert_response :success
+    assert_equal true, json_response["public_submissions"]
+
+    get "/api/v1/forms/#{form.slug}/submissions"
+    assert_response :success
+    assert_equal 1, json_response["data"].size
+    assert_equal "Ada", json_response["data"].first["answers"].first["value"]
+
+    # The respondent is shown the way the attendee list shows people — handle
+    # and avatar. Publishing answers must not publish contact details.
+    user = json_response["data"].first["user"]
+    assert user["name"].present?
+    assert_not user.key?("email"), "email is PII and has no view that a stranger can reach"
+    assert_not user.key?("phone")
+  end
+
+  test "an unpublished form keeps its answers private however the flag is set" do
+    form = create_published_form
+    patch "/api/v1/forms/#{form.slug}", params: { public_submissions: true, published: false },
+      headers: auth_headers(@author), as: :json
+    assert_response :success
+
+    # A draft is not something a stranger is meant to reach at all, so
+    # publishing its responses would be a stranger surprise than the flag
+    # promises.
+    get "/api/v1/forms/#{form.slug}/submissions"
+    assert_response :forbidden
+    get "/api/v1/forms/#{form.slug}/submissions", headers: auth_headers(@author)
+    assert_response :success
+  end
+
+  test "the flag belongs to the form, so an event's registration answers can be published too" do
+    group = create_group(owner: @author)
+    event = create_event(group: group, owner: @author)
+
+    post "/api/v1/events/#{event.id}/form",
+      params: { title: "RSVP", public_submissions: true,
+                fields: [{ label: "Why?", field_type: "textarea" }] },
+      headers: auth_headers(@author), as: :json
+    assert_response :success
+    form = event.reload.form
+    assert form.public_submissions
+
+    post "/api/v1/events/#{event.id}/participants",
+      params: { form_answers: [{ field_id: form.form_fields.first.id, value: "curious" }] },
+      headers: auth_headers(@responder), as: :json
+    assert_response :created
+
+    get "/api/v1/forms/#{form.slug}/submissions"
+    assert_response :success
+    assert_equal ["curious"], json_response["data"].first["answers"].map { |a| a["value"] }
+  end
+
+  test "save_event_form leaves the flag alone when it is not sent" do
+    group = create_group(owner: @author)
+    event = create_event(group: group, owner: @author)
+    post "/api/v1/events/#{event.id}/form",
+      params: { title: "RSVP", public_submissions: true, fields: [{ label: "Why?" }] },
+      headers: auth_headers(@author), as: :json
+
+    # An editor that predates the flag posts no key for it; that must not read
+    # as "turn it off" and silently unpublish a wall of answers.
+    post "/api/v1/events/#{event.id}/form",
+      params: { title: "RSVP v2", fields: [{ label: "Why?" }] },
+      headers: auth_headers(@author), as: :json
+    assert_response :success
+    assert event.reload.form.public_submissions
+  end
+
+  test "can_edit tells a public reader they are not the author" do
+    form = create_published_form
+    patch "/api/v1/forms/#{form.slug}", params: { public_submissions: true },
+      headers: auth_headers(@author), as: :json
+
+    get "/api/v1/forms/#{form.slug}", headers: auth_headers(@author)
+    assert_equal true, json_response["can_edit"]
+
+    # A signed-in reader of a public form is not its author. Without this the
+    # responses page offered them an edit link that only fails when followed.
+    get "/api/v1/forms/#{form.slug}", headers: auth_headers(@responder)
+    assert_equal false, json_response["can_edit"]
+
+    get "/api/v1/forms/#{form.slug}"
+    assert_equal false, json_response["can_edit"]
+  end
+
+  # ---- field types ----
+
+  test "the long-text, date and url types are accepted and round-trip" do
+    post "/api/v1/forms",
+      params: { title: "Survey", published: true, fields: [
+        { label: "Tell us more", field_type: "textarea" },
+        { label: "When", field_type: "date" },
+        { label: "Your site", field_type: "url" }
+      ] },
+      headers: auth_headers(@author), as: :json
+
+    assert_response :created
+    assert_equal %w[textarea date url], json_response["fields"].map { |f| f["field_type"] }
+  end
+
+  test "multi_select keeps its options and a plain text field does not" do
+    post "/api/v1/forms",
+      params: { title: "Survey", published: true, fields: [
+        { label: "Pick any", field_type: "multi_select", options: %w[a b c] },
+        { label: "Free text", field_type: "text", options: %w[ignored] }
+      ] },
+      headers: auth_headers(@author), as: :json
+
+    assert_response :created
+    assert_equal %w[a b c], json_response["fields"].first["options"]
+    assert_equal [], json_response["fields"].last["options"],
+      "a stale option list must not survive a change to a type that has no choices"
+  end
+
+  test "a multi_select answer is the chosen options in one value" do
+    post "/api/v1/forms",
+      params: { title: "Survey", published: true,
+                fields: [{ label: "Pick any", field_type: "multi_select", options: %w[a b c] }] },
+      headers: auth_headers(@author), as: :json
+    form = Form.find(json_response["id"])
+
+    post "/api/v1/forms/#{form.slug}/submissions",
+      params: { answers: [{ field_id: form.form_fields.first.id, value: "a|c" }] },
+      headers: auth_headers(@responder), as: :json
+
+    assert_response :created
+    # One row, one value — no answer-per-choice, so nothing about the schema
+    # or the dedupe-by-field rule changes.
+    assert_equal 1, json_response["answers"].size
+    assert_equal "a|c", json_response["answers"].first["value"]
+  end
+
+  test "an option cannot contain the separator a multi_select answer is joined by" do
+    post "/api/v1/forms",
+      params: { title: "Survey", published: true,
+                fields: [{ label: "Pick any", field_type: "multi_select", options: ["a|b", "c"] }] },
+      headers: auth_headers(@author), as: :json
+
+    # Silently rewriting it would leave the choice list not matching the
+    # answers already stored against it; the author can see this and reword.
+    assert_response :unprocessable_entity
+    assert_match "cannot contain", json_response["error"]
+    assert_equal 0, Form.where(created_by_id: @author.id).count
+  end
+
+  test "an unknown field type still degrades to text rather than failing the save" do
+    post "/api/v1/forms",
+      params: { title: "Survey", published: true,
+                fields: [{ label: "From the future", field_type: "colour-picker" }] },
+      headers: auth_headers(@author), as: :json
+    assert_response :created
+    assert_equal "text", json_response["fields"].first["field_type"]
+  end
+
   # ---- editing a form people have already answered ----
 
   test "removing a question people already answered succeeds, and takes those answers with it" do
