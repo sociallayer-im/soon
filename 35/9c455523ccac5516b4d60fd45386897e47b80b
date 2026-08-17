@@ -1,0 +1,38 @@
+app/models/concerns/starrable.rb
+  s_e9ed806a3d225c::t_75c2d260fab966 1-25
+app/models/comment.rb
+  s_e9ed806a3d225c::t_b18fa299fe00db 22
+app/models/topic.rb
+  s_e9ed806a3d225c::t_75c2d260fab966 15
+app/controllers/api/v1/replies_controller.rb
+  s_e9ed806a3d225c::t_807a9b7814c903 20-21,79-85
+  s_e9ed806a3d225c::t_01e633273fb2e9 86
+app/controllers/api/v1/comments_controller.rb
+  s_e9ed806a3d225c::t_b18fa299fe00db 53-61,63-64,66
+db/migrate/20260817130000_add_stars_count_to_replies.rb
+  s_e9ed806a3d225c::t_f0dca8d514ce16 1-8
+test/controllers/api/v1/discussion_controller_test.rb
+  s_e9ed806a3d225c::t_59969de3e828b9 404-454
+app/blueprints/reply_blueprint.rb
+  s_e9ed806a3d225c::t_807a9b7814c903 4-11
+app/models/reply.rb
+  s_e9ed806a3d225c::t_75c2d260fab966 6
+db/schema.rb
+  s_e9ed806a3d225c::t_91463b5773fc1d 13,818
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "359c455523ccac5516b4d60fd45386897e47b80b",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
