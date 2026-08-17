@@ -52,9 +52,16 @@ class Category < ApplicationRecord
     # this the one private surface that rule did not cover, and moderation
     # would still have refused them, so they could read a board they could not
     # act on.
-    scope.where(visibility: "public")
-         .or(scope.where(visibility: "member",  group_id: joined))
-         .or(scope.where(visibility: "manager", group_id: managed))
+    # A manager sees every board in their own group, whatever its visibility.
+    # Two reasons, and the second is the one that forced it: moderation of a
+    # team board is impossible if its managers cannot open it, and a board
+    # whose only team has been deleted matches no other branch here — it would
+    # keep its topics and become unreachable by the very people who could
+    # re-point or archive it. This is not a confidentiality boundary either
+    # way: a manager can already PATCH any board's visibility.
+    scope.where(group_id: managed)
+         .or(scope.where(visibility: "public"))
+         .or(scope.where(visibility: "member", group_id: joined))
          .or(scope.where(visibility: "team", id: teamed))
   end
 

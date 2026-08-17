@@ -12,8 +12,13 @@ class MembershipBlueprint < Blueprinter::Base
   # asking for a second request per member. Callers MUST preload it — see
   # GroupsController; 2407 memberships each resolving their own teams is 2407
   # queries.
+  # Ordered the same way the filter chips are (the manager's `sort`, then id),
+  # so the same two teams do not appear in one order on one row and another on
+  # the next. sort_by on the loaded array rather than an ordered query — the
+  # association is preloaded, and re-ordering it in SQL would undo that.
   field :teams do |membership|
-    TeamRefBlueprint.render_as_hash(membership.user.teams.select { |t| t.group_id == membership.group_id })
+    mine = membership.user.teams.select { |t| t.group_id == membership.group_id }
+    TeamRefBlueprint.render_as_hash(mine.sort_by { |t| [ -t.sort, t.id ] })
   end
 
   # For "which groups does this user belong to" listings.

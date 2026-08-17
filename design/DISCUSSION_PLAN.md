@@ -140,8 +140,14 @@ end
 |---|---|
 | `public` | 任何人，包括未登录 |
 | `member` | 该 group 的成员（含 manager / owner） |
-| `manager` | 该 group 的 manager / owner（含父 group 的 manager） |
-| `invited` | 显式名单，见下表 |
+| `manager` | 该 group 的 manager / owner（**不含**父 group 的 manager） |
+| `team` | 关联的一个或多个 team 的成员（见 `design/TEAM_PLAN.md`） |
+
+**并且：manager / owner 看得见本 group 的每一个板块，无论其 visibility。**
+两个理由，第二个是逼出这条规则的那个：team 板块的管理员打不开它就无法执行管理
+操作；而一个板块唯一关联的 team 被删除后，它不匹配任何一条可见性分支 ——
+帖子还在，却没有任何人能再打开它，包括唯一有权修复它的人。这也不构成保密边界：
+管理员本来就可以 PATCH 任意板块的 visibility。
 
 前三档不需要额外存储，直接查现有的 `memberships`。只有 `invited` 需要一张表：
 

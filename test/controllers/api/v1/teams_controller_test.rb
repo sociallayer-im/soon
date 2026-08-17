@@ -146,6 +146,10 @@ class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
     assert Category.exists?(board.id)
     assert_empty board.reload.teams
     assert_not_includes Category.visible_to(@member, group: @group).pluck(:id), board.id
+    # ...but a manager still sees it, or an orphaned board would be
+    # unreachable by the only people who could re-point or archive it.
+    assert_includes Category.visible_to(@owner, group: @group).pluck(:id), board.id
+    assert_includes Category.visible_to(@manager, group: @group).pluck(:id), board.id
   end
 
   test "the roster carries each member's teams without a query per member" do

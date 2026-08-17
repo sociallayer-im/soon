@@ -145,7 +145,10 @@ class DiscussionTest < ActiveSupport::TestCase
                  Category.visible_to(stranger, group: @group).where.not(id: @category.id).pluck(:id).sort
     assert_equal [ public_board.id, member_board.id ].sort,
                  Category.visible_to(member, group: @group).where.not(id: @category.id).pluck(:id).sort
-    assert_equal [ public_board.id, member_board.id, manager_board.id ].sort,
+    # A manager sees every board in the group, team-restricted ones included —
+    # otherwise they could not moderate them, and a board whose team is later
+    # deleted would become unreachable by anyone. See Category.visible_to.
+    assert_equal [ public_board.id, member_board.id, manager_board.id, team_board.id ].sort,
                  Category.visible_to(@owner, group: @group).where.not(id: @category.id).pluck(:id).sort
     assert_equal [ public_board.id, member_board.id, team_board.id ].sort,
                  Category.visible_to(invitee, group: @group).where.not(id: @category.id).pluck(:id).sort
