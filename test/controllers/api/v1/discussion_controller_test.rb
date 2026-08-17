@@ -47,6 +47,89 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # Regression: the group switch was only checked on the two endpoints that
+  # take ?group_id=. Everything addressed by record id ignored it, so a group
+  # that turned its forum off kept every existing topic readable, editable and
+  # deletable by anyone who had the URL.
+  test "turning a group's forum off closes every endpoint, not just the lists" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      reply = create_reply(topic: topic, user: @author)
+      @group.update!(discussion_enabled: false)
+
+      get "/api/v1/topics", params: { group_id: @group.id }
+      assert_response :not_found
+      get "/api/v1/categories", params: { group_id: @group.id }
+      assert_response :not_found
+      get "/api/v1/topics/#{topic.id}"
+      assert_response :not_found
+      get "/api/v1/topics/#{topic.id}/replies"
+      assert_response :not_found
+      post "/api/v1/topics/#{topic.id}/replies", params: { reply: { content: "x" } },
+           headers: auth_headers(@author)
+      assert_response :not_found
+      patch "/api/v1/topics/#{topic.id}", params: { topic: { title: "changed" } },
+            headers: auth_headers(@author)
+      assert_response :not_found
+      delete "/api/v1/topics/#{topic.id}", headers: auth_headers(@author)
+      assert_response :not_found
+      post "/api/v1/topics/#{topic.id}/pin", headers: auth_headers(@owner)
+      assert_response :not_found
+      patch "/api/v1/replies/#{reply.id}", params: { reply: { content: "y" } },
+            headers: auth_headers(@author)
+      assert_response :not_found
+      delete "/api/v1/replies/#{reply.id}", headers: auth_headers(@author)
+      assert_response :not_found
+      patch "/api/v1/categories/#{@category.id}", params: { category: { name: "N" } },
+            headers: auth_headers(@owner)
+      assert_response :not_found
+    end
+  end
+
+  # Regression: can_edit used to build a policy per reply, which asked the
+  # memberships table once per floor. The manager half of that answer is the
+  # same for the whole thread.
+  test "the reply list does not query per reply" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      3.times { create_reply(topic: topic, user: create_user) }
+      few = count_queries { get "/api/v1/topics/#{topic.id}/replies", headers: auth_headers(@stranger) }
+      12.times { create_reply(topic: topic, user: create_user) }
+      many = count_queries { get "/api/v1/topics/#{topic.id}/replies", headers: auth_headers(@stranger) }
+
+      assert_equal few, many,
+        "reply list went from #{few} to #{many} queries when the thread grew from 3 to 15 replies"
+    end
+  end
+
+  test "search treats LIKE metacharacters as text" do
+    with_discussion do
+      create_topic(category: @category, user: @author, title: "alpha")
+      create_topic(category: @category, user: @author, title: "100% cotton")
+
+      # A bare "%" used to return the whole board as if every title matched.
+      get "/api/v1/topics", params: { group_id: @group.id, search: "%" }
+      assert_equal [ "100% cotton" ], json_response["data"].map { |t| t["title"] }
+
+      get "/api/v1/topics", params: { group_id: @group.id, search: "_" }
+      assert_empty json_response["data"]
+
+      get "/api/v1/topics", params: { group_id: @group.id, search: "alpha" }
+      assert_equal [ "alpha" ], json_response["data"].map { |t| t["title"] }
+    end
+  end
+
+  def count_queries
+    n = 0
+    sub = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      n += 1 unless payload[:name].to_s =~ /SCHEMA|TRANSACTION/
+    end
+    yield
+    n
+  ensure
+    ActiveSupport::Notifications.unsubscribe(sub)
+  end
+
   test "reads are public and do not 401 without a token" do
     with_discussion do
       topic = create_topic(category: @category, user: @author)

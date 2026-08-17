@@ -1,5 +1,6 @@
 class Api::V1::TopicsController < Api::BaseController
   include DiscussionRateLimit
+  include DiscussionGate
 
   before_action :require_discussion_enabled!
   skip_before_action :authenticate!, only: %i[index show]
@@ -149,6 +150,9 @@ class Api::V1::TopicsController < Api::BaseController
     else
       Topic.find(params[:id])
     end
+    # The group's switch, checked against the topic rather than a parameter —
+    # otherwise every by-id action stays open after a group turns its forum off.
+    require_group_discussion!(@topic.group)
   end
 
   # Managers see flagged topics in the list so they can review what they (or
@@ -170,7 +174,7 @@ class Api::V1::TopicsController < Api::BaseController
     end
 
     scope = scope.where("tags && ARRAY[?]::varchar[]", params[:tags].to_s.split(",")) if params[:tags].present?
-    scope = scope.where("title ILIKE ?", "%#{params[:search]}%") if params[:search].present?
+    scope = scope.where("title ILIKE ?", "%#{escape_like(params[:search])}%") if params[:search].present?
     scope = scope.where(user_id: User.resolve!(params[:user_id]).id) if params[:user_id].present?
 
     if params[:starred_id].present?
@@ -187,6 +191,15 @@ class Api::V1::TopicsController < Api::BaseController
     when "unanswered" then scope.where(replies_count: 0).recently_active
     else scope.order(Arel.sql("pinned_at DESC NULLS LAST")).recently_active
     end
+  end
+
+  # % and _ are LIKE metacharacters, so an unescaped search box is a search box
+  # where typing "_" matches everything. Nothing can escape the scope this way —
+  # the query is still parameterised and still bounded by the visibility scopes
+  # — but the results are wrong, and a bare "%" makes the endpoint return the
+  # whole board as if it were a match.
+  def escape_like(term)
+    term.to_s.gsub(/[\\%_]/) { |ch| "\\#{ch}" }
   end
 
   def star_scope(user)

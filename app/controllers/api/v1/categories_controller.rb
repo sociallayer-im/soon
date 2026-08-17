@@ -1,4 +1,6 @@
 class Api::V1::CategoriesController < Api::BaseController
+  include DiscussionGate
+
   before_action :require_discussion_enabled!
   skip_before_action :authenticate!, only: :index
   before_action :authenticate_optional!, only: :index
@@ -60,6 +62,7 @@ class Api::V1::CategoriesController < Api::BaseController
 
   def set_category
     @category = Category.find(params[:id])
+    require_group_discussion!(@category.group)
   end
 
   def category_params

@@ -23,8 +23,13 @@ class ReplyBlueprint < Blueprinter::Base
   association :reply_to, blueprint: ReplyRefBlueprint
 
   view :with_permissions do
+    # Deliberately not ReplyPolicy.new(...).update? per reply: that resolves
+    # the group and asks the memberships table again for every floor, which is
+    # one query per row. The manager half of the answer is the same for the
+    # whole thread, so the controller resolves it once and passes it in; only
+    # the authorship half varies.
     field :can_edit do |reply, options|
-      ReplyPolicy.new(options[:current_user], reply).update?
+      options[:can_manage] || reply.user_id == options[:current_user]&.id
     end
   end
 end
