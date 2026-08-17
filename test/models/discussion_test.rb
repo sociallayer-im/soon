@@ -149,11 +149,19 @@ class DiscussionTest < ActiveSupport::TestCase
                  Category.visible_to(invitee, group: @group).where.not(id: @category.id).pluck(:id).sort
   end
 
-  test "a parent group's manager sees a child group's manager board" do
+  # The mirror of GroupPolicy's 2026-07-29 narrowing: managing a parent group
+  # confers nothing over a child's content. Granting read here would have left
+  # a parent manager able to read a board they are refused moderation on.
+  test "a parent group's manager does NOT see a child group's manager board" do
     parent = create_group(owner: @owner)
     child = create_group(discussion_enabled: true, parent_id: parent.id)
     board = create_category(group: child, visibility: "manager")
 
-    assert_includes Category.visible_to(@owner, group: child).pluck(:id), board.id
+    assert_not_includes Category.visible_to(@owner, group: child).pluck(:id), board.id
+
+    # A manager of the child group itself does see it.
+    child_manager = create_user
+    create_membership(user: child_manager, group: child, role: "manager")
+    assert_includes Category.visible_to(child_manager, group: child).pluck(:id), board.id
   end
 end

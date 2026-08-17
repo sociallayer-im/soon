@@ -34,17 +34,22 @@ class Category < ApplicationRecord
     return scope if user&.platform_admin?
     return scope.where(visibility: "public") if user.nil?
 
-    managed  = user.memberships.where(role: %w[manager owner]).select(:group_id)
-    joined   = user.memberships.select(:group_id)
-    invited  = CategoryMember.where(user_id: user.id).select(:category_id)
-    # A parent group's managers manage its children, so a child group's
-    # manager-only board is visible to them as well.
-    parented = Group.where(parent_id: managed).select(:id)
+    managed = user.memberships.where(role: %w[manager owner]).select(:group_id)
+    joined  = user.memberships.select(:group_id)
+    invited = CategoryMember.where(user_id: user.id).select(:category_id)
 
+    # Membership in the group itself, never in its parent. An earlier version
+    # let a parent group's managers see a child's manager-only board on the
+    # grounds that they manage their children — which is not what this
+    # codebase decided: GroupPolicy narrowed a parent manager's power over a
+    # child to promoting and demoting managers, and nothing else (2026-07-29,
+    # recorded there as deliberate). Granting read access here would have made
+    # this the one private surface that rule did not cover, and moderation
+    # would still have refused them, so they could read a board they could not
+    # act on.
     scope.where(visibility: "public")
          .or(scope.where(visibility: "member",  group_id: joined))
          .or(scope.where(visibility: "manager", group_id: managed))
-         .or(scope.where(visibility: "manager", group_id: parented))
          .or(scope.where(visibility: "invited", id: invited))
   end
 
