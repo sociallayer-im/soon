@@ -4,7 +4,7 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
   test "create makes the creator the owner" do
     user = create_user
     assert_difference "Group.count", 1 do
-      post "/api/v1/groups", params: { group: { name: "my_group" } }, headers: auth_headers(user)
+      post "/api/v1/groups", params: { group: { name: "my-group" } }, headers: auth_headers(user)
     end
     assert_response :created
     group = Group.find(json_response["id"])

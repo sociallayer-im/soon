@@ -51,12 +51,11 @@ class User < ApplicationRecord
   # `name` is the user's unique identifier/username (the handle concept). It must
   # be a well-formed slug and unique (the column is uniquely indexed). It is nil
   # until the user picks one on the register screen.
+  #
+  # The shape of it lives in HandleName, shared with Group — the two used to
+  # disagree with each other and with the frontend. See that file.
   validates :name, uniqueness: true, allow_nil: true
-  # Only when the name is being set or changed: plenty of live users hold
-  # 3-5 character names from the old minimum, and they must keep saving —
-  # the floor applies to new picks, not to what's already taken.
-  validates :name, format: { with: /\A[a-z0-9_]{6,30}\z/, message: "must be 6-30 lowercase letters, digits, or underscores" },
-    allow_blank: true, if: :will_save_change_to_name?
+  include HandleName
 
   # Platform administrators curate cross-group content: homepage featured/top
   # tags, popup-city removal. Two markers answer to this — the `admin` boolean

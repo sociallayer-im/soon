@@ -7,7 +7,7 @@ class UserTest < ActiveSupport::TestCase
   test "a new name must be at least 6 characters" do
     user = User.new(email: "short@test.com", name: "abc")
     assert_not user.valid?
-    assert_match(/6-30/, user.errors[:name].first)
+    assert_match(/6-20/, user.errors[:name].first)
 
     user.name = "abcdef"
     assert user.valid?

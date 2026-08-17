@@ -5,14 +5,14 @@ class CommentMailerTest < ActionMailer::TestCase
     owner = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner, title: "My Event")
-    author = create_user(name: "feedback_author")
+    author = create_user(name: "feedback-author")
     comment = create_comment(user: author, item: event, comment_type: "feedback")
 
     mail = CommentMailer.feedback(comment_id: comment.id)
 
     assert_equal [owner.email], mail.to
     assert_equal "New feedback on My Event", mail.subject
-    assert_match "feedback_author", mail.html_part.body.to_s
+    assert_match "feedback-author", mail.html_part.body.to_s
     assert_match comment.content, mail.html_part.body.to_s
   end
 

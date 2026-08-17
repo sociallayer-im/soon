@@ -32,11 +32,11 @@ class Group < ApplicationRecord
   has_many :oauth_applications, dependent: :nullify
 
   # `name` is the group's unique slug (the handle concept) — it appears in URLs
-  # (/group/<name>) so it must be well-formed and unique. Unlike user names,
-  # group slugs also allow hyphens ("edge-city").
+  # (/group/<name>) so it must be well-formed and unique. Same shape as a user
+  # name; see HandleName, which is also where the guard that keeps the six
+  # existing out-of-range group handles saveable lives.
   validates :name, presence: true, uniqueness: true
-  validates :name, format: { with: /\A[a-z0-9_-]{3,30}\z/, message: "must be 3-30 lowercase letters, digits, underscores, or hyphens" },
-    allow_blank: true
+  include HandleName
 
   # Eager-loads every association GroupBlueprint's :detail view walks. Render
   # that view without this and each group costs five extra queries, plus one

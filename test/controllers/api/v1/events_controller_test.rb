@@ -62,12 +62,12 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index with co_host_id resolves by username too" do
-    co_host = create_user(name: "cohost_handle")
+    co_host = create_user(name: "cohost-handle")
     group = create_group
     event = create_event(group: group, owner: create_user, status: "published")
     create_event_role(event: event, item: co_host, role: "speaker")
 
-    get "/api/v1/events", params: { co_host_id: "cohost_handle" }
+    get "/api/v1/events", params: { co_host_id: "cohost-handle" }
     assert_response :success
     assert_equal [event.id], json_response["data"].map { |e| e["id"] }
   end

@@ -29,15 +29,15 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
 
   test "update changes the current user's name" do
     user = create_user
-    patch "/api/v1/users/#{user.id}", params: { user: { name: "new_name" } }, headers: auth_headers(user)
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "new-name" } }, headers: auth_headers(user)
     assert_response :success
-    assert_equal "new_name", user.reload.name
+    assert_equal "new-name", user.reload.name
   end
 
   test "update ignores unpermitted params like email" do
     user = create_user
     original_email = user.email
-    patch "/api/v1/users/#{user.id}", params: { user: { name: "new_name", email: "hacked@test.com" } }, headers: auth_headers(user)
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "new-name", email: "hacked@test.com" } }, headers: auth_headers(user)
     assert_response :success
     assert_equal original_email, user.reload.email
   end
@@ -95,15 +95,15 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update rejects a name already taken by another user" do
-    taken = create_user(name: "taken_name")
+    taken = create_user(name: "taken-name")
     user = create_user
-    patch "/api/v1/users/#{user.id}", params: { user: { name: "taken_name" } }, headers: auth_headers(user)
+    patch "/api/v1/users/#{user.id}", params: { user: { name: "taken-name" } }, headers: auth_headers(user)
     assert_response :unprocessable_entity
   end
 
   test "name is the unique identifier — two users cannot share one" do
-    create_user(name: "duplicate_name")
-    assert_raises(ActiveRecord::RecordInvalid) { create_user(name: "duplicate_name") }
+    create_user(name: "duplicate-name")
+    assert_raises(ActiveRecord::RecordInvalid) { create_user(name: "duplicate-name") }
   end
 
   test "name must be a lowercase slug at creation time" do
@@ -112,11 +112,11 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a user is resolvable by name via the badge owner filter" do
-    owner = create_user(name: "resolvable_user")
+    owner = create_user(name: "resolvable-user")
     bc = create_badge_class(creator: owner)
     badge = create_badge(badge_class: bc, creator: owner, owner: owner)
 
-    get "/api/v1/badges", params: { owner_handle: "resolvable_user" }, headers: auth_headers(owner)
+    get "/api/v1/badges", params: { owner_handle: "resolvable-user" }, headers: auth_headers(owner)
     assert_response :success
     assert_equal [badge.id], json_response["data"].map { |b| b["id"] }
   end

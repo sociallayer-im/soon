@@ -7,22 +7,26 @@ module FactoryHelpers
     @rsa_key ||= OpenSSL::PKey::RSA.generate(2048)
   end
 
+  # Bounded on purpose: a user/group name is capped at 20 characters
+  # (HandleName), and "user-" plus this has to fit. pid is folded to five
+  # digits so a high pid on a busy machine cannot push a name over the limit
+  # and fail every test in the file with a validation error.
   def unique_suffix
     @unique_counter = (@unique_counter || 0) + 1
-    "#{Process.pid}#{@unique_counter}#{rand(1000)}"
+    "#{Process.pid % 100_000}#{@unique_counter}#{rand(1000)}"
   end
 
   def create_user(**attrs)
     n = unique_suffix
     User.create!({
       email: "user#{n}@test.com",
-      name: "user_#{n}"
+      name: "user-#{n}"
     }.merge(attrs))
   end
 
   def create_group(owner: nil, **attrs)
     n = unique_suffix
-    group = Group.create!({ name: "group_#{n}" }.merge(attrs))
+    group = Group.create!({ name: "group-#{n}" }.merge(attrs))
     group.add_member(owner.id, "owner") if owner
     group
   end

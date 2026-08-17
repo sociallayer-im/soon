@@ -254,7 +254,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     post "/api/v1/auth/request_phone_code", params: { phone: "13800138006" }
     post "/api/v1/auth/verify_phone_code", params: { phone: "13800138006", code: AuthCode.last.code }
     original = User.find(json_response["user"]["id"])
-    original.update!(name: "phone_first_user")
+    original.update!(name: "phone-first-user")
 
     wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
 
@@ -280,7 +280,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     post "/api/v1/auth/verify_phone_code", params: { phone: "13800138007", code: AuthCode.last.code }
 
     # A name means the account is real, which closes the merge window.
-    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}", name: "established_one")
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}", name: "established-one")
 
     travel PHONE_INTERVAL_SKIP do
       post "/api/v1/auth/request_phone_code", params: { phone: "13800138007", context: "bind_phone" }
@@ -323,7 +323,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
 
     patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "too_early" } }, headers: auth_headers(wechat)
+      params: { user: { name: "too-early" } }, headers: auth_headers(wechat)
 
     assert_response :unprocessable_entity
     assert_nil wechat.reload.name
@@ -338,10 +338,10 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "now_allowed" } }, headers: auth_headers(wechat)
+      params: { user: { name: "now-allowed" } }, headers: auth_headers(wechat)
 
     assert_response :success
-    assert_equal "now_allowed", wechat.reload.name
+    assert_equal "now-allowed", wechat.reload.name
   end
 
   # The rule is about WeChat's guarantee that the user is a mainland one with a
@@ -351,7 +351,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     user = User.create!(email: "nophone#{unique_suffix}@test.com")
 
     patch "/api/v1/users/#{user.id}",
-      params: { user: { name: "email_user_#{unique_suffix}" } }, headers: auth_headers(user)
+      params: { user: { name: "email-#{unique_suffix}" } }, headers: auth_headers(user)
 
     assert_response :success
     assert_not_nil user.reload.name
@@ -370,13 +370,13 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
   # Once a name exists the merge window is shut regardless, so a later edit has
   # nothing left to protect and refusing it would only break renaming.
   test "an already-named WeChat account can still edit its name" do
-    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}", name: "named_already")
+    wechat = User.create!(wechat_openid: "openid_#{unique_suffix}", name: "named-already")
 
     patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "renamed_ok" } }, headers: auth_headers(wechat)
+      params: { user: { name: "renamed-ok" } }, headers: auth_headers(wechat)
 
     assert_response :success
-    assert_equal "renamed_ok", wechat.reload.name
+    assert_equal "renamed-ok", wechat.reload.name
   end
 
   test "the requirement does not exist on a deployment without phone sign-in" do
@@ -384,7 +384,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
 
     patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "sg_user_#{unique_suffix}" } }, headers: auth_headers(wechat)
+      params: { user: { name: "sg-#{unique_suffix}" } }, headers: auth_headers(wechat)
 
     assert_response :success
     assert_not_nil wechat.reload.name

@@ -272,7 +272,7 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
   end
 
   test "binding an in-use email from an unregistered WeChat account merges into it" do
-    existing = create_user(email: "me@test.com", name: "alice_wong")
+    existing = create_user(email: "me@test.com", name: "alice-wong")
     wechat = fresh_wechat_user
     bind_code_for("me@test.com")
 
@@ -291,7 +291,7 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
     assert_not User.exists?(wechat.id), "the throwaway WeChat account is gone"
     assert_equal "o_new", existing.reload.wechat_openid
     assert_equal "u_new", existing.wechat_unionid
-    assert_equal "alice_wong", existing.name, "the surviving account keeps its own profile"
+    assert_equal "alice-wong", existing.name, "the surviving account keeps its own profile"
   end
 
   # The point of the whole feature: the next WeChat login must land on the
@@ -319,7 +319,7 @@ class Api::V1::WalletAuthTest < ActionDispatch::IntegrationTest
   # and deleting it could throw away whatever the user has already done.
   test "a WeChat account that already registered a name will not merge" do
     create_user(email: "me@test.com")
-    wechat = User.create!(wechat_openid: "o_new", name: "bob_zhang")
+    wechat = User.create!(wechat_openid: "o_new", name: "bob-zhang")
     bind_code_for("me@test.com")
 
     assert_no_difference "User.count" do

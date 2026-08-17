@@ -86,7 +86,10 @@ class PublicReadsTest < ActionDispatch::IntegrationTest
     assert_not dup.valid?
 
     assert_not Group.new(name: "Has Spaces").valid?
-    assert Group.new(name: "edge_city2").valid?
+    # Underscores were legal for a group and are not any more — the shape is
+    # now the same one users get. See HandleName.
+    assert_not Group.new(name: "edge_city2").valid?
+    assert Group.new(name: "edge-city2").valid?
   end
 
   # --- events ---
