@@ -1,0 +1,21 @@
+design/DISCUSSION_PLAN.md
+  s_e9ed806a3d225c::t_4ffd9207a365b2 83-112
+  s_e9ed806a3d225c::t_cbc2a4d9b72933 160-161,235-236
+  s_e9ed806a3d225c::t_90775c9cfffa92 372-379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a8f2d8f616fcc6d42b22ec29c28933be961942aa",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
