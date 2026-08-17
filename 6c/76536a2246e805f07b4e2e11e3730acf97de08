@@ -1,0 +1,27 @@
+app/blueprints/team_ref_blueprint.rb
+  s_e9ed806a3d225c::t_2e08fd7797afa4 10-14
+app/controllers/api/v1/teams_controller.rb
+  s_e9ed806a3d225c::t_ead2e5d2c7ab93 2-3,24
+app/controllers/concerns/slug_generator.rb
+  s_e9ed806a3d225c::t_ead2e5d2c7ab93 1-27
+test/controllers/api/v1/teams_controller_test.rb
+  s_e9ed806a3d225c::t_2b1c36a3ccc077 111-133
+app/controllers/api/v1/categories_controller.rb
+  s_e9ed806a3d225c::t_ead2e5d2c7ab93 3,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6c76536a2246e805f07b4e2e11e3730acf97de08",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
