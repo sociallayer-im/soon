@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_140001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -112,19 +112,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_130000) do
     t.string "summary"
     t.integer "topics_count", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.string "visibility", default: "public", null: false, comment: "public | member | manager | invited"
+    t.string "visibility", default: "public", null: false, comment: "public | member | manager | team"
     t.index ["group_id", "slug"], name: "index_categories_on_group_id_and_slug", unique: true
     t.index ["group_id", "sort"], name: "index_categories_on_group_id_and_sort"
     t.index ["group_id", "visibility"], name: "index_categories_on_group_id_and_visibility"
   end
 
-  create_table "category_members", id: :string, force: :cascade do |t|
+  create_table "category_teams", id: :string, force: :cascade do |t|
     t.string "category_id", null: false
     t.datetime "created_at", null: false
+    t.string "team_id", null: false
     t.datetime "updated_at", null: false
-    t.string "user_id", null: false
-    t.index ["category_id", "user_id"], name: "index_category_members_on_category_id_and_user_id", unique: true
-    t.index ["user_id"], name: "index_category_members_on_user_id"
+    t.index ["category_id", "team_id"], name: "index_category_teams_on_category_id_and_team_id", unique: true
+    t.index ["team_id"], name: "index_category_teams_on_team_id"
   end
 
   create_table "comments", id: :string, force: :cascade do |t|
@@ -854,6 +854,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_130000) do
     t.index ["user_id"], name: "index_stripe_settings_on_user_id"
   end
 
+  create_table "team_memberships", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "team_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["team_id", "user_id"], name: "index_team_memberships_on_team_id_and_user_id", unique: true
+    t.index ["user_id"], name: "index_team_memberships_on_user_id"
+  end
+
+  create_table "teams", id: :string, force: :cascade do |t|
+    t.boolean "archived", default: false, null: false
+    t.string "color"
+    t.datetime "created_at", null: false
+    t.string "description"
+    t.string "group_id", null: false
+    t.integer "members_count", default: 0, null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.integer "sort", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id", "slug"], name: "index_teams_on_group_id_and_slug", unique: true
+    t.index ["group_id", "sort"], name: "index_teams_on_group_id_and_sort"
+  end
+
   create_table "ticket_items", id: :string, force: :cascade do |t|
     t.integer "amount"
     t.string "auth_type", comment: "free | payment | badge | invite"
@@ -1128,8 +1152,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_130000) do
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
   add_foreign_key "categories", "groups"
-  add_foreign_key "category_members", "categories"
-  add_foreign_key "category_members", "users"
+  add_foreign_key "category_teams", "categories"
+  add_foreign_key "category_teams", "teams"
   add_foreign_key "comments", "badges"
   add_foreign_key "comments", "comments", column: "edit_parent_id"
   add_foreign_key "comments", "comments", column: "reply_parent_id"
@@ -1181,6 +1205,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_130000) do
   add_foreign_key "participants", "vouchers"
   add_foreign_key "replies", "topics"
   add_foreign_key "replies", "users"
+  add_foreign_key "team_memberships", "teams"
+  add_foreign_key "team_memberships", "users"
+  add_foreign_key "teams", "groups"
   add_foreign_key "ticket_items", "coupons"
   add_foreign_key "ticket_items", "events"
   add_foreign_key "ticket_items", "groups"

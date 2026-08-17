@@ -134,8 +134,10 @@ class DiscussionTest < ActiveSupport::TestCase
     public_board  = create_category(group: @group, visibility: "public")
     member_board  = create_category(group: @group, visibility: "member")
     manager_board = create_category(group: @group, visibility: "manager")
-    invited_board = create_category(group: @group, visibility: "invited")
-    CategoryMember.create!(category: invited_board, user: invitee)
+    create_membership(user: invitee, group: @group)
+    team_board = create_category(group: @group, visibility: "team")
+    team = create_team(group: @group, users: [ invitee ])
+    CategoryTeam.create!(category: team_board, team: team)
 
     assert_equal [ public_board.id ].sort,
                  Category.visible_to(nil, group: @group).where.not(id: @category.id).pluck(:id).sort
@@ -145,7 +147,7 @@ class DiscussionTest < ActiveSupport::TestCase
                  Category.visible_to(member, group: @group).where.not(id: @category.id).pluck(:id).sort
     assert_equal [ public_board.id, member_board.id, manager_board.id ].sort,
                  Category.visible_to(@owner, group: @group).where.not(id: @category.id).pluck(:id).sort
-    assert_equal [ public_board.id, invited_board.id ].sort,
+    assert_equal [ public_board.id, member_board.id, team_board.id ].sort,
                  Category.visible_to(invitee, group: @group).where.not(id: @category.id).pluck(:id).sort
   end
 

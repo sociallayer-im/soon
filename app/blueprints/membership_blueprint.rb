@@ -7,6 +7,15 @@ class MembershipBlueprint < Blueprinter::Base
   fields :role, :active, :admin_notification, :created_at
   association :user, blueprint: UserBlueprint
 
+  # Which teams this person is in. The roster is fetched whole and filtered in
+  # the browser, so the badges and the team filter both read this rather than
+  # asking for a second request per member. Callers MUST preload it — see
+  # GroupsController; 2407 memberships each resolving their own teams is 2407
+  # queries.
+  field :teams do |membership|
+    TeamRefBlueprint.render_as_hash(membership.user.teams.select { |t| t.group_id == membership.group_id })
+  end
+
   # For "which groups does this user belong to" listings.
   view :with_group do
     association :group, blueprint: GroupBlueprint

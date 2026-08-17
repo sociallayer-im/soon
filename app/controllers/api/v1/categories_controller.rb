@@ -25,18 +25,24 @@ class Api::V1::CategoriesController < Api::BaseController
     return render_not_found unless group.discussion_enabled?
     authorize group, :manage?, policy_class: GroupPolicy
 
-    category = group.categories.new(category_params.except(:group_id))
+    category = group.categories.new(category_params.except(:group_id, :team_ids))
     category.slug = generate_slug(group, category.name) if category.slug.blank?
-    category.save!
-    render json: CategoryBlueprint.render(category), status: :created
+    ActiveRecord::Base.transaction do
+      category.save!
+      sync_teams!(category)
+    end
+    render json: CategoryBlueprint.render(category.reload), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
 
   def update
     authorize @category, :update?
-    @category.update!(category_params.except(:group_id))
-    render json: CategoryBlueprint.render(@category)
+    ActiveRecord::Base.transaction do
+      @category.update!(category_params.except(:group_id, :team_ids))
+      sync_teams!(@category)
+    end
+    render json: CategoryBlueprint.render(@category.reload)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -67,7 +73,23 @@ class Api::V1::CategoriesController < Api::BaseController
 
   def category_params
     params.require(:category).permit(:group_id, :name, :slug, :summary, :sort,
-                                     :archived, :visibility)
+                                     :archived, :visibility, team_ids: [])
+  end
+
+  # Which teams may see a `visibility: "team"` board. Absent means "leave as
+  # is" rather than "clear", so a rename cannot silently make a private board
+  # invisible to everyone.
+  def sync_teams!(category)
+    return if params[:category][:team_ids].nil?
+
+    ids = Array(params[:category][:team_ids]).map(&:to_s)
+    # Only this group's teams — CategoryTeam validates it too, but refusing
+    # here gives a useful message instead of a validation string.
+    scoped = category.group.teams.where(id: ids).pluck(:id)
+    category.category_teams.where.not(team_id: scoped).destroy_all
+    (scoped - category.category_teams.pluck(:team_id)).each do |team_id|
+      category.category_teams.create!(team_id: team_id)
+    end
   end
 
   # Slugs only have to be unique inside one group, so the disambiguating

@@ -9,6 +9,7 @@ class Group < ApplicationRecord
   has_many :tracks, dependent: :destroy
   # Discussion boards. restrict_with_error rather than destroy: deleting a
   # group with live discussion should be a deliberate act, not a side effect.
+  has_many :teams, dependent: :destroy
   has_many :categories, dependent: :restrict_with_error
   has_many :topics, dependent: :restrict_with_error
   has_many :venues, dependent: :destroy
@@ -49,7 +50,10 @@ class Group < ApplicationRecord
   # between them, one group alone with 712) it turned a ~70ms page into a
   # 9-second one. Keep in step with GroupBlueprint's :detail view.
   scope :with_detail_associations, -> {
-    includes(:parent, :children, { tracks: :group }, { active_venues: :place }, { memberships: :user })
+    # memberships: { user: :teams } — the roster renders each member's team
+    # badges, and without preloading the teams that is one query per member.
+    includes(:parent, :children, { tracks: :group }, { active_venues: :place },
+             :teams, { memberships: { user: :teams } })
   }
 
   # Looks a group up by primary key OR unique slug — API paths accept either

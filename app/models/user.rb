@@ -10,7 +10,8 @@ class User < ApplicationRecord
   has_many :track_roles, dependent: :destroy
   has_many :topics, dependent: :destroy
   has_many :replies, dependent: :destroy
-  has_many :category_members, dependent: :destroy
+  has_many :team_memberships, dependent: :destroy
+  has_many :teams, through: :team_memberships
   has_many :tracks, through: :track_roles
   has_many :domains, as: :item, dependent: :destroy
   has_many :created_badge_classes, class_name: "BadgeClass", foreign_key: "creator_id", dependent: :destroy

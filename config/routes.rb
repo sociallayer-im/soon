@@ -183,6 +183,17 @@ Rails.application.routes.draw do
       resources :tracks,   only: %i[index show create update destroy]
       resources :markers,  only: %i[index show create update destroy]
 
+      # Teams — named subsets of a group's members. Team is to a group's
+      # members what Track is to its events: a grouping that is also an
+      # identity, and something later features can hang off.
+      resources :teams, only: %i[index create update destroy] do
+        member do
+          get    :members
+          post   "members", to: "teams#add_member"
+          delete "members/:user_id", to: "teams#remove_member"
+        end
+      end
+
       # Discussion boards. Off unless DISCUSSION_ENABLED is set, and off per
       # group unless groups.discussion_enabled — see design/DISCUSSION_PLAN.md.
       # The model is DiscussionCategory-free on purpose: `Category` reads the

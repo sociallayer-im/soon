@@ -1,0 +1,194 @@
+require "test_helper"
+
+class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
+  def setup
+    @owner = create_user
+    @manager = create_user
+    @member = create_user
+    @outsider = create_user
+    @group = create_group(owner: @owner)
+    create_membership(user: @manager, group: @group, role: "manager")
+    create_membership(user: @member, group: @group)
+  end
+
+  test "a person can be in several teams at once" do
+    core = create_team(group: @group)
+    volunteers = create_team(group: @group)
+
+    post "/api/v1/teams/#{core.id}/members", params: { user_id: @member.id },
+         headers: auth_headers(@manager)
+    assert_response :created
+    post "/api/v1/teams/#{volunteers.id}/members", params: { user_id: @member.id },
+         headers: auth_headers(@manager)
+    assert_response :created
+
+    assert_equal [ core.id, volunteers.id ].sort, @member.reload.teams.pluck(:id).sort
+    assert_equal 1, core.reload.members_count
+    assert_equal 1, volunteers.reload.members_count
+  end
+
+  test "adding the same person twice is idempotent" do
+    team = create_team(group: @group)
+    2.times do
+      post "/api/v1/teams/#{team.id}/members", params: { user_id: @member.id },
+           headers: auth_headers(@manager)
+    end
+    assert_equal 1, team.reload.members_count
+  end
+
+  test "someone outside the group cannot be put in one of its teams" do
+    team = create_team(group: @group)
+
+    post "/api/v1/teams/#{team.id}/members", params: { user_id: @outsider.id },
+         headers: auth_headers(@manager)
+    assert_response :unprocessable_entity
+    assert_equal 0, team.reload.members_count
+  end
+
+  # A team groups a group's members. Someone who leaves keeps neither the
+  # badge nor — through a team-restricted board — the access.
+  test "leaving the group leaves its teams" do
+    team = create_team(group: @group, users: [ @member ])
+    other_group = create_group(owner: @owner)
+    create_membership(user: @member, group: other_group)
+    kept = create_team(group: other_group, users: [ @member ])
+
+    Membership.find_by(user: @member, group: @group).destroy
+
+    assert_equal [ kept.id ], @member.reload.teams.pluck(:id)
+    assert_equal 0, team.reload.members_count
+  end
+
+  test "only managers create, edit, delete teams and change their members" do
+    team = create_team(group: @group)
+
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "Core" } },
+         headers: auth_headers(@member)
+    assert_response :forbidden
+    patch "/api/v1/teams/#{team.id}", params: { team: { name: "X" } },
+          headers: auth_headers(@member)
+    assert_response :forbidden
+    delete "/api/v1/teams/#{team.id}", headers: auth_headers(@member)
+    assert_response :forbidden
+    post "/api/v1/teams/#{team.id}/members", params: { user_id: @member.id },
+         headers: auth_headers(@member)
+    assert_response :forbidden
+
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "Core Team" } },
+         headers: auth_headers(@manager)
+    assert_response :created
+    assert_equal "core-team", json_response["slug"]
+  end
+
+  test "the team list is for members, not the public" do
+    create_team(group: @group)
+
+    get "/api/v1/teams", params: { group_id: @group.id }
+    assert_response :unauthorized
+    get "/api/v1/teams", params: { group_id: @group.id }, headers: auth_headers(@outsider)
+    assert_response :forbidden
+    get "/api/v1/teams", params: { group_id: @group.id }, headers: auth_headers(@member)
+    assert_response :success
+  end
+
+  test "slugs are unique per group, not globally" do
+    other = create_group(owner: @owner)
+
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "Core", slug: "core" } },
+         headers: auth_headers(@owner)
+    assert_response :created
+    # The same slug in a different community is fine — unlike tracks, whose
+    # global unique index makes the first community to use a name own it.
+    post "/api/v1/teams", params: { team: { group_id: other.id, name: "Core", slug: "core" } },
+         headers: auth_headers(@owner)
+    assert_response :created
+    # Twice in the same one is not.
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "Core", slug: "core" } },
+         headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+  end
+
+  test "a team can be deleted even with members, and its boards survive" do
+    team = create_team(group: @group, users: [ @member ])
+    board = create_category(group: @group, visibility: "team")
+    CategoryTeam.create!(category: board, team: team)
+
+    delete "/api/v1/teams/#{team.id}", headers: auth_headers(@owner)
+    assert_response :success
+
+    # The person is still in the group; only the grouping is gone.
+    assert Membership.exists?(user: @member, group: @group)
+    # The board is still there but now names nobody, so it is manager-only in
+    # effect. That is the reason the UI warns before deleting.
+    assert Category.exists?(board.id)
+    assert_empty board.reload.teams
+    assert_not_includes Category.visible_to(@member, group: @group).pluck(:id), board.id
+  end
+
+  test "the roster carries each member's teams without a query per member" do
+    team = create_team(group: @group, users: [ @member ])
+    5.times { create_membership(user: create_user, group: @group) }
+
+    few = count_queries { get "/api/v1/groups/#{@group.id}" }
+    10.times { create_membership(user: create_user, group: @group) }
+    many = count_queries { get "/api/v1/groups/#{@group.id}" }
+    assert_equal few, many,
+      "group detail went from #{few} to #{many} queries as the roster grew"
+
+    membership = json_response["memberships"].find { |m| m["user"]["id"] == @member.id }
+    assert_equal [ team.id ], membership["teams"].map { |t| t["id"] }
+    assert_equal team.name, membership["teams"].first["name"]
+
+    plain = json_response["memberships"].find { |m| m["user"]["id"] == @owner.id }
+    assert_empty plain["teams"]
+  end
+
+  test "a team-restricted board is visible to its team and to nobody else" do
+    ENV["DISCUSSION_ENABLED"] = "true"
+    @group.update!(discussion_enabled: true)
+    team = create_team(group: @group, users: [ @member ])
+    board = create_category(group: @group, visibility: "team")
+    CategoryTeam.create!(category: board, team: team)
+    topic = create_topic(category: board, user: @member)
+
+    get "/api/v1/topics/#{topic.id}", headers: auth_headers(@member)
+    assert_response :success
+
+    plain_member = create_user
+    create_membership(user: plain_member, group: @group)
+    get "/api/v1/topics/#{topic.id}", headers: auth_headers(plain_member)
+    assert_response :not_found
+
+    get "/api/v1/topics/#{topic.id}", headers: auth_headers(@outsider)
+    assert_response :not_found
+    get "/api/v1/topics/#{topic.id}"
+    assert_response :not_found
+  ensure
+    ENV.delete("DISCUSSION_ENABLED")
+  end
+
+  test "a board can only name teams from its own group" do
+    ENV["DISCUSSION_ENABLED"] = "true"
+    @group.update!(discussion_enabled: true)
+    board = create_category(group: @group, visibility: "team")
+    foreign = create_team(group: create_group(owner: @owner))
+
+    patch "/api/v1/categories/#{board.id}",
+          params: { category: { team_ids: [ foreign.id ] } }, headers: auth_headers(@owner)
+    assert_response :success
+    assert_empty board.reload.teams
+  ensure
+    ENV.delete("DISCUSSION_ENABLED")
+  end
+
+  def count_queries
+    n = 0
+    sub = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      n += 1 unless payload[:name].to_s =~ /SCHEMA|TRANSACTION/
+    end
+    yield
+    n
+  ensure
+    ActiveSupport::Notifications.unsubscribe(sub)
+  end
+end

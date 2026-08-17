@@ -216,18 +216,20 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "losing access to an invited board hides its topics immediately" do
+  test "losing a team hides that team's board immediately" do
     with_discussion do
-      board = create_category(group: @group, visibility: "invited")
+      create_membership(user: @stranger, group: @group)
+      board = create_category(group: @group, visibility: "team")
       topic = create_topic(category: board, user: @owner)
-      membership = CategoryMember.create!(category: board, user: @stranger)
+      team = create_team(group: @group, users: [ @stranger ])
+      CategoryTeam.create!(category: board, team: team)
       Comment.create!(user: @stranger, item_type: "Topic", item_id: topic.id,
                       comment_type: "star")
 
       get "/api/v1/topics/#{topic.id}", headers: auth_headers(@stranger)
       assert_response :success
 
-      membership.destroy!
+      TeamMembership.find_by(team: team, user: @stranger).destroy!
       get "/api/v1/topics/#{topic.id}", headers: auth_headers(@stranger)
       assert_response :not_found
 

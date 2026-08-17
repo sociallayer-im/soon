@@ -5,7 +5,7 @@ class Api::V1::MembershipsController < Api::BaseController
 
   # GET /api/v1/groups/:group_id/memberships
   def index
-    render_collection @group.memberships.includes(:user), blueprint: MembershipBlueprint
+    render_collection @group.memberships.includes(user: :teams), blueprint: MembershipBlueprint
   end
 
   # POST /api/v1/groups/:group_id/memberships

@@ -7,10 +7,11 @@
 #
 # Flat, with no parent_id — ordering is `sort`, exactly as homeland's nodes.
 class Category < ApplicationRecord
-  VISIBILITIES = %w[public member manager invited].freeze
+  VISIBILITIES = %w[public member manager team].freeze
 
   belongs_to :group
-  has_many :category_members, dependent: :destroy
+  has_many :category_teams, dependent: :destroy
+  has_many :teams, through: :category_teams
   has_many :topics, dependent: :restrict_with_error
 
   validates :name, presence: true, length: { maximum: 100 }
@@ -36,7 +37,11 @@ class Category < ApplicationRecord
 
     managed = user.memberships.where(role: %w[manager owner]).select(:group_id)
     joined  = user.memberships.select(:group_id)
-    invited = CategoryMember.where(user_id: user.id).select(:category_id)
+    # A board restricted to a team names the team, not the people — so the
+    # restriction has a meaning ("the volunteers") and is maintained in one
+    # place instead of once per board.
+    teamed  = CategoryTeam.where(team_id: TeamMembership.where(user_id: user.id).select(:team_id))
+                          .select(:category_id)
 
     # Membership in the group itself, never in its parent. An earlier version
     # let a parent group's managers see a child's manager-only board on the
@@ -50,7 +55,7 @@ class Category < ApplicationRecord
     scope.where(visibility: "public")
          .or(scope.where(visibility: "member",  group_id: joined))
          .or(scope.where(visibility: "manager", group_id: managed))
-         .or(scope.where(visibility: "invited", id: invited))
+         .or(scope.where(visibility: "team", id: teamed))
   end
 
   def visible_to?(user)

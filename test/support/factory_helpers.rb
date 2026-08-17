@@ -51,6 +51,13 @@ module FactoryHelpers
     Track.create!({ name: "Track #{n}", title: "Track #{n}", group: group }.merge(attrs))
   end
 
+  def create_team(group:, users: [], **attrs)
+    n = unique_suffix
+    team = Team.create!({ name: "Team #{n}", slug: "team-#{n}", group: group }.merge(attrs))
+    users.each { |u| TeamMembership.create!(team: team, user: u) }
+    team
+  end
+
   def create_category(group:, **attrs)
     n = unique_suffix
     Category.create!({ name: "Board #{n}", slug: "board-#{n}", group: group }.merge(attrs))
