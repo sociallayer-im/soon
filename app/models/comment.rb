@@ -19,7 +19,7 @@ class Comment < ApplicationRecord
   # Group from the frontend, BadgeClass from the feedback mail path — plus
   # Topic. It is deliberately not "every model": the point is that an arbitrary
   # string cannot be stored here.
-  ITEM_TYPES = %w[Event Group BadgeClass Topic].freeze
+  ITEM_TYPES = %w[Event Group BadgeClass Topic Reply].freeze
   validates :item_type, inclusion: { in: ITEM_TYPES }, allow_nil: true,
     if: :will_save_change_to_item_type?
 

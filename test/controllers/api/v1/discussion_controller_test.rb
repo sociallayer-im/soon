@@ -401,6 +401,57 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "starring a reply keeps its own count and flag in step" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      reply = create_reply(topic: topic, user: @author)
+
+      post "/api/v1/comments/star", params: { item_type: "Reply", item_id: reply.id },
+           headers: auth_headers(@stranger)
+      assert_response :success
+      assert_equal 1, reply.reload.stars_count
+
+      # The person who starred it sees is_starred; another reader does not.
+      get "/api/v1/topics/#{topic.id}/replies", headers: auth_headers(@stranger)
+      row = json_response["data"].find { |r| r["id"] == reply.id }
+      assert row["is_starred"]
+      assert_equal 1, row["stars_count"]
+
+      get "/api/v1/topics/#{topic.id}/replies", headers: auth_headers(@owner)
+      assert_not json_response["data"].find { |r| r["id"] == reply.id }["is_starred"]
+
+      get "/api/v1/topics/#{topic.id}/replies"
+      assert_not json_response["data"].find { |r| r["id"] == reply.id }["is_starred"]
+
+      post "/api/v1/comments/unstar", params: { item_type: "Reply", item_id: reply.id },
+           headers: auth_headers(@stranger)
+      assert_response :success
+      assert_equal 0, reply.reload.stars_count
+    end
+  end
+
+  test "starring is per person, and the count is everyone's" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+
+      [ @author, @stranger, @owner ].each do |user|
+        post "/api/v1/comments/star", params: { item_type: "Topic", item_id: topic.id },
+             headers: auth_headers(user)
+      end
+      assert_equal 3, topic.reload.stars_count
+
+      # Starring twice is idempotent rather than additive.
+      post "/api/v1/comments/star", params: { item_type: "Topic", item_id: topic.id },
+           headers: auth_headers(@author)
+      assert_equal 3, topic.reload.stars_count
+
+      get "/api/v1/topics", params: { group_id: @group.id }, headers: auth_headers(@author)
+      row = json_response["data"].find { |t| t["id"] == topic.id }
+      assert_equal 3, row["stars_count"]
+      assert row["is_starred"]
+    end
+  end
+
   test "comment item_type is whitelisted" do
     with_discussion do
       post "/api/v1/comments/star", params: { item_type: "User", item_id: @owner.id },

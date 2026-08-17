@@ -1,7 +1,14 @@
 class ReplyBlueprint < Blueprinter::Base
   identifier :id
 
-  fields :topic_id, :content, :content_type, :reply_to_id, :created_at, :updated_at
+  fields :topic_id, :content, :content_type, :reply_to_id, :stars_count,
+         :created_at, :updated_at
+
+  # Resolved for the whole page in one query and handed in, rather than asking
+  # per reply — a 50-floor thread would otherwise be 50 extra round trips.
+  field :is_starred do |reply, options|
+    options[:starred_reply_ids] ? options[:starred_reply_ids].include?(reply.id) : false
+  end
 
   field :flagged do |reply|
     reply.flagged?

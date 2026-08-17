@@ -17,7 +17,8 @@ class Api::V1::RepliesController < Api::BaseController
     scope = topic.replies.visible_to(current_user, manager: manager).chronological
     render_collection scope.includes(:user, reply_to: :user),
                       blueprint: ReplyBlueprint, view: :with_permissions,
-                      current_user: current_user
+                      current_user: current_user,
+                      starred_reply_ids: starred_reply_ids(scope)
   end
 
   def create
@@ -74,6 +75,14 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   private
+
+  # One query for the page, not one per floor.
+  def starred_reply_ids(scope)
+    return [] if current_user.nil?
+
+    Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Reply",
+                  removed: [ nil, false ], item_id: scope.reselect(:id)).pluck(:item_id)
+  end
 
   def set_reply
     @reply = if action_name == "restore"

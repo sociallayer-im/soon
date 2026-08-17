@@ -12,6 +12,7 @@
 class Topic < ApplicationRecord
   include SoftDelete
   include Flaggable
+  include Starrable
 
   MAX_CONTENT   = 64.kilobytes
   MAX_TAGS      = 10
@@ -88,22 +89,7 @@ class Topic < ApplicationRecord
     update_columns(attrs)
   end
 
-  # Stars live in `comments` (comment_type: "star"), not in an association, so
-  # topics cannot see them and the count has to be refreshed explicitly.
-  def refresh_stars_count!
-    count = Comment.where(item_type: "Topic", item_id: id, comment_type: "star",
-                          removed: [ nil, false ]).count
-    update_columns(stars_count: count, updated_at: Time.current)
-  end
-
   def after_flag_change! = refresh_category_counts!
-
-  def starred_by?(user)
-    return false if user.nil?
-
-    Comment.exists?(item_type: "Topic", item_id: id, comment_type: "star",
-                    user_id: user.id, removed: [ nil, false ])
-  end
 
   private
 

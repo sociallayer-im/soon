@@ -50,13 +50,20 @@ class Api::V1::CommentsController < Api::BaseController
 
   private
 
-  # Stars live in this table rather than on the starred record, so a topic
-  # cannot see its own star count and has to be told. Topic#refresh_stars_count!
-  # is the sole writer of that column; nothing else may touch it.
-  def refresh_star_count(comment)
-    return unless comment.item_type == "Topic"
+  # Stars live in this table rather than on the starred record, so neither a
+  # topic nor a reply can see its own count and has to be told.
+  # <Model>#refresh_stars_count! is the sole writer of that column.
+  #
+  # with_deleted because a soft-deleted record can still be unstarred by
+  # someone whose list it is still sitting in; refreshing a count on a row
+  # nobody can see is harmless, failing to find the row is not.
+  STARRABLE = { "Topic" => Topic, "Reply" => Reply }.freeze
 
-    Topic.with_deleted.find_by(id: comment.item_id)&.refresh_stars_count!
+  def refresh_star_count(comment)
+    model = STARRABLE[comment.item_type]
+    return if model.nil?
+
+    model.with_deleted.find_by(id: comment.item_id)&.refresh_stars_count!
   end
 
   def set_comment

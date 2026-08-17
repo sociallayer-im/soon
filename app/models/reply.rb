@@ -3,6 +3,7 @@
 class Reply < ApplicationRecord
   include SoftDelete
   include Flaggable
+  include Starrable
 
   MAX_CONTENT = 64.kilobytes
 
