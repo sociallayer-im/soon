@@ -26,8 +26,11 @@ Rails.application.routes.draw do
   # paths here. Handle constraints mirror the model formats so /users/:handle
   # never swallows an unrelated path.
   scope module: :federation, format: false do
-    user_handle = /[a-z0-9_]{3,30}/
-    group_handle = /[a-z0-9_-]{3,30}/
+    # One definition, shared with the two URI parsers — see the comment on
+    # Federation::Urls::HANDLE_SEGMENT for why it is broader than the rule for
+    # choosing a handle.
+    user_handle = Federation::Urls::HANDLE_SEGMENT
+    group_handle = Federation::Urls::HANDLE_SEGMENT
 
     get "/.well-known/webfinger", to: "well_known#webfinger"
     get "/.well-known/host-meta", to: "well_known#host_meta"

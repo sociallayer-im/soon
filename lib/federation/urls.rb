@@ -43,6 +43,23 @@ module Federation
       end
     end
 
+    # The path segment an actor URL can carry — deliberately BROADER than
+    # HandleName::FORMAT, and shared by the route constraints and the two
+    # places that parse an actor URI back into a record.
+    #
+    # HandleName says what may be CHOSEN today; this has to match what exists.
+    # Live data holds handles that predate every version of that rule (names
+    # below the length floor, 42-character `0x…` wallet addresses with capital
+    # letters), and the segment is also the canonical id, which is what these
+    # URLs actually carry.
+    #
+    # It was three separate literals of `[a-z0-9_]{3,30}` before, copied from
+    # the user-name rule of the day. When handles gained hyphens, every one of
+    # them silently stopped resolving the renamed users — a 404 from the route,
+    # and a dropped activity from the inbox — which is exactly the failure mode
+    # duplicated constants have.
+    HANDLE_SEGMENT = /[A-Za-z0-9_-]{1,64}/
+
     # Resolves either form: the canonical id, or a handle (peers that cached a
     # handle URL before, and humans typing one, both still land).
     def find_user(key)

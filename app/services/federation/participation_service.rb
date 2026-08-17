@@ -38,6 +38,10 @@ module Federation
         end
         participant = existing || Participant.new(event: event, fed_actor_id: fed_actor.id)
         if existing
+          # transition! owns the seat counter: it compares seated-ness before
+          # and after and moves participant_count itself. Incrementing here as
+          # well — as this did unconditionally, for both branches — counted an
+          # attending join twice.
           participant.transition!(status, fed_join_uri: activity["id"], registered_at: Time.current,
                                           message: activity["participationMessage"])
         else
@@ -45,8 +49,10 @@ module Federation
                                         registered_at: Time.current,
                                         message: activity["participationMessage"])
           participant.save!
+          # A new row never transitions, so this path still owns its own seat —
+          # the same split the local join in ParticipantsController#create makes.
+          event.increment!(:participant_count) if status == "attending"
         end
-        event.increment!(:participant_count) if status == "attending"
         OutboxService.accept_join(event, fed_actor, activity, participant) if seat
       end
       return reject(event, fed_actor, activity, "event is full") if capacity_hit
@@ -60,9 +66,9 @@ module Federation
       participant = Participant.find_by(event: event, fed_actor_id: fed_actor.id)
       return :ignored if participant.nil? || participant.cancelled?
 
-      was_seated = participant.seated?
+      # Same reason as join: transition! frees the seat, so decrementing here
+      # drove participant_count to -1 on every remote Leave.
       participant.transition!("cancelled")
-      event.decrement!(:participant_count) if was_seated && event.participant_count.to_i > 0
       Logging.log(:in, "Leave", domain: fed_actor.domain, status: "cancelled", event: event.id)
       :processed
     end

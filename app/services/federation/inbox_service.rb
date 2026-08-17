@@ -304,8 +304,8 @@ module Federation
     def self.resolve_local_actor(uri)
       return nil unless uri.is_a?(String) && Urls.local?(uri)
       case URI.parse(uri).path
-      when %r{\A/users/(?<key>[a-z0-9_]+)\z} then Urls.find_user(Regexp.last_match[:key])
-      when %r{\A/groups/(?<key>[a-z0-9_-]+)\z} then Urls.find_group(Regexp.last_match[:key])
+      when %r{\A/users/(?<key>#{Urls::HANDLE_SEGMENT})\z} then Urls.find_user(Regexp.last_match[:key])
+      when %r{\A/groups/(?<key>#{Urls::HANDLE_SEGMENT})\z} then Urls.find_group(Regexp.last_match[:key])
       end
     rescue URI::Error
       nil

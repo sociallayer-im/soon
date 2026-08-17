@@ -20,7 +20,7 @@ class Federation::UrlsTest < ActiveSupport::TestCase
 
     # the whole point: renaming must not move the actor
     before = URLS.actor_url(user)
-    user.update!(name: "renamed_#{SecureRandom.hex(3)}")
+    user.update!(name: "renamed-#{SecureRandom.hex(3)}")
     assert_equal before, URLS.actor_url(user.reload)
     assert_equal "#{URLS.actor_url(user)}#main-key", URLS.key_id(user)
     assert_equal "#{URLS.actor_url(user)}/inbox", URLS.inbox_url(user)

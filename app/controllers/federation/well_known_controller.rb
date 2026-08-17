@@ -103,8 +103,8 @@ module Federation
         path = URI.parse(resource).path
         case path
         when "/actor" then :instance
-        when %r{\A/users/(?<key>[a-z0-9_]+)\z} then Urls.find_user(Regexp.last_match[:key])
-        when %r{\A/groups/(?<key>[a-z0-9_-]+)\z} then Urls.find_group(Regexp.last_match[:key])
+        when %r{\A/users/(?<key>#{Urls::HANDLE_SEGMENT})\z} then Urls.find_user(Regexp.last_match[:key])
+        when %r{\A/groups/(?<key>#{Urls::HANDLE_SEGMENT})\z} then Urls.find_group(Regexp.last_match[:key])
         end
       end
     end
