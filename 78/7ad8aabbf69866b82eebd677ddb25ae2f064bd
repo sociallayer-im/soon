@@ -1,0 +1,68 @@
+test/models/fed_delivery_test.rb
+  s_e9ed806a3d225c::t_1b3ca6dce1c34c 42-70
+test/lib/federation/http_client_test.rb
+  s_e9ed806a3d225c::t_314b1d090eeee3 40-50,58-60,67-75,82-95,100-103
+  s_e9ed806a3d225c::t_dfe89031f02735 51-57,61-66,76-81,96-99
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_c05b5cfe2fdc07 134-138
+  s_e9ed806a3d225c::t_39fc5e55764869 104-107
+  s_e9ed806a3d225c::t_15511ac50b7528 79-86,94-97
+  s_e9ed806a3d225c::t_3d6546a0243b75 125-128
+app/models/fed_inbound_activity.rb
+  s_e9ed806a3d225c::t_515a61d548afe0 4-10,12,19-27,29-30,32-35
+  s_e9ed806a3d225c::t_613140e07431df 31,36
+app/controllers/api/v1/participants_controller.rb
+  s_e9ed806a3d225c::t_c1c5fd3b93ea35 174,178,179-183,199-204,232-233
+test/integration/federation_hardening_test.rb
+  s_e9ed806a3d225c::t_d34e8454c43f1f 35-36,38
+  s_e9ed806a3d225c::t_930ab062d22693 1-34,37,39-64,72-111
+  s_e9ed806a3d225c::t_47cdbe8edb4bdf 65-71
+app/services/federation/outbox_service.rb
+  s_e9ed806a3d225c::t_597c024fb2ce51 212-215
+  s_e9ed806a3d225c::t_80de610f176762 257-265
+  s_e9ed806a3d225c::t_fd5fc51b5ed3d6 232
+app/jobs/federation/delivery_job.rb
+  s_e9ed806a3d225c::t_6dfd074509a979 22,25
+  s_e9ed806a3d225c::t_95a399ffa69da0 38,40
+test/models/fed_inbound_activity_test.rb
+  s_e9ed806a3d225c::t_a1e3278d850be9 6-7,9-29
+app/controllers/api/v1/comments_controller.rb
+  s_e9ed806a3d225c::t_e9e133c0aeb662 58-59
+  s_e9ed806a3d225c::t_6757bea260dc31 9-16,19-22
+db/migrate/20260802120000_harden_federation_invariants.rb
+  s_e9ed806a3d225c::t_360a7a3701b507 1-25
+app/controllers/federation/inboxes_controller.rb
+  s_e9ed806a3d225c::t_7c0be275a5315b 49-51,53-64
+app/models/fed_instance_key.rb
+  s_e9ed806a3d225c::t_aecfc2de380b7d 9-10,13
+app/services/federation/participation_service.rb
+  s_e9ed806a3d225c::t_a3612ebf0a6c4a 24,29,31-38
+  s_e9ed806a3d225c::t_ed56217f751175 52
+app/jobs/federation/inbound_job.rb
+  s_e9ed806a3d225c::t_9528dfa0c50181 5-8,12-17,20-25
+lib/federation/http_client.rb
+  s_e9ed806a3d225c::t_8d59d22dfb7f6d 47-54,57-66
+app/models/fed_delivery.rb
+  s_e9ed806a3d225c::t_08b74d832a0818 23-26,31,39-41,43,48-62
+  s_e9ed806a3d225c::t_d42105d59d0c4b 63-64
+db/schema.rb
+  s_e9ed806a3d225c::t_865f684dcfc90c 337,347,349
+design/FEDERATION_DEVLOG.md
+  s_e9ed806a3d225c::t_4e735eb9dd8b10 217-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "787ad8aabbf69866b82eebd677ddb25ae2f064bd",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

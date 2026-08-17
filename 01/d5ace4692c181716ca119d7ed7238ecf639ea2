@@ -1,0 +1,37 @@
+db/migrate/20260803110000_add_follow_reconciliation.rb
+  s_e9ed806a3d225c::t_6ac4a5bd1f7809 1-11
+app/models/fed_follow.rb
+  s_e9ed806a3d225c::t_57f247b082fb64 6-9
+test/integration/federation_reconciliation_test.rb
+  s_e9ed806a3d225c::t_cf9585fa799a47 1-243
+app/services/federation/inbox_service.rb
+  s_e9ed806a3d225c::t_21e3dda068631c 36-38
+app/jobs/federation/reconciliation_job.rb
+  s_e9ed806a3d225c::t_5ce710c9dbe34e 1-14
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_1fa5dc01120ab2 56-60
+app/services/federation/follow_reconciliation_service.rb
+  s_e9ed806a3d225c::t_d34eaa68c62416 1-127
+db/schema.rb
+  s_e9ed806a3d225c::t_8f969c6fc85240 319,322-323
+design/FEDERATION_INTEROP_VERIFICATION.md
+  s_e9ed806a3d225c::t_370399e44d77cf 351-358
+design/FEDERATION_PLAN.md
+  s_e9ed806a3d225c::t_11dd814b9e17cc 696-701
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "01d5ace4692c181716ca119d7ed7238ecf639ea2",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

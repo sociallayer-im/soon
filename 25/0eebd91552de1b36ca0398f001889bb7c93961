@@ -1,0 +1,70 @@
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_e7f86132ba3e1a 46-50
+lib/federation/rate_limiter.rb
+  s_e9ed806a3d225c::t_1510cbc39bd66d 1,6-14,18-22,29-33,39-41
+  s_e9ed806a3d225c::t_5846612c0b0553 2-5,15-17,23-28,34-38
+db/migrate/20260802000004_create_fed_domain_tables.rb
+  s_e9ed806a3d225c::t_b87a74e76b4f10 1-27
+app/services/federation/inbox_service.rb
+  s_e9ed806a3d225c::t_de1e1d95404739 1-67
+app/jobs/federation/sweeper_job.rb
+  s_e9ed806a3d225c::t_faba58e55481f5 1-27
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_b053a35b38a38f 99
+  s_e9ed806a3d225c::t_46f17ab60822e3 82-86
+  s_e9ed806a3d225c::t_755115a1b75b84 117
+  s_e9ed806a3d225c::t_bcc9b82c3c3303 57
+  s_e9ed806a3d225c::t_84630eafce8458 123-132
+app/services/federation/outbox_service.rb
+  s_e9ed806a3d225c::t_cbad72f11daefd 1-86
+app/services/federation/actor_fetch_service.rb
+  s_e9ed806a3d225c::t_92a8cc09e14d05 1-83
+app/controllers/api/v1/federation_controller.rb
+  s_e9ed806a3d225c::t_8270cf352054e0 1-66
+test/support/federation_helpers.rb
+  s_e9ed806a3d225c::t_08e3eb20614d1e 1-45
+test/integration/federation_inbox_test.rb
+  s_e9ed806a3d225c::t_7766499024887d 12
+  s_e9ed806a3d225c::t_3b6a58b799686b 7
+  s_e9ed806a3d225c::t_3d32affb312810 120
+  s_e9ed806a3d225c::t_a5e8821c64efeb 1-6,8-11,13-119,121-190
+app/models/fed_domain_stat.rb
+  s_e9ed806a3d225c::t_ca0f84fe02d880 1-41
+test/integration/federation_delivery_test.rb
+  s_e9ed806a3d225c::t_352e79a6957a85 65,69,74
+  s_e9ed806a3d225c::t_69ba385a0ca736 1-64,66-68,70-73,75-176
+app/models/fed_domain_policy.rb
+  s_e9ed806a3d225c::t_b42ff8d94a73be 1-25
+app/jobs/federation/inbound_job.rb
+  s_e9ed806a3d225c::t_6c25e3e20436e7 1-14
+lib/federation/logging.rb
+  s_e9ed806a3d225c::t_5c30e3945e1eb0 1-14
+test/integration/federation_admin_test.rb
+  s_e9ed806a3d225c::t_7afcf4b35a81e5 1-48
+config/routes.rb
+  s_e9ed806a3d225c::t_faefdcfbd8765a 64-68
+  s_e9ed806a3d225c::t_e78f8406709774 49-52
+app/controllers/federation/inboxes_controller.rb
+  s_e9ed806a3d225c::t_14919fabc30cc2 1-126
+app/jobs/federation/delivery_job.rb
+  s_e9ed806a3d225c::t_04b0cb0a2a6c0f 34-35,37-40
+  s_e9ed806a3d225c::t_e8678ea411b127 1-33,36,41-58
+db/schema.rb
+  s_e9ed806a3d225c::t_d00d0f03d69a9b 259-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "250eebd91552de1b36ca0398f001889bb7c93961",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+app/controllers/federation/base_controller.rb
+  s_e9ed806a3d225c::t_5d2f030b997466 1-28
+app/controllers/federation/actors_controller.rb
+  s_e9ed806a3d225c::t_03ea969a2bd914 1-22
+db/migrate/20260802000003_create_fed_instance_keys.rb
+  s_e9ed806a3d225c::t_a202740c3473f1 1-12
+app/services/federation/event_serializer.rb
+  s_e9ed806a3d225c::t_5c6247b2794b4f 1-127
+app/controllers/federation/well_known_controller.rb
+  s_e9ed806a3d225c::t_e10601e3779ebb 1-97
+app/services/federation/actor_serializer.rb
+  s_e9ed806a3d225c::t_80462f81b5918d 1-84
+config/routes.rb
+  s_e9ed806a3d225c::t_f89490a3b70cea 23-50
+lib/federation.rb
+  s_e9ed806a3d225c::t_a643abf5016b41 1-9
+app/controllers/federation/collections_controller.rb
+  s_e9ed806a3d225c::t_85bd4e382e1dc6 1-55
+app/controllers/federation/objects_controller.rb
+  s_e9ed806a3d225c::t_d63f83a55c1d58 1-18
+lib/federation/json_ld.rb
+  s_e9ed806a3d225c::t_1ec5602107ef43 1-55
+app/models/fed_instance_key.rb
+  s_e9ed806a3d225c::t_5ca54ac34e9733 1-19
+test/integration/federation_discovery_test.rb
+  s_e9ed806a3d225c::t_ec96a9197fd58b 1-140,142-145,197-211
+  s_e9ed806a3d225c::t_f779e24d32c65a 141
+  s_e9ed806a3d225c::t_5d0b0c827e9b20 146-196
+db/schema.rb
+  s_e9ed806a3d225c::t_0edac023b933cc 343-346,348,361-362
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f8cdac14ac5cfa3e799aa381526c49c439ee2147",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+app/services/federation/comment_serializer.rb
+  s_e9ed806a3d225c::t_e71b3995f6f870 1-47
+test/integration/federation_discovery_test.rb
+  s_e9ed806a3d225c::t_64ab0a30d0e3a5 206-231
+app/controllers/federation/objects_controller.rb
+  s_e9ed806a3d225c::t_459a6813577b9d 17-31
+config/routes.rb
+  s_e9ed806a3d225c::t_be068a2bf1cb57 49
+app/services/federation/outbox_service.rb
+  s_e9ed806a3d225c::t_5922c20ebbb09c 56-60,63
+  s_e9ed806a3d225c::t_ff89428baa23df 61-62,64
+  s_e9ed806a3d225c::t_f7d22f770e3646 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "3e3af69bc87b9963cea99118442a904a26ac491d",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+app/services/federation/actor_fetch_service.rb
+  s_e9ed806a3d225c::t_693e495b03e1ff 125-131,133-136
+  s_e9ed806a3d225c::t_26b4d5627e43bc 65,80-93,108-124,132,137-138
+  s_e9ed806a3d225c::t_fefdb566f6f64f 139
+app/services/federation/follow_reconciliation_service.rb
+  s_e9ed806a3d225c::t_ca7229a822308d 71-80
+test/integration/federation_reconciliation_test.rb
+  s_e9ed806a3d225c::t_884bcc3fe798e7 227-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a3d65e904ee110f5ec47b22e89b377c7a34e2c39",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}

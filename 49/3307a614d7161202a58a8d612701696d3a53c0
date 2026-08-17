@@ -1,0 +1,19 @@
+design/FEDERATION_INTEROP_VERIFICATION.md
+  s_e9ed806a3d225c::t_f06da58c7c4b10 297-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "493307a614d7161202a58a8d612701696d3a53c0",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
