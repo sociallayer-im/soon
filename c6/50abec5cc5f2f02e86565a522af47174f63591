@@ -1,0 +1,99 @@
+db/migrate/20260817120000_add_discussion_to_groups.rb
+  s_e9ed806a3d225c::t_4d8788e7d4c512 1-13
+db/migrate/20260817120002_create_category_members.rb
+  s_e9ed806a3d225c::t_4d8788e7d4c512 1-15
+app/blueprints/category_blueprint.rb
+  s_e9ed806a3d225c::t_55d2fd9eb3c731 1-13
+app/models/user.rb
+  s_e9ed806a3d225c::t_17a559c1fad583 11-13
+app/blueprints/category_member_blueprint.rb
+  s_e9ed806a3d225c::t_55d2fd9eb3c731 1-5
+app/blueprints/category_ref_blueprint.rb
+  s_e9ed806a3d225c::t_55d2fd9eb3c731 1-7
+app/policies/category_policy.rb
+  s_e9ed806a3d225c::t_131347361351a6 1-18
+app/blueprints/topic_blueprint.rb
+  s_e9ed806a3d225c::t_7e919f9a28ff2e 1-46
+app/models/category.rb
+  s_e9ed806a3d225c::t_bfae353989767a 1-64
+app/controllers/concerns/discussion_rate_limit.rb
+  s_e9ed806a3d225c::t_4ddc2fd1f21e87 1-56
+app/policies/topic_policy.rb
+  s_e9ed806a3d225c::t_131347361351a6 1-50
+test/controllers/api/v1/discussion_controller_test.rb
+  s_e9ed806a3d225c::t_34773c66326964 1-67,72-232,234-235,237-349,361-362,368,385-424
+  s_e9ed806a3d225c::t_4c0891e882552f 233,236
+  s_e9ed806a3d225c::t_6ebdf9e99a6b6c 350-360,363-367,369-384
+  s_e9ed806a3d225c::t_9026c6e1038f5c 68-71
+db/migrate/20260817120001_create_categories.rb
+  s_e9ed806a3d225c::t_4d8788e7d4c512 1-22
+app/blueprints/reply_blueprint.rb
+  s_e9ed806a3d225c::t_55d2fd9eb3c731 1-23
+app/blueprints/reply_ref_blueprint.rb
+  s_e9ed806a3d225c::t_55d2fd9eb3c731 1-18
+app/models/comment.rb
+  s_e9ed806a3d225c::t_4c0891e882552f 8,26
+  s_e9ed806a3d225c::t_7623be0ccc5107 9-16,23-24
+  s_e9ed806a3d225c::t_35382a76252a51 17-22
+app/controllers/api/v1/comments_controller.rb
+  s_e9ed806a3d225c::t_7623be0ccc5107 28-30,38,53-60
+  s_e9ed806a3d225c::t_5709e3221392af 61
+app/models/group.rb
+  s_e9ed806a3d225c::t_17a559c1fad583 10-13
+test/models/discussion_test.rb
+  s_e9ed806a3d225c::t_4c0891e882552f 140,142,144,146,148
+  s_e9ed806a3d225c::t_802a71c00550c9 1-139,141,143,145,147,149-159
+app/controllers/api/v1/topics_controller.rb
+  s_e9ed806a3d225c::t_4c0891e882552f 34,194
+  s_e9ed806a3d225c::t_6e33244251a5c2 1-18,20-33,35-41,46-153,158-187,189-193,195-214
+  s_e9ed806a3d225c::t_636540118b0859 19,154-157,188
+  s_e9ed806a3d225c::t_9026c6e1038f5c 42-45
+app/models/concerns/soft_delete.rb
+  s_e9ed806a3d225c::t_953dd2c6646315 2-54
+  s_e9ed806a3d225c::t_cac816ad1c0345 1
+app/controllers/api/v1/groups_controller.rb
+  s_e9ed806a3d225c::t_3d29a52b2ff8c8 121
+app/models/concerns/flaggable.rb
+  s_e9ed806a3d225c::t_c9a41c5e3faef5 1-39
+db/migrate/20260817120003_create_topics.rb
+  s_e9ed806a3d225c::t_8fd05bbc47a7f1 1-53
+app/models/reply.rb
+  s_e9ed806a3d225c::t_b993eff7356967 1-53
+app/models/category_member.rb
+  s_e9ed806a3d225c::t_b993eff7356967 1-11
+app/controllers/api/v1/categories_controller.rb
+  s_e9ed806a3d225c::t_00959853eeee9b 1-80
+app/controllers/api/base_controller.rb
+  s_e9ed806a3d225c::t_88ebf2d66fedf2 46-54
+db/migrate/20260817120004_create_replies.rb
+  s_e9ed806a3d225c::t_8fd05bbc47a7f1 1-32
+app/controllers/api/v1/replies_controller.rb
+  s_e9ed806a3d225c::t_88ebf2d66fedf2 1-89
+app/models/topic.rb
+  s_e9ed806a3d225c::t_4c0891e882552f 95,105
+  s_e9ed806a3d225c::t_a9d3bddc82652f 1-94,96-104,106-131
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_0351d28d84d239 54-72
+config/routes.rb
+  s_e9ed806a3d225c::t_3d29a52b2ff8c8 186-210
+app/policies/reply_policy.rb
+  s_e9ed806a3d225c::t_131347361351a6 1-31
+db/schema.rb
+  s_e9ed806a3d225c::t_65a103328ecb48 13,105-129,568,577,808-828,943-975,1129-1131,1181-1182,1193-1195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c650abec5cc5f2f02e86565a522af47174f63591",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
