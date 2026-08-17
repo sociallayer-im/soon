@@ -1,0 +1,29 @@
+design/TEAM_PLAN.md
+  s_e9ed806a3d225c::t_42bc43db6f8d91 118-121
+test/models/discussion_test.rb
+  s_e9ed806a3d225c::t_826998d6eaec41 148-151
+app/models/category.rb
+  s_e9ed806a3d225c::t_895a97a00dc37e 55-64
+design/DISCUSSION_PLAN.md
+  s_e9ed806a3d225c::t_42bc43db6f8d91 143-150
+app/blueprints/membership_blueprint.rb
+  s_e9ed806a3d225c::t_afc65b7cb02a63 15-18,20-21
+test/controllers/api/v1/teams_controller_test.rb
+  s_e9ed806a3d225c::t_108b42d08dcc6e 149-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f57bf188eeb0f6581e35c349e8eeff929d716e69",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
