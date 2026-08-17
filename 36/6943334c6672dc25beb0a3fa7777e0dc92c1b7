@@ -1,0 +1,25 @@
+app/services/user_merger.rb
+  s_e9ed806a3d225c::t_d0e26887e70712 11-24,34-35,58-60
+test/services/user_merger_federation_test.rb
+  s_e9ed806a3d225c::t_3fdbadaafde534 1-71
+app/controllers/api/v1/participants_controller.rb
+  s_e9ed806a3d225c::t_d0e26887e70712 22-24
+app/models/user.rb
+  s_e9ed806a3d225c::t_d0e26887e70712 19-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "366943334c6672dc25beb0a3fa7777e0dc92c1b7",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
