@@ -23,9 +23,11 @@ class ReplyPolicy < ApplicationPolicy
 
   private
 
-  def author? = user && record.user_id == user.id
+  # !! rather than a bare && : with no user this returns nil, and the
+  # blueprint would ship can_edit: null where the client's type says boolean.
+  def author? = !!(user && record.user_id == user.id)
 
   def manages_group?
-    GroupPolicy.new(user, record.topic.group).manage?
+    !!GroupPolicy.new(user, record.topic.group).manage?
   end
 end
