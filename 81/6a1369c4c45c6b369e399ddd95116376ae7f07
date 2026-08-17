@@ -1,0 +1,29 @@
+lib/federation/urls.rb
+  s_e9ed806a3d225c::t_b080c28199daa4 46-62
+config/routes.rb
+  s_e9ed806a3d225c::t_b080c28199daa4 29-33
+app/services/federation/participation_service.rb
+  s_e9ed806a3d225c::t_ab0e08a6a7cb94 41-44,52-54,69-70
+test/lib/federation/urls_test.rb
+  s_e9ed806a3d225c::t_5069cde91eccaf 23
+app/controllers/federation/well_known_controller.rb
+  s_e9ed806a3d225c::t_b080c28199daa4 106-107
+app/services/federation/inbox_service.rb
+  s_e9ed806a3d225c::t_b080c28199daa4 307-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "816a1369c4c45c6b369e399ddd95116376ae7f07",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
