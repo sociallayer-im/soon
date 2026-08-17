@@ -77,6 +77,11 @@ env:
   # (WEB_URL is the frontend and would 404 them).
   STRIPE_ENABLED: "true"
   API_URL: "https://api.sola.day"
+  # Discussion boards (design/DISCUSSION_PLAN.md). Without this every
+  # /api/v1/{categories,topics,replies} endpoint 404s. Switching it on does
+  # not make a forum appear anywhere: groups.discussion_enabled defaults to
+  # false, so each group still has to opt in from its settings.
+  DISCUSSION_ENABLED: "true"
 
 secrets:
   load: [.env.production]
