@@ -80,6 +80,36 @@ SDK 的 `updateGroup` 请求体。`group_params` 用的是
 三张新表，全部沿用 `soon` 的 TSID 字符串主键（`ApplicationRecord` 的
 `before_create :set_tsid_primary_key`），**不是** homeland 的 `id: :serial`。
 
+### 1.0 命名：模型叫 `DiscussionCategory`，路由叫 `categories`
+
+定下的规则是**内部名带前缀，对外路径不带**：
+
+| 场合 | 用什么 |
+|---|---|
+| 模型 / 表 | `DiscussionCategory` / `discussion_categories` |
+| 外键 | `discussion_category_id` |
+| REST 路径 | `/api/v1/categories`（`resources :discussion_categories, path: "categories"`） |
+| 查询参数 | `category_id` / `category_slug` |
+| Blueprint 里的字段名 | `category` |
+| SDK / 前端 / i18n | `category` / 板块 |
+
+理由：`Category` 是个裸名词，将来活动分类、徽章分类都会想要它，模型名先占掉
+就锁死了；而 URL 和前端类型里带上 `discussion_` 前缀只是噪音 —— 路径已经在
+`/api/v1` 下，不存在第二个 categories 资源要区分。这与 `resources :oauth_
+applications, path: "oauth/applications"` 是同一手法，仓库里已有先例。
+
+**代价（一次性，记在这里省得实现时重新发现）：** Postgres 标识符上限 63 字符，
+`discussion_category_` 前缀会让两个自动生成的索引名越界：
+
+```
+71  index_discussion_category_members_on_discussion_category_id_and_user_id
+70  index_topics_on_discussion_category_id_and_status_and_last_active_mark
+```
+
+这两处必须手写 `name:`（下面的建表代码里已经写上）。Rails 会在 migration 时
+直接报 "Index name is too long"，不会静默截断，所以漏掉不会造成隐患，只会让
+migration 跑不过。
+
 ### `discussion_categories`（板块）
 
 ```ruby
@@ -127,7 +157,8 @@ create_table :discussion_category_members, id: :string do |t|
   t.string :discussion_category_id, null: false
   t.string :user_id,                null: false
   t.timestamps
-  t.index [:discussion_category_id, :user_id], unique: true
+  t.index [:discussion_category_id, :user_id], unique: true,
+          name: "index_category_members_on_category_and_user"   # 自动名超 63 字符
   t.index :user_id
 end
 ```
@@ -201,7 +232,8 @@ create_table :topics, id: :string do |t|
   t.datetime :deleted_at                         # 软删除
   t.timestamps
   t.index [:group_id, :status, :last_active_mark]
-  t.index [:discussion_category_id, :status, :last_active_mark]
+  t.index [:discussion_category_id, :status, :last_active_mark],
+          name: "index_topics_on_category_and_status_and_active" # 同上
   t.index [:group_id, :pinned_at]
   t.index :user_id
   t.index :deleted_at
@@ -337,14 +369,14 @@ homeland 里 `alias_method :destroy!, :destroy` 把原始的硬删除挂到了 `
 group 后校验 `group.discussion_enabled`，不满足一律 404。
 
 ```
-GET    /discussion_categories?group_id=      板块列表（只返回可见的）
-POST   /discussion_categories                建板块（manager）
-PATCH  /discussion_categories/:id            含改 visibility（manager）
-DELETE /discussion_categories/:id
+GET    /categories?group_id=                 板块列表（只返回可见的）
+POST   /categories                           建板块（manager）
+PATCH  /categories/:id                       含改 visibility（manager）
+DELETE /categories/:id
 
-GET    /discussion_categories/:id/members    invited 名单（manager）
-POST   /discussion_categories/:id/members    加人（manager）
-DELETE /discussion_categories/:id/members/:user_id
+GET    /categories/:id/members               invited 名单（manager）
+POST   /categories/:id/members               加人（manager）
+DELETE /categories/:id/members/:user_id
 
 GET    /topics                               列表；filters 见下（公开）
 GET    /topics/:id                           详情（公开）
