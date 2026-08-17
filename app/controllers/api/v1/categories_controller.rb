@@ -1,5 +1,6 @@
 class Api::V1::CategoriesController < Api::BaseController
   include DiscussionGate
+  include SlugGenerator
 
   before_action :require_discussion_enabled!
   skip_before_action :authenticate!, only: :index
@@ -26,7 +27,7 @@ class Api::V1::CategoriesController < Api::BaseController
     authorize group, :manage?, policy_class: GroupPolicy
 
     category = group.categories.new(category_params.except(:group_id, :team_ids))
-    category.slug = generate_slug(group, category.name) if category.slug.blank?
+    category.slug = generate_slug(category.name) { |s| group.categories.exists?(slug: s) } if category.slug.blank?
     ActiveRecord::Base.transaction do
       category.save!
       sync_teams!(category)
@@ -90,16 +91,5 @@ class Api::V1::CategoriesController < Api::BaseController
     (scoped - category.category_teams.pluck(:team_id)).each do |team_id|
       category.category_teams.create!(team_id: team_id)
     end
-  end
-
-  # Slugs only have to be unique inside one group, so the disambiguating
-  # suffix counts within that group too.
-  def generate_slug(group, name)
-    base = name.to_s.parameterize.presence || "board"
-    base = base.first(40)
-    slug = base
-    n = 1
-    slug = "#{base}-#{n += 1}" while group.categories.exists?(slug: slug)
-    slug
   end
 end

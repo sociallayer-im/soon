@@ -7,5 +7,9 @@
 # cities, per the note there), so every field costs that many times over.
 class TeamRefBlueprint < Blueprinter::Base
   identifier :id
-  fields :name, :slug, :color
+  # `sort` travels with the ref so the client can order badges and filter chips
+  # the way the manager arranged them. Without it the client has to invent an
+  # order, and the obvious choice — localeCompare — gives different answers on
+  # the server and in the browser, which React reports as a hydration mismatch.
+  fields :name, :slug, :color, :sort
 end

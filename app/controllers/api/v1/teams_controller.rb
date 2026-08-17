@@ -1,4 +1,6 @@
 class Api::V1::TeamsController < Api::BaseController
+  include SlugGenerator
+
   before_action :set_team, only: %i[update destroy members add_member remove_member]
 
   # GET /api/v1/teams?group_id=
@@ -19,7 +21,7 @@ class Api::V1::TeamsController < Api::BaseController
     authorize group, :create?, policy_class: TeamPolicy
 
     team = group.teams.new(team_params.except(:group_id))
-    team.slug = generate_slug(group, team.name) if team.slug.blank?
+    team.slug = generate_slug(team.name, max: 30) { |s| group.teams.exists?(slug: s) } if team.slug.blank?
     team.save!
     render json: TeamBlueprint.render(team), status: :created
   rescue ActiveRecord::RecordInvalid => e
@@ -79,11 +81,4 @@ class Api::V1::TeamsController < Api::BaseController
                                  :sort, :archived)
   end
 
-  def generate_slug(group, name)
-    base = (name.to_s.parameterize.presence || "team").first(30)
-    slug = base
-    n = 1
-    slug = "#{base}-#{n += 1}" while group.teams.exists?(slug: slug)
-    slug
-  end
 end

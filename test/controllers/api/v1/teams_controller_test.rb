@@ -108,6 +108,29 @@ class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  # parameterize drops every non-ASCII character, so a Chinese name would
+  # otherwise reduce to "" and each such team would land on team, team-2,
+  # team-3 — a slug that describes nothing and collides with every sibling.
+  test "a team named in Chinese still gets a distinct slug" do
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "核心团队" } },
+         headers: auth_headers(@owner)
+    assert_response :created
+    first = json_response["slug"]
+
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "设计组" } },
+         headers: auth_headers(@owner)
+    assert_response :created
+    second = json_response["slug"]
+
+    assert_not_equal first, second
+    assert_match(/\A[a-z0-9][a-z0-9-]*\z/, first)
+    assert_match(/\A[a-z0-9][a-z0-9-]*\z/, second)
+    # And a Latin name still reads as itself.
+    post "/api/v1/teams", params: { team: { group_id: @group.id, name: "Core Team" } },
+         headers: auth_headers(@owner)
+    assert_equal "core-team", json_response["slug"]
+  end
+
   test "a team can be deleted even with members, and its boards survive" do
     team = create_team(group: @group, users: [ @member ])
     board = create_category(group: @group, visibility: "team")
