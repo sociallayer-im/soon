@@ -28,9 +28,9 @@ group**（即 event home 所属的那个社群），不是全站单一论坛。
    `Comment(comment_type: "star", item: <polymorphic>)`，
    `POST /api/v1/comments/star` 接受任意 `item_type`。**收藏帖子在后端可以零
    改动跑通** —— 见 §5 的但书。
-4. **回复是平铺的，回给帖子，不回给人。** 不做楼中楼，不做 `reply_to_id`。
-   homeland 有 `replies.reply_to_id`，但它也只是"引用了谁"的弱指针，不构成树；
-   我们连这个都不需要。
+4. **回复平铺渲染，但记录回复对象。** `replies.reply_to_id` 指向同一帖内的
+   另一条回复，用来显示"回复 @某某"并跳转 —— 和 homeland 一样，它是**弱指针
+   而非树结构**：楼层仍按时间正序平铺，不做楼中楼、不做无限嵌套。
 5. **两级开关：部署级 env + group 级列。** 见 §0.1。板块可以是私有的，
    可见性是板块自己的属性，帖子继承它 —— 见 §1.2。
 
@@ -252,25 +252,38 @@ self.last_active_mark = Time.now.to_i if created_at > 1.month.ago
 
 ```ruby
 create_table :replies, id: :string do |t|
-  t.string   :topic_id, null: false
-  t.string   :user_id,  null: false
-  t.text     :content,  null: false
+  t.string   :topic_id,    null: false
+  t.string   :user_id,     null: false
+  t.string   :reply_to_id                        # 同帖内的另一条回复，可空
+  t.text     :content,     null: false
   t.string   :content_type, default: "text"
   t.datetime :deleted_at
   t.timestamps
   t.index [:topic_id, :created_at]
+  t.index :reply_to_id
   t.index :user_id
   t.index :deleted_at
 end
 ```
 
-刻意**没有**的三个字段，每个都对应 homeland 的一个决定：
+**`reply_to_id` 是弱指针，不是树。** 楼层永远按 `created_at` 正序平铺分页，
+`reply_to_id` 只用来在这条回复上方显示"回复 @某某：<摘要>"并锚点跳转。三条
+随之而来的规则：
+
+1. **同帖校验。** 抄 homeland 那行防御 ——
+   `self.reply_to_id = nil if reply_to&.topic_id != topic_id`。跨帖引用只可能
+   来自伪造的请求体，静默置空比报错好：它不影响这条回复本身的内容。
+2. **不加外键，`nil` 是合法状态。** 被引用的回复可能被软删甚至硬删；此时显示
+   "回复已删除"而不是 500。理由与 `topics.last_reply_id` 不加外键相同。
+3. **不做递归查询。** 渲染只向上看一层，永远不展开引用链 —— 一层是常数次
+   查询（`includes(:reply_to)`），链是 N+1 且深度不可控。
+
+刻意**没有**的两个字段，每个都对应 homeland 的一个决定：
 
 - **没有 `action` / `target_type`。** homeland 把"加精""封禁""关帖"这类系统
   事件写成 `action` 非空的 reply，混进楼层流。省了一张表，代价是此后**每一处**
   查询都要记得 `.without_system`，`replies_count` 也要排除它们——忘一次就是脏
   数据露出。我们把这些操作留给现有的 `activities` 表。
-- **没有 `reply_to_id`。** 平铺，见 §0.4。
 - **没有 `mentioned_user_ids`（数组列）。** 一期不做 @ 提醒。真要做时，
   homeland 的做法（`before_save` 正则扫 body，最多取 5 个，存
   `integer[]`）可以直接翻译成 `string[]`，但要连它的 **limit(5)** 一起抄——
@@ -405,7 +418,9 @@ DELETE /replies/:id
   照 `EventBlueprint` 把 `content` 放 `:extended` 的先例）；含
   `category`（用 ref blueprint）、`user`、`last_reply_user`、计数、`is_starred`
 - `TopicBlueprint` `:detail` 视图 — 加 `content`、`is_starred`、`can_edit`
-- `ReplyBlueprint` — `content` + `user` + `created_at` + `can_edit`
+- `ReplyBlueprint` — `content` + `user` + `created_at` + `can_edit` +
+  `reply_to`（**用 ref blueprint**：只给 id、作者名和一段截断的正文摘要。
+  嵌完整的 `ReplyBlueprint` 会递归，且把被引用回复的全文重复传一遍）
 - `CategoryRefBlueprint` — 嵌在 topic 里的轻量形状。按既有约定，
   **另建 ref blueprint，而不是给 category blueprint 加 view**。
 
@@ -507,7 +522,10 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 
 版式与活动详情页同构，去掉报名区、活动信息区、参与者列表，加：正文
 （markdown 渲染，与 event `content` 同一套）、回复列表（正序、分页）、
-底部回复框（未登录显示登录提示，锁帖显示锁定提示）。右侧保留作者卡片、
+底部回复框（未登录显示登录提示，锁帖显示锁定提示）。每条回复有"回复"按钮，
+点击后回复框进入引用态（顶部显示被引用的一条，可取消）；提交时带上
+`reply_to_id`。带引用的回复在正文上方显示"回复 @某某：<摘要>"，点击锚点跳到
+被引用楼层；被引用回复已删除时显示"回复已删除"而不是空白。右侧保留作者卡片、
 收藏按钮、管理操作（置顶/锁帖/删除）。
 
 ### 7.4 SDK
@@ -532,7 +550,7 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 **一期（可上线的最小闭环）**
 两级开关（env + `groups.discussion_enabled` + 设置页开关）· 板块 CRUD
 （manager）· 板块可见性 `public`/`member`/`manager` · 发帖/编辑/软删 ·
-平铺回复 · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
+平铺回复（含 `reply_to_id` 引用）· 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
 卡片与详情页 UI
 
 `invited` 档（`category_members` 表 + 名单管理 UI）可以推到二期，
@@ -560,7 +578,8 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
   `comments(comment_type)` 表达 star 了，两套并存比任何一套单独存在都糟。要统一
   是一次独立的重构，不是论坛的一部分。
 - **不做系统事件混入楼层流**（见 §1 replies）。
-- **不做楼中楼。**
+- **不做楼中楼。** `reply_to_id` 只是显示层的引用，不改变楼层的平铺顺序，
+  也不递归展开。
 - **不做跨 group 的全站论坛。** 论坛是 group 的一部分，
   `topics.group_id` 非空。全站聚合视图是以后的事，加 `discover` 端点即可，不用
   改表。
@@ -583,6 +602,8 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
       收藏列表、按作者过滤、通知）都用一个无权限的 token curl 一遍，
       且返回 404 而非 403
 - [ ] 移出 `invited` 名单后，此人立刻看不到该板块的帖（含已收藏的）
+- [ ] 跨帖的 `reply_to_id` 被静默置空（构造一个指向别的帖子的回复请求）
+- [ ] 被引用的回复删除后，引用它的那条仍能正常渲染（显示"回复已删除"）
 - [ ] `groups.can_post_topic` 和 `discussion_enabled` 从设置页保存后**确实
       落库**（permit 列表 + SDK 请求体两处都验）
 - [ ] 首页两个 tab 的 URL 前进/后退正常，刷新后停在同一 tab
@@ -692,21 +713,25 @@ add_foreign_key :topics, :users
 
 # 4. db/migrate/*_create_replies.rb
 create_table :replies, id: :string do |t|
-  t.string   :topic_id, null: false
-  t.string   :user_id,  null: false
-  t.text     :content,  null: false
+  t.string   :topic_id,    null: false
+  t.string   :user_id,     null: false
+  t.string   :reply_to_id                        # 同帖内的另一条回复，可空
+  t.text     :content,     null: false
   t.string   :content_type, default: "text"
   t.datetime :deleted_at
   t.timestamps
   t.index [:topic_id, :created_at]
+  t.index :reply_to_id
   t.index :user_id
   t.index :deleted_at
 end
 add_foreign_key :replies, :topics
 add_foreign_key :replies, :users
+# reply_to_id 无外键：被引用的回复可能已被删除，见 §1 replies
 ```
 
-`topics.last_reply_id` 和 `last_reply_user_id` **不加外键**：回复被硬删时外键会
+`topics.last_reply_id`、`last_reply_user_id` 和 `replies.reply_to_id`
+**不加外键**：回复被硬删时外键会
 挡住，而这两列本来就是可以指向已消失记录的缓存。读取一律 `includes` + 判空。
 
 ### 11.3 表名冲突检查
