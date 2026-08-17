@@ -1,0 +1,64 @@
+# A discussion board, belonging to one group.
+#
+# NOT a site-wide taxonomy. The bare name `Category` is taken by this feature
+# (design/DISCUSSION_PLAN.md 1.0); anything that later needs to categorise
+# events or badges has to be EventCategory / BadgeCategory. `group_id` is
+# null: false precisely so this cannot quietly become a general-purpose table.
+#
+# Flat, with no parent_id — ordering is `sort`, exactly as homeland's nodes.
+class Category < ApplicationRecord
+  VISIBILITIES = %w[public member manager invited].freeze
+
+  belongs_to :group
+  has_many :category_members, dependent: :destroy
+  has_many :topics, dependent: :restrict_with_error
+
+  validates :name, presence: true, length: { maximum: 100 }
+  validates :slug, presence: true, format: { with: /\A[a-z0-9][a-z0-9-]*\z/,
+    message: "must be lowercase letters, digits and hyphens" },
+    length: { maximum: 50 },
+    uniqueness: { scope: :group_id, case_sensitive: false }
+  validates :visibility, inclusion: { in: VISIBILITIES }
+  validates :summary, length: { maximum: 500 }, allow_blank: true
+
+  scope :sorted, -> { order(sort: :desc, created_at: :asc) }
+  scope :listed, -> { where(archived: false) }
+
+  # The categories `user` may see inside `group`. Everything that reads topics
+  # goes through this — see Topic.in_visible_categories.
+  #
+  # Written as one relation rather than a Ruby filter so it can compose into a
+  # subquery: the topic list must not load every category to decide.
+  def self.visible_to(user, group: nil)
+    scope = group ? where(group_id: group.id) : all
+    return scope if user&.platform_admin?
+    return scope.where(visibility: "public") if user.nil?
+
+    managed  = user.memberships.where(role: %w[manager owner]).select(:group_id)
+    joined   = user.memberships.select(:group_id)
+    invited  = CategoryMember.where(user_id: user.id).select(:category_id)
+    # A parent group's managers manage its children, so a child group's
+    # manager-only board is visible to them as well.
+    parented = Group.where(parent_id: managed).select(:id)
+
+    scope.where(visibility: "public")
+         .or(scope.where(visibility: "member",  group_id: joined))
+         .or(scope.where(visibility: "manager", group_id: managed))
+         .or(scope.where(visibility: "manager", group_id: parented))
+         .or(scope.where(visibility: "invited", id: invited))
+  end
+
+  def visible_to?(user)
+    self.class.visible_to(user).exists?(id: id)
+  end
+
+  def private? = visibility != "public"
+
+  # Sole writer of topics_count. Recomputed rather than incremented, for the
+  # reason in design/DISCUSSION_PLAN.md 1.1: soft delete and flagging both go
+  # through update_columns, which fires no callbacks, so a counter_cache would
+  # drift. Counts live rows only, so the number matches the list beside it.
+  def refresh_topics_count!
+    update_columns(topics_count: topics.not_flagged.count, updated_at: Time.current)
+  end
+end

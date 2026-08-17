@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_120004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -100,6 +100,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
     t.index ["owner_id"], name: "index_badges_on_owner_id"
     t.index ["ref_id"], name: "index_badges_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
+  end
+
+  create_table "categories", id: :string, force: :cascade do |t|
+    t.boolean "archived", default: false, null: false
+    t.datetime "created_at", null: false
+    t.string "group_id", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.integer "sort", default: 0, null: false
+    t.string "summary"
+    t.integer "topics_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.string "visibility", default: "public", null: false, comment: "public | member | manager | invited"
+    t.index ["group_id", "slug"], name: "index_categories_on_group_id_and_slug", unique: true
+    t.index ["group_id", "sort"], name: "index_categories_on_group_id_and_sort"
+    t.index ["group_id", "visibility"], name: "index_categories_on_group_id_and_visibility"
+  end
+
+  create_table "category_members", id: :string, force: :cascade do |t|
+    t.string "category_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["category_id", "user_id"], name: "index_category_members_on_category_id_and_user_id", unique: true
+    t.index ["user_id"], name: "index_category_members_on_user_id"
   end
 
   create_table "comments", id: :string, force: :cascade do |t|
@@ -540,6 +565,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
     t.text "banner_text"
     t.text "bio"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
+    t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
     t.datetime "created_at", null: false
@@ -548,6 +574,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
     t.string "custom_domain_token"
     t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
+    t.boolean "discussion_enabled", default: false, null: false
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true
@@ -778,6 +805,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
     t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
   end
 
+  create_table "replies", id: :string, force: :cascade do |t|
+    t.text "content", null: false
+    t.string "content_type", default: "text"
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.string "deleted_by_id"
+    t.string "flag_reason"
+    t.datetime "flagged_at"
+    t.string "flagged_by_id"
+    t.string "reply_to_id"
+    t.string "topic_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["deleted_at"], name: "index_replies_on_deleted_at"
+    t.index ["flagged_at"], name: "index_replies_on_flagged_at"
+    t.index ["reply_to_id"], name: "index_replies_on_reply_to_id"
+    t.index ["topic_id", "created_at"], name: "index_replies_on_topic_and_created_alive", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["topic_id", "created_at"], name: "index_replies_on_topic_id_and_created_at"
+    t.index ["user_id"], name: "index_replies_on_user_id"
+  end
+
   create_table "stripe_events", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error"
@@ -890,6 +938,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
     t.index ["event_id"], name: "index_tickets_on_event_id"
     t.index ["group_id", "status"], name: "index_tickets_on_group_id_and_status"
     t.check_constraint "quantity IS NULL OR quantity >= 0", name: "tickets_quantity_non_negative"
+  end
+
+  create_table "topics", id: :string, force: :cascade do |t|
+    t.string "category_id", null: false
+    t.datetime "closed_at"
+    t.text "content"
+    t.string "content_type", default: "text"
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.string "deleted_by_id"
+    t.string "flag_reason"
+    t.datetime "flagged_at"
+    t.string "flagged_by_id"
+    t.string "group_id", null: false
+    t.string "image_url"
+    t.bigint "last_active_mark", null: false
+    t.string "last_reply_id"
+    t.string "last_reply_user_id"
+    t.datetime "pinned_at"
+    t.datetime "replied_at"
+    t.integer "replies_count", default: 0, null: false
+    t.integer "stars_count", default: 0, null: false
+    t.string "tags", default: [], array: true
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["category_id", "last_active_mark"], name: "index_topics_on_category_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["deleted_at"], name: "index_topics_on_deleted_at"
+    t.index ["flagged_at"], name: "index_topics_on_flagged_at"
+    t.index ["group_id", "last_active_mark"], name: "index_topics_on_group_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["group_id", "pinned_at"], name: "index_topics_on_group_id_and_pinned_at"
+    t.index ["tags"], name: "index_topics_on_tags", using: :gin
+    t.index ["user_id"], name: "index_topics_on_user_id"
   end
 
   create_table "track_roles", id: :string, force: :cascade do |t|
@@ -1045,6 +1126,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
   add_foreign_key "badges", "users", column: "creator_id"
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
+  add_foreign_key "categories", "groups"
+  add_foreign_key "category_members", "categories"
+  add_foreign_key "category_members", "users"
   add_foreign_key "comments", "badges"
   add_foreign_key "comments", "comments", column: "edit_parent_id"
   add_foreign_key "comments", "comments", column: "reply_parent_id"
@@ -1094,6 +1178,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
   add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
   add_foreign_key "participants", "vouchers"
+  add_foreign_key "replies", "topics"
+  add_foreign_key "replies", "users"
   add_foreign_key "ticket_items", "coupons"
   add_foreign_key "ticket_items", "events"
   add_foreign_key "ticket_items", "groups"
@@ -1104,6 +1190,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120000) do
   add_foreign_key "tickets", "badge_classes", column: "check_badge_class_id"
   add_foreign_key "tickets", "events"
   add_foreign_key "tickets", "groups"
+  add_foreign_key "topics", "categories"
+  add_foreign_key "topics", "groups"
+  add_foreign_key "topics", "users"
   add_foreign_key "track_roles", "tracks"
   add_foreign_key "track_roles", "users"
   add_foreign_key "tracks", "groups"

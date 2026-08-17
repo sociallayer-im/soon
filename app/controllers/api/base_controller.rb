@@ -43,6 +43,15 @@ class Api::BaseController < ActionController::API
   # applies where phone sign-in exists.
   def phone_login_enabled? = ENV["PHONE_LOGIN_ENABLED"] == "true"
 
+  # The discussion boards are off unless a deployment turns them on. Gated
+  # endpoints 404 rather than 403: a feature that has not shipped should look
+  # like it does not exist, the same as the phone-auth routes.
+  def discussion_enabled? = ENV["DISCUSSION_ENABLED"] == "true"
+
+  def require_discussion_enabled!
+    render_not_found unless discussion_enabled?
+  end
+
   def require_wechat_pay_enabled!
     render_not_found unless wechat_pay_enabled?
   end

@@ -51,6 +51,25 @@ module FactoryHelpers
     Track.create!({ name: "Track #{n}", title: "Track #{n}", group: group }.merge(attrs))
   end
 
+  def create_category(group:, **attrs)
+    n = unique_suffix
+    Category.create!({ name: "Board #{n}", slug: "board-#{n}", group: group }.merge(attrs))
+  end
+
+  def create_topic(category:, user:, **attrs)
+    Topic.create!({
+      title: "Topic #{unique_suffix}",
+      content: "body",
+      category: category,
+      group: category.group,
+      user: user
+    }.merge(attrs))
+  end
+
+  def create_reply(topic:, user:, **attrs)
+    Reply.create!({ content: "reply #{unique_suffix}", topic: topic, user: user }.merge(attrs))
+  end
+
   def create_event(group:, owner:, place: nil, **attrs)
     place ||= create_place
     Event.create!({

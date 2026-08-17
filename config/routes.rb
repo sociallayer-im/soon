@@ -183,6 +183,31 @@ Rails.application.routes.draw do
       resources :tracks,   only: %i[index show create update destroy]
       resources :markers,  only: %i[index show create update destroy]
 
+      # Discussion boards. Off unless DISCUSSION_ENABLED is set, and off per
+      # group unless groups.discussion_enabled — see design/DISCUSSION_PLAN.md.
+      # The model is DiscussionCategory-free on purpose: `Category` reads the
+      # same from the URL to the SDK, and this is the only categories resource.
+      resources :categories, only: %i[index create update destroy]
+      resources :topics, only: %i[index show create update destroy] do
+        member do
+          post :pin
+          post :unpin
+          post :close
+          post :open
+          post :flag
+          post :unflag
+          post :restore
+        end
+        resources :replies, only: %i[index create], shallow: false
+      end
+      resources :replies, only: %i[update destroy] do
+        member do
+          post :flag
+          post :unflag
+          post :restore
+        end
+      end
+
       # Remember (shared commemorative badge). Static paths before :voucher_id.
       get  "remember/meta",               to: "remember#meta"
       get  "remember/related_groups",     to: "remember#related_groups"

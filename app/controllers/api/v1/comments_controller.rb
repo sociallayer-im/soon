@@ -25,7 +25,9 @@ class Api::V1::CommentsController < Api::BaseController
   # POST /api/v1/comments/star
   def star
     comment = Comment.find_or_initialize_by(user: current_user, item_type: params[:item_type], item_id: params[:item_id], comment_type: "star")
-    comment.save
+    return render_error(comment.errors.full_messages.join(", ")) unless comment.save
+
+    refresh_star_count(comment)
     render json: { result: "ok" }
   end
 
@@ -33,6 +35,7 @@ class Api::V1::CommentsController < Api::BaseController
   def unstar
     comment = Comment.find_by(user: current_user, item_type: params[:item_type], item_id: params[:item_id], comment_type: "star")
     comment&.destroy
+    refresh_star_count(comment) if comment
     render json: { result: "ok" }
   end
 
@@ -46,6 +49,15 @@ class Api::V1::CommentsController < Api::BaseController
   end
 
   private
+
+  # Stars live in this table rather than on the starred record, so a topic
+  # cannot see its own star count and has to be told. Topic#refresh_stars_count!
+  # is the sole writer of that column; nothing else may touch it.
+  def refresh_star_count(comment)
+    return unless comment.item_type == "Topic"
+
+    Topic.with_deleted.find_by(id: comment.item_id)&.refresh_stars_count!
+  end
 
   def set_comment
     @comment = Comment.find(params[:id])

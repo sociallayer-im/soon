@@ -118,6 +118,7 @@ class Api::V1::GroupsController < Api::BaseController
       :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
       :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
       :can_publish_event, :can_join_event, :can_view_event,
+      :discussion_enabled, :can_post_topic,
       social_links: {}, group_tags: [], event_tag_list: [],
       requirement_tag_list: [], venue_tag_list: [])
 

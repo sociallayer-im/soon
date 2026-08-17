@@ -7,6 +7,10 @@ class Group < ApplicationRecord
   has_many :events, dependent: :destroy, inverse_of: :group
   has_many :markers, dependent: :destroy
   has_many :tracks, dependent: :destroy
+  # Discussion boards. restrict_with_error rather than destroy: deleting a
+  # group with live discussion should be a deliberate act, not a side effect.
+  has_many :categories, dependent: :restrict_with_error
+  has_many :topics, dependent: :restrict_with_error
   has_many :venues, dependent: :destroy
   # Removing a venue is a soft delete (VenuesController#destroy sets archived),
   # so `venues` still contains removed rows — it exists for dependent: :destroy
