@@ -208,9 +208,13 @@ create_table :topics, id: :string do |t|
   t.string   :content_type, default: "text"      # 与 comments 一致
   t.string   :image_url                          # 可选海报，列表卡片用
   t.string   :tags,     default: [], array: true
-  t.string   :status,   default: "published"     # published | closed | hidden
+
+  # 四种状态全部是可空时间戳，没有 status 列，见 §1.3
   t.datetime :pinned_at                          # 置顶（板块内）
   t.datetime :closed_at                          # 锁帖，不再接受回复
+  t.datetime :flagged_at                         # 隐藏（管理操作 / 举报处理）
+  t.string   :flagged_by_id
+  t.string   :flag_reason
 
   # 反规范化的"最后回复"缓存 —— 列表页排序与展示全靠它，见 §1.1
   t.string   :last_reply_id
@@ -221,12 +225,21 @@ create_table :topics, id: :string do |t|
   t.bigint   :last_active_mark, null: false      # 排序键，Unix 秒
 
   t.datetime :deleted_at                         # 软删除
+  t.string   :deleted_by_id
   t.timestamps
-  t.index [:group_id, :status, :last_active_mark]
-  t.index [:category_id, :status, :last_active_mark]
+
+  # 列表页只看得见活着的帖，所以排序索引带上同样的条件（部分索引），
+  # 索引体积和写入成本都只跟可见集合走。
+  t.index [:group_id, :last_active_mark],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_topics_on_group_and_active"
+  t.index [:category_id, :last_active_mark],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_topics_on_category_and_active"
   t.index [:group_id, :pinned_at]
   t.index :user_id
   t.index :deleted_at
+  t.index :flagged_at
   t.index :tags, using: :gin
 end
 ```
@@ -247,6 +260,59 @@ self.last_active_mark = Time.now.to_i if created_at > 1.month.ago
 
 **`stars_count` 需要自己维护**，因为 star 落在 `comments` 表里，不是关联。见
 §5。
+
+### 1.3 帖子的四种状态：全是时间戳，没有 status 列
+
+规划早期版本同时有 `status`（`published | closed | hidden`）和 `closed_at`、
+`deleted_at`，那是**两套真相**：`status = "closed"` 和 `closed_at` 非空必须永远
+一致，而没有任何机制保证它们一致。去掉 `status`，四种状态各由一个可空时间戳
+表达：
+
+| 列 | 含义 | 谁能做 | 对谁不可见 |
+|---|---|---|---|
+| `pinned_at` | 板块内置顶 | manager | —— |
+| `closed_at` | 锁帖，不再接受回复 | manager 或作者 | ——（仍可读） |
+| `flagged_at` | 隐藏（管理操作 / 举报处理） | manager | 除作者和 manager 外的所有人 |
+| `deleted_at` | 软删除 | 作者或 manager | 所有人（含作者） |
+
+时间戳而不是布尔的好处是**顺带记录了"什么时候"**，这在事后追查"这帖什么时候
+被藏的"时是唯一的线索；布尔列答不了这个问题，而为它再加一列 `hidden_at` 就又
+回到了两套真相。
+
+`flagged_by_id` / `deleted_by_id` 记谁做的，`flag_reason` 记为什么。
+
+**存 id 而不是 homeland 的 `who_deleted`（存 login 字符串）** —— 理由和不抄
+`last_reply_user_login` 相同：handle 可以改，存下来的字符串会过期。
+
+#### flag 与 soft delete 的区别，是给谁看
+
+- **flag（隐藏）：作者仍然看得见自己的帖**，并且看得见"已被隐藏"的提示和
+  `flag_reason`。这是有意的 —— 一个帖子凭空消失、作者却收不到任何解释，是社区
+  管理里最容易引发冲突的做法。manager 也看得见，才能复核和撤销（`unflag`）。
+- **soft delete：对所有人不可见，包括作者。** 它是"删除"的语义，`deleted_at`
+  的存在只为可恢复和审计，不为展示。
+
+两者独立，可以同时存在（先被隐藏、后被删除），所以不能合并成一个枚举列。
+
+#### 一个 scope 管全部
+
+```ruby
+scope :visible_to, ->(user) {
+  # 未登录 / 普通用户：deleted_at IS NULL AND flagged_at IS NULL
+  # 作者本人：额外看得见自己被 flag 的帖
+  # manager：看得见 flagged，看不见 deleted（要看走 with_deleted）
+}
+```
+
+和 §1.2 的板块可见性一样，**所有读路径都必须从这一个 scope 出发**，包括按 id
+直取、楼层列表、搜索、收藏列表、通知。两个 scope 组合起来才是"这个人能看到的
+帖子"。
+
+#### 回复不做 flag
+
+回复只有软删（`replies.deleted_at`）。给回复也加一套隐藏状态，等于把上面的
+组合矩阵再乘一遍，而回复的内容量和争议面都远小于主题帖 —— 需要处理时删掉即可。
+真出现需求，加列比拆列容易。
 
 ### `replies`（楼层）
 
@@ -388,6 +454,7 @@ PATCH  /topics/:id
 DELETE /topics/:id                           软删除
 POST   /topics/:id/pin      /unpin           manager
 POST   /topics/:id/close    /open            manager 或作者
+POST   /topics/:id/flag     /unflag          manager；flag 带 reason
 
 GET    /topics/:topic_id/replies             楼层列表（公开，正序分页）
 POST   /topics/:topic_id/replies
@@ -550,7 +617,7 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 **一期（可上线的最小闭环）**
 两级开关（env + `groups.discussion_enabled` + 设置页开关）· 板块 CRUD
 （manager）· 板块可见性 `public`/`member`/`manager` · 发帖/编辑/软删 ·
-平铺回复（含 `reply_to_id` 引用）· 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
+平铺回复（含 `reply_to_id` 引用）· flag / 软删 · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
 卡片与详情页 UI
 
 `invited` 档（`category_members` 表 + 名单管理 UI）可以推到二期，
@@ -602,6 +669,9 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
       收藏列表、按作者过滤、通知）都用一个无权限的 token curl 一遍，
       且返回 404 而非 403
 - [ ] 移出 `invited` 名单后，此人立刻看不到该板块的帖（含已收藏的）
+- [ ] 被 flag 的帖：作者仍看得见并看得到 `flag_reason`，其他人 404
+- [ ] 被软删的帖：**作者本人也看不见**（这条最容易漏，作者往往被当成特例放行）
+- [ ] flag 后再删、删后再 flag，两种顺序都不出错（状态互相独立）
 - [ ] 跨帖的 `reply_to_id` 被静默置空（构造一个指向别的帖子的回复请求）
 - [ ] 被引用的回复删除后，引用它的那条仍能正常渲染（显示"回复已删除"）
 - [ ] `groups.can_post_topic` 和 `discussion_enabled` 从设置页保存后**确实
@@ -684,11 +754,14 @@ create_table :topics, id: :string do |t|
   t.text     :content
   t.string   :content_type, default: "text"
   t.string   :image_url
-  t.string   :tags,   default: [], array: true
-  t.string   :status, null: false, default: "published",
-             comment: "published | closed | hidden"
-  t.datetime :pinned_at
-  t.datetime :closed_at
+  t.string   :tags, default: [], array: true
+
+  # 四种状态全部是可空时间戳，见 §1.3。没有 status 列。
+  t.datetime :pinned_at                          # 置顶
+  t.datetime :closed_at                          # 锁帖，不再接受回复
+  t.datetime :flagged_at                         # 被隐藏（管理操作 / 举报处理）
+  t.string   :flagged_by_id
+  t.string   :flag_reason
 
   # 反规范化的"最后回复"缓存，见 §1.1；唯一写入者是 Topic#refresh_last_reply!
   t.string   :last_reply_id
@@ -699,12 +772,18 @@ create_table :topics, id: :string do |t|
   t.bigint   :last_active_mark, null: false      # 排序键，Unix 秒
 
   t.datetime :deleted_at
+  t.string   :deleted_by_id
   t.timestamps
-  t.index [:group_id, :status, :last_active_mark]
-  t.index [:category_id, :status, :last_active_mark]
+  t.index [:group_id, :last_active_mark],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_topics_on_group_and_active"
+  t.index [:category_id, :last_active_mark],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_topics_on_category_and_active"
   t.index [:group_id, :pinned_at]
   t.index :user_id
   t.index :deleted_at
+  t.index :flagged_at
   t.index :tags, using: :gin
 end
 add_foreign_key :topics, :groups
