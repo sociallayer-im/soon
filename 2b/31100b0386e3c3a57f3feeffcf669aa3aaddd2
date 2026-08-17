@@ -1,0 +1,60 @@
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 65
+  s_e9ed806a3d225c::t_8c9c6efe611749 70
+test/controllers/api/v1/users_controller_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 32,40,98,100,105-106,115
+  s_e9ed806a3d225c::t_8c9c6efe611749 34,119
+app/models/concerns/handle_name.rb
+  s_e9ed806a3d225c::t_2b6f2fe4bf6c53 1-51
+test/controllers/api/v1/wallet_auth_test.rb
+  s_e9ed806a3d225c::t_8c9c6efe611749 294
+  s_e9ed806a3d225c::t_3aac060e3846da 275,322
+lib/tasks/handles.rake
+  s_e9ed806a3d225c::t_4ca3e96baeff23 1-57
+test/models/group_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 5,16,29,38
+test/controllers/api/v1/public_reads_test.rb
+  s_e9ed806a3d225c::t_840f0843a036c5 89-92
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_7970511b32a530 10-13
+  s_e9ed806a3d225c::t_8f6d26854b58ed 16,23,29
+test/controllers/api/v1/groups_controller_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 7
+test/controllers/api/v1/phone_auth_test.rb
+  s_e9ed806a3d225c::t_5718cab5211fab 257,354,387
+  s_e9ed806a3d225c::t_8c9c6efe611749 344,379
+  s_e9ed806a3d225c::t_3aac060e3846da 283,326,341,373,376
+app/models/user.rb
+  s_e9ed806a3d225c::t_f9c0045e21f833 54-56,58
+app/models/group.rb
+  s_e9ed806a3d225c::t_9c7afb45e166ca 35-37,39
+test/mailers/group_mailer_test.rb
+  s_e9ed806a3d225c::t_8c9c6efe611749 15,33,44,47
+  s_e9ed806a3d225c::t_3aac060e3846da 5,24,37
+test/mailers/comment_mailer_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 8
+  s_e9ed806a3d225c::t_8c9c6efe611749 15
+test/mailers/event_mailer_test.rb
+  s_e9ed806a3d225c::t_3aac060e3846da 54
+  s_e9ed806a3d225c::t_8c9c6efe611749 61
+test/models/user_test.rb
+  s_e9ed806a3d225c::t_840f0843a036c5 10
+test/models/handle_name_test.rb
+  s_e9ed806a3d225c::t_eacafe2eae799c 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2b31100b0386e3c3a57f3feeffcf669aa3aaddd2",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
