@@ -77,7 +77,8 @@ SDK 的 `updateGroup` 请求体。`group_params` 用的是
 
 ## 1. 数据模型
 
-三张新表，全部沿用 `soon` 的 TSID 字符串主键（`ApplicationRecord` 的
+**四张**新表（`categories` / `category_members` / `topics` / `replies`），全部
+沿用 `soon` 的 TSID 字符串主键（`ApplicationRecord` 的
 `before_create :set_tsid_primary_key`），**不是** homeland 的 `id: :serial`。
 
 ### 1.0 命名：模型就叫 `Category`
@@ -244,6 +245,10 @@ create_table :topics, id: :string do |t|
 end
 ```
 
+`last_active_mark` 是 `null: false` 且**没有默认值**，靠
+`before_create { self.last_active_mark = Time.now.to_i }` 填 —— 与 homeland 一致。
+漏掉它就是建帖时的 NOT NULL 违例。
+
 **`last_active_mark` 是整数 Unix 秒而不是 datetime**，直接抄 homeland：列表页
 唯一的排序键，整数索引扫描更省。同时抄它那条产品规则：
 
@@ -294,25 +299,50 @@ self.last_active_mark = Time.now.to_i if created_at > 1.month.ago
 
 两者独立，可以同时存在（先被隐藏、后被删除），所以不能合并成一个枚举列。
 
-#### 一个 scope 管全部
+#### 两个 scope 分工，不要重叠
+
+`deleted_at` 由 §2 的 `SoftDelete` concern 的 `default_scope` 统一挡掉，
+**`visible_to` 不再重复这个条件** —— 两处都写同一个条件，日后改一处就会漏一处。
 
 ```ruby
+# SoftDelete 的 default_scope：deleted_at IS NULL（所有人，含作者、manager）
+# 想看已删的只有 with_deleted，仅用于管理端和数据修复
+
 scope :visible_to, ->(user) {
-  # 未登录 / 普通用户：deleted_at IS NULL AND flagged_at IS NULL
-  # 作者本人：额外看得见自己被 flag 的帖
-  # manager：看得见 flagged，看不见 deleted（要看走 with_deleted）
+  # 只管 flagged_at：
+  #   未登录 / 普通用户 → flagged_at IS NULL
+  #   作者本人           → flagged_at IS NULL OR user_id = 自己
+  #   manager           → 不过滤（要能复核和撤销）
 }
 ```
 
-和 §1.2 的板块可见性一样，**所有读路径都必须从这一个 scope 出发**，包括按 id
-直取、楼层列表、搜索、收藏列表、通知。两个 scope 组合起来才是"这个人能看到的
-帖子"。
+于是"这个人能看到的帖子"是三层的组合，缺一层就是漏洞：
 
-#### 回复不做 flag
+```ruby
+Topic.in_visible_categories(user)   # §1.2 板块可见性
+     .visible_to(user)              # §1.3 flag
+     # default_scope 已经挡掉 deleted_at
+```
 
-回复只有软删（`replies.deleted_at`）。给回复也加一套隐藏状态，等于把上面的
-组合矩阵再乘一遍，而回复的内容量和争议面都远小于主题帖 —— 需要处理时删掉即可。
-真出现需求，加列比拆列容易。
+**所有读路径都必须走这个组合**，包括按 id 直取、楼层列表、搜索、收藏列表、
+通知。`replies` 用同名的一对 scope，语义一致。
+
+#### 回复同样可以 flag 和软删
+
+`replies` 带 `flagged_at` / `flagged_by_id` / `flag_reason` / `deleted_at` /
+`deleted_by_id`，语义与主题帖**逐条对应**：flag 后作者仍看得见自己的那条和原因，
+其他人看不见；软删对所有人不可见。
+
+不给回复做的是 `pinned_at` 和 `closed_at` —— 置顶一条楼层没有意义（楼层按时间
+平铺），锁一条楼层也没有对应的动作（回复不接受回复）。
+
+两个连带规则：
+
+- **`replies_count` 只数活着的**（`deleted_at IS NULL AND flagged_at IS NULL`），
+  `last_reply_id` 同样跳过被删和被隐藏的那条。否则列表页会显示"最后回复"却指向
+  一条谁也看不见的内容。
+- **被引用的回复若被 flag**，引用它的那条显示"回复已被隐藏"，与"回复已删除"
+  同一处理路径（§1 replies 规则 2）。
 
 ### `replies`（楼层）
 
@@ -323,12 +353,23 @@ create_table :replies, id: :string do |t|
   t.string   :reply_to_id                        # 同帖内的另一条回复，可空
   t.text     :content,     null: false
   t.string   :content_type, default: "text"
+
+  # 与主题帖同形的两种状态，见 §1.3
+  t.datetime :flagged_at
+  t.string   :flagged_by_id
+  t.string   :flag_reason
   t.datetime :deleted_at
+  t.string   :deleted_by_id
+
   t.timestamps
-  t.index [:topic_id, :created_at]
+  t.index [:topic_id, :created_at],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_replies_on_topic_and_created_alive"
+  t.index [:topic_id, :created_at]                # 管理端要看全部
   t.index :reply_to_id
   t.index :user_id
   t.index :deleted_at
+  t.index :flagged_at
 end
 ```
 
@@ -354,6 +395,49 @@ end
   homeland 的做法（`before_save` 正则扫 body，最多取 5 个，存
   `integer[]`）可以直接翻译成 `string[]`，但要连它的 **limit(5)** 一起抄——
   没有上限的话一条 @全员 就是一次群发。
+
+### 1.4 复查时补上的六处空缺
+
+这一节是把方案通读一遍后发现的、原先只字未提或前后不一致的地方，逐条定死。
+
+**1. `categories.archived` 是什么，删板块又怎么办。**
+`archived = true` 的板块不出现在发帖时的板块选择器里，但已有的帖照常可读、可
+回复，板块列表里折叠在"已归档"下。**这是板块唯一的下线方式。**
+`DELETE /categories/:id` 只在该板块**一条帖都没有**时才真正删除；有帖则拒绝
+（422，提示改用归档）。理由：删板块会让其中的帖失去 `category_id`，而
+`topics.category_id` 是 `null: false` 且可见性完全依赖它 —— 允许删就要么级联删
+帖，要么留下一批可见性未定义的帖，两个都比"不许删"糟。
+
+**2. `topics.group_id` 是冗余的，但保留，并且必须锁死同步。**
+它可以从 `category.group_id` 推出来。保留是为了 group 级列表不必 join
+`categories`（首页那条查询是最热的）。代价是它可能和 category 不一致，所以：
+**移动帖子只能移到同一个 group 内的板块**，模型层校验
+`category.group_id == group_id`，跨 group 移动直接拒绝。没有这条，一次移动就能
+把帖子送进另一个社群的论坛。
+
+**3. `categories.topics_count` 由谁维护。**
+和 §1.1 同一规则：`Category#refresh_topics_count!` 是唯一写入者，重算而非增减，
+在发帖、软删、恢复、移动板块（**两个板块都要重算**）后调用。
+**它数的是"活着的帖"**（`deleted_at IS NULL AND flagged_at IS NULL`），与列表页
+看到的条数一致 —— 数字和列表对不上是最容易被当成 bug 报上来的那类问题。
+
+**4. 发帖/回复的频率限制，一期就要有。**
+论坛是这个产品第一个**匿名可读、登录即可写**的面，没有限流就是等垃圾内容。
+homeland 有 `Topic::RateLimit`（`Rails.cache` 存两个键：一个间隔锁、一个小时
+计数），形状可以直接抄。一期取保守值：**发帖间隔 30 秒、每小时 10 条；回复
+间隔 5 秒、每小时 60 条**，写成常量而不是 `Setting`（§9 已决定不引入 settings
+表）。这是**新增的一期范围**，之前的分期漏了它。
+
+**5. 长度与内容校验。**
+`title` 1–200 字符；`content` 上限 64 KB（`text` 列本身没有上限，不设就等于允许
+一次写入几 MB）；`reply.content` 同样 64 KB；`tags` 最多 10 个、每个 32 字符。
+一期不做敏感词（homeland 的 `Setting.ban_words_*` 依赖 settings 表）。
+
+**6. 举报（report）不做，一期由 manager 手动 flag。**
+`flagged_at` 的注释里写着"举报处理"，但**没有举报入口，也没有举报表** —— 这是
+有意的：举报需要一张 `reports` 表、一个待处理队列和一套通知，是独立的一块。
+一期 flag 的触发只能是 manager 自己看到。**文档里不要让"举报"这个词暗示功能
+存在**，二期再评估。
 
 ### 与现有模型的关系
 
@@ -381,9 +465,16 @@ homeland 的 `notifications` 表有 `target` / `second_target` / `third_target`
 homeland 自己就是这么绕过去的——`Topic#update_last_reply` 里是
 `self.replies_count = replies.without_system.count`，一次 COUNT，不是增减。
 
-**计数器的所有权必须单点**：`Topic#refresh_last_reply!` 是唯一写
-`replies_count` / `last_reply_id` / `replied_at` / `last_active_mark` 的地方，
-创建回复、删除回复、恢复回复都调它。
+**计数器的所有权必须单点**，三个计数各有唯一写入者：
+
+| 计数 | 唯一写入者 | 何时调用 |
+|---|---|---|
+| `topics.replies_count` / `last_reply_id` / `replied_at` / `last_active_mark` | `Topic#refresh_last_reply!` | 建/删/恢复/flag/unflag 回复 |
+| `categories.topics_count` | `Category#refresh_topics_count!` | 建/删/恢复/flag/unflag/移动主题帖 |
+| `topics.stars_count` | `Topic#refresh_stars_count!` | star / unstar（§5） |
+
+三者都**只数活着的**（`deleted_at IS NULL AND flagged_at IS NULL`），与列表页
+看到的一致。
 
 浏览量（`hits`）**一期不做**。homeland 把它放 Redis（`RedisCountable`）而从不
 落库，是对的：PV 每次请求都要写，落库就是给主表制造写热点。我们要做时照这个
@@ -455,12 +546,18 @@ DELETE /topics/:id                           软删除
 POST   /topics/:id/pin      /unpin           manager
 POST   /topics/:id/close    /open            manager 或作者
 POST   /topics/:id/flag     /unflag          manager；flag 带 reason
+POST   /topics/:id/restore                   撤销软删（manager）
 
 GET    /topics/:topic_id/replies             楼层列表（公开，正序分页）
 POST   /topics/:topic_id/replies
 PATCH  /replies/:id
-DELETE /replies/:id
+DELETE /replies/:id                          软删除
+POST   /replies/:id/flag    /unflag          manager；flag 带 reason
+POST   /replies/:id/restore                  撤销软删（manager）
 ```
+
+`GET /categories/:id`（单个板块）故意**没有**：板块信息很小，列表一次全给，
+前端不需要单取；少一个端点就少一处要重复写可见性判断的地方。
 
 `GET /topics` 的 filter：`group_id`（必填）、`category_id` 或 `category_slug`、
 `tags`、`search`、`user_id`、`starred_id`、`collection`
@@ -566,7 +663,7 @@ xs 断点下左右翻转、右侧 140×140 图），差异只在内容：
 
 | CardEvent | CardTopic |
 |---|---|
-| 状态 Badge（Past/Ongoing/…） | 置顶 / 已锁 / 精华 Badge |
+| 状态 Badge（Past/Ongoing/…） | 置顶 / 已锁 Badge（**没有"精华"** —— schema 里没有对应列，homeland 的 `grade` 我们没抄） |
 | 标题 + EventKindLabel | 标题 |
 | tags（彩色圆点，`getLabelColor`） | tags，**同一套配色函数** |
 | track | category |
@@ -593,7 +690,8 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 点击后回复框进入引用态（顶部显示被引用的一条，可取消）；提交时带上
 `reply_to_id`。带引用的回复在正文上方显示"回复 @某某：<摘要>"，点击锚点跳到
 被引用楼层；被引用回复已删除时显示"回复已删除"而不是空白。右侧保留作者卡片、
-收藏按钮、管理操作（置顶/锁帖/删除）。
+收藏按钮、管理操作（置顶 / 锁帖 / 隐藏 / 删除）。被 flag 的帖对作者显示一条
+黄色提示条，写明 `flag_reason`；对 manager 额外显示"撤销隐藏"。
 
 ### 7.4 SDK
 
@@ -617,8 +715,13 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 **一期（可上线的最小闭环）**
 两级开关（env + `groups.discussion_enabled` + 设置页开关）· 板块 CRUD
 （manager）· 板块可见性 `public`/`member`/`manager` · 发帖/编辑/软删 ·
-平铺回复（含 `reply_to_id` 引用）· flag / 软删 · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
+平铺回复（含 `reply_to_id` 引用）· 主题帖与回复的 flag / 软删 / 恢复 ·
+置顶 / 锁帖 · **频率限制与长度校验（§1.4）** · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
 卡片与详情页 UI
+
+置顶和锁帖原本排在二期，移到一期：列一期就建，UI 上卡片的"置顶/已锁"Badge 和
+详情页的管理操作也都在一期的版式里 —— 留到二期等于一期先做一套没有数据来源的
+Badge。
 
 `invited` 档（`category_members` 表 + 名单管理 UI）可以推到二期，
 但 **`visibility` 列一期就要建，且 scope 从一开始就按 §1.2 的单一 scope 写**。
@@ -626,7 +729,7 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 
 **二期**
 `invited` 板块与名单管理 · tag 过滤与 tag 管理（复用 group 的 `*_tag_list`
-形状）· 置顶/锁帖 · 搜索（先 ILIKE）· 通知接入 `activities`（有人回复我的帖，
+形状）· 搜索（先 ILIKE）· 通知接入 `activities`（有人回复我的帖，
 **注意通知本身会泄漏私有板块的标题**，见 §1.2）
 
 **三期（各自独立评估，不要顺手做）**
@@ -647,6 +750,10 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
 - **不做系统事件混入楼层流**（见 §1 replies）。
 - **不做楼中楼。** `reply_to_id` 只是显示层的引用，不改变楼层的平铺顺序，
   也不递归展开。
+- **不做举报（report）功能。** 见 §1.4 第 6 条：一期 flag 只能由 manager 手动
+  触发，没有举报入口也没有举报表。
+- **不做"精华"（homeland 的 `grade`）。** schema 里没有对应列，卡片上也不要出现
+  这个 Badge。要做是加一列加一个端点，届时单独决定。
 - **不做跨 group 的全站论坛。** 论坛是 group 的一部分，
   `topics.group_id` 非空。全站聚合视图是以后的事，加 `discover` 端点即可，不用
   改表。
@@ -658,7 +765,8 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
 - [ ] `bin/rails test` 全绿（当前基线 1123 runs / 0 failures）
 - [ ] 新增模型/策略/端点各有测试；软删除后的计数重算有专门用例
 - [ ] `npx tsc --noEmit` 干净
-- [ ] 匿名访问 `GET /topics`、`GET /topics/:id`、`GET /replies` 不 401
+- [ ] 匿名访问 `GET /topics`、`GET /topics/:id`、
+      `GET /topics/:id/replies`、`GET /categories` 不 401
       （逐个 curl，不靠"应该没问题"）
 - [ ] `DISCUSSION_ENABLED` 未设时，**每一个** discussion 端点都 404
       （逐个 curl；漏掉一个就是绕过全局开关的后门）
@@ -672,6 +780,13 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
 - [ ] 被 flag 的帖：作者仍看得见并看得到 `flag_reason`，其他人 404
 - [ ] 被软删的帖：**作者本人也看不见**（这条最容易漏，作者往往被当成特例放行）
 - [ ] flag 后再删、删后再 flag，两种顺序都不出错（状态互相独立）
+- [ ] 回复的 flag / 软删：作者、他人、manager 三种身份各看到什么，逐个验
+- [ ] `replies_count` 在回复被 flag 后减少，且 `last_reply_id` 不指向被隐藏的那条
+- [ ] `categories.topics_count` 与列表实际条数一致（含 flag / 移动板块之后）
+- [ ] 跨 group 移动帖子被拒绝（构造一个指向别的 group 的 `category_id`）
+- [ ] 有帖的板块不能删（422），归档后帖仍可读
+- [ ] 频率限制生效：连续发帖 / 回复触发限流而不是写入成功
+- [ ] `title` 超长、`content` 超 64 KB、`tags` 超 10 个都被拒绝
 - [ ] 跨帖的 `reply_to_id` 被静默置空（构造一个指向别的帖子的回复请求）
 - [ ] 被引用的回复删除后，引用它的那条仍能正常渲染（显示"回复已删除"）
 - [ ] `groups.can_post_topic` 和 `discussion_enabled` 从设置页保存后**确实
@@ -797,12 +912,23 @@ create_table :replies, id: :string do |t|
   t.string   :reply_to_id                        # 同帖内的另一条回复，可空
   t.text     :content,     null: false
   t.string   :content_type, default: "text"
+
+  # 状态与 topics 同形，见 §1.3
+  t.datetime :flagged_at
+  t.string   :flagged_by_id
+  t.string   :flag_reason
   t.datetime :deleted_at
+  t.string   :deleted_by_id
+
   t.timestamps
+  t.index [:topic_id, :created_at],
+          where: "deleted_at IS NULL AND flagged_at IS NULL",
+          name: "index_replies_on_topic_and_created_alive"
   t.index [:topic_id, :created_at]
   t.index :reply_to_id
   t.index :user_id
   t.index :deleted_at
+  t.index :flagged_at
 end
 add_foreign_key :replies, :topics
 add_foreign_key :replies, :users
