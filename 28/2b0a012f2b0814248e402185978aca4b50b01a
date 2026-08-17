@@ -1,0 +1,72 @@
+app/blueprints/team_ref_blueprint.rb
+  s_e9ed806a3d225c::t_37b6bfd7881cb9 1-11
+design/TEAM_PLAN.md
+  s_e9ed806a3d225c::t_0ecb941f7d5b80 1-195
+app/models/team.rb
+  s_e9ed806a3d225c::t_df745a84180b02 1-33
+app/models/category_team.rb
+  s_e9ed806a3d225c::t_df745a84180b02 1-17
+app/controllers/api/v1/memberships_controller.rb
+  s_e9ed806a3d225c::t_d35f8f0a2b4730 8
+test/models/discussion_test.rb
+  s_e9ed806a3d225c::t_94ce501aa26485 137-140,150
+db/migrate/20260817140000_create_teams.rb
+  s_e9ed806a3d225c::t_3024d4b9640ab5 1-33
+app/policies/team_policy.rb
+  s_e9ed806a3d225c::t_d77fb2f2bc3baf 1-20
+app/controllers/api/v1/categories_controller.rb
+  s_e9ed806a3d225c::t_02031827e709b0 28,30-34,41-45,76-92
+test/controllers/api/v1/teams_controller_test.rb
+  s_e9ed806a3d225c::t_ce3861e0c5007f 1-194
+app/blueprints/team_blueprint.rb
+  s_e9ed806a3d225c::t_37b6bfd7881cb9 1-10
+app/models/membership.rb
+  s_e9ed806a3d225c::t_df18be54d7ce1f 10-22
+  s_e9ed806a3d225c::t_02031827e709b0 9
+test/controllers/api/v1/discussion_controller_test.rb
+  s_e9ed806a3d225c::t_7d11080597b6aa 219,221-222,224-225,232
+app/policies/category_policy.rb
+  s_e9ed806a3d225c::t_02031827e709b0 5-6,10
+db/migrate/20260817140001_replace_category_members_with_teams.rb
+  s_e9ed806a3d225c::t_3024d4b9640ab5 1-37
+app/models/team_membership.rb
+  s_e9ed806a3d225c::t_db8a0819c0e26d 26-29,31
+  s_e9ed806a3d225c::t_df745a84180b02 1-25,30,32-33
+app/controllers/api/v1/users_controller.rb
+  s_e9ed806a3d225c::t_d35f8f0a2b4730 30
+app/controllers/api/v1/teams_controller.rb
+  s_e9ed806a3d225c::t_d77fb2f2bc3baf 1-89
+app/models/category.rb
+  s_e9ed806a3d225c::t_df18be54d7ce1f 10,13-14,40-44,58
+app/models/user.rb
+  s_e9ed806a3d225c::t_df18be54d7ce1f 13-14
+config/routes.rb
+  s_e9ed806a3d225c::t_d77fb2f2bc3baf 186-196
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_94ce501aa26485 54-60
+app/models/group.rb
+  s_e9ed806a3d225c::t_df18be54d7ce1f 12
+  s_e9ed806a3d225c::t_d35f8f0a2b4730 53-56
+app/blueprints/category_blueprint.rb
+  s_e9ed806a3d225c::t_02031827e709b0 7-10
+app/blueprints/membership_blueprint.rb
+  s_e9ed806a3d225c::t_37b6bfd7881cb9 10-18
+db/schema.rb
+  s_e9ed806a3d225c::t_69a86f007cff99 13,115,121,124,126-127,857-880,1155-1156,1208-1210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "282b0a012f2b0814248e402185978aca4b50b01a",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
