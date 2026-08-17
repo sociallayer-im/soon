@@ -84,6 +84,13 @@ class Api::BaseController < ActionController::API
   # Cache-Control when the request is anonymous: an authenticated response
   # carries per-user fields (is_attending/is_starred/...) and a CDN cache is
   # shared across users, so caching it would leak one user's flags to another.
+  # The groups this caller belongs to, as a Set, resolved once. Blueprints use
+  # it to decide whether to render a group's private team badges; doing it per
+  # membership row would be one query per member.
+  def member_group_ids
+    @member_group_ids ||= current_user ? current_user.memberships.pluck(:group_id).to_set : Set.new
+  end
+
   def cache_when_anonymous!(max_age:)
     return if current_user
     response.headers["Cache-Control"] = "public, max-age=#{max_age}"
@@ -113,7 +120,7 @@ class Api::BaseController < ActionController::API
     pagy = Pagy::Offset.new(
       count: scope.count,
       page: params.fetch(:page, 1).to_i,
-      limit: [limit, PAGY_MAX_LIMIT].min
+      limit: [ limit, PAGY_MAX_LIMIT ].min
     )
     records = pagy.records(scope)
     render json: {

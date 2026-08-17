@@ -22,7 +22,10 @@ class UserMerger
     memberships: [ :group_id ],
     participants: [ :event_id ],
     track_roles: [ :track_id ],
-    form_submissions: [ :form_id ]
+    form_submissions: [ :form_id ],
+    # Both accounts can already be in the same team, so a blind repoint would
+    # hit the unique index on [team_id, user_id].
+    team_memberships: [ :team_id ]
   }.freeze
 
   # Straight FK repoints — no uniqueness risk on these tables.
@@ -41,6 +44,13 @@ class UserMerger
     raise ArgumentError, "cannot merge a user into itself" if @from.id == @into.id
 
     User.transaction do
+      # BEFORE the membership dedup, and that order is load-bearing:
+      # Membership#after_destroy drops the leaver's team memberships in that
+      # group, so deduping memberships first would delete `from`'s team rows
+      # while they were still waiting to be handed over — the merge would
+      # succeed and the teams would silently vanish.
+      dedupe_and_repoint(:team_memberships, :team_id)
+
       dedupe_and_repoint_memberships
       dedupe_and_repoint(:participants, :event_id)
       dedupe_and_repoint(:track_roles, :track_id)
@@ -52,6 +62,18 @@ class UserMerger
       repoint("badges", "owner_id")
       repoint("badges", "creator_id")
       repoint("comments", "user_id")
+      # Discussion. Without these, `from.destroy!` hits topics/replies' foreign
+      # keys and the whole merge raises — and User's dependent: :destroy would
+      # otherwise delete a person's posts rather than hand them to the account
+      # they merged into. The audit columns follow for the same reason: the
+      # person who hid or deleted something still exists, as `into`.
+      repoint("topics", "user_id")
+      repoint("topics", "last_reply_user_id")
+      repoint("topics", "flagged_by_id")
+      repoint("topics", "deleted_by_id")
+      repoint("replies", "user_id")
+      repoint("replies", "flagged_by_id")
+      repoint("replies", "deleted_by_id")
       repoint("activities", "initiator_id")
       repoint("activities", "receiver_id")
       repoint("vouchers", "sender_id")

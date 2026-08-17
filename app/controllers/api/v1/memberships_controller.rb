@@ -1,11 +1,14 @@
 class Api::V1::MembershipsController < Api::BaseController
   # The member roster is public — group pages show members without login.
   skip_before_action :authenticate!, only: :index
+  # Personalizes the team badges only; see MembershipBlueprint.
+  before_action :authenticate_optional!, only: :index
   before_action :set_group
 
   # GET /api/v1/groups/:group_id/memberships
   def index
-    render_collection @group.memberships.includes(user: :teams), blueprint: MembershipBlueprint
+    render_collection @group.memberships.includes(user: :teams),
+                      blueprint: MembershipBlueprint, member_group_ids: member_group_ids
   end
 
   # POST /api/v1/groups/:group_id/memberships
@@ -93,7 +96,7 @@ class Api::V1::MembershipsController < Api::BaseController
   def can_change_role?(current_role, new_role)
     policy = GroupPolicy.new(current_user, @group)
     return true if policy.manage?
-    policy.can_assign_manager? && [current_role, new_role].include?("manager")
+    policy.can_assign_manager? && [ current_role, new_role ].include?("manager")
   end
 
   # The setting only governs mail sent to owners and managers, so it is only

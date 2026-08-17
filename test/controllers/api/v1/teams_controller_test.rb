@@ -156,9 +156,11 @@ class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
     team = create_team(group: @group, users: [ @member ])
     5.times { create_membership(user: create_user, group: @group) }
 
-    few = count_queries { get "/api/v1/groups/#{@group.id}" }
+    # As a member, so the private badges are actually rendered — an anonymous
+    # request would skip them and the query count would prove nothing.
+    few = count_queries { get "/api/v1/groups/#{@group.id}", headers: auth_headers(@member) }
     10.times { create_membership(user: create_user, group: @group) }
-    many = count_queries { get "/api/v1/groups/#{@group.id}" }
+    many = count_queries { get "/api/v1/groups/#{@group.id}", headers: auth_headers(@member) }
     assert_equal few, many,
       "group detail went from #{few} to #{many} queries as the roster grew"
 
@@ -168,6 +170,43 @@ class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
 
     plain = json_response["memberships"].find { |m| m["user"]["id"] == @owner.id }
     assert_empty plain["teams"]
+  end
+
+  # The roster is a public endpoint, so a team name rides along with it. That
+  # is a decision per team, not per deployment: private by default.
+  test "a private team's badge reaches members only; a public one reaches anyone" do
+    secret = create_team(group: @group, users: [ @member ])
+    shown  = create_team(group: @group, users: [ @member ], is_public: true)
+
+    badges = ->(headers) {
+      get "/api/v1/groups/#{@group.id}", headers: headers
+      json_response["memberships"].find { |m| m["user"]["id"] == @member.id }["teams"].map { |t| t["id"] }
+    }
+
+    assert_equal [ shown.id ], badges.({})
+    assert_equal [ shown.id ], badges.(auth_headers(@outsider))
+    assert_equal [ secret.id, shown.id ].sort, badges.(auth_headers(@member)).sort
+    assert_equal [ secret.id, shown.id ].sort, badges.(auth_headers(@owner)).sort
+
+    # The same rule on the other two endpoints that render a membership.
+    get "/api/v1/groups/#{@group.id}/memberships"
+    assert_equal [ shown.id ],
+      json_response["data"].find { |m| m["user"]["id"] == @member.id }["teams"].map { |t| t["id"] }
+
+    get "/api/v1/users/#{@member.id}/groups"
+    assert_equal [ shown.id ], json_response.first["teams"].map { |t| t["id"] }
+    get "/api/v1/users/#{@member.id}/groups", headers: auth_headers(@member)
+    assert_equal [ secret.id, shown.id ].sort, json_response.first["teams"].map { |t| t["id"] }.sort
+  end
+
+  test "a signed-in group detail response is never cached" do
+    get "/api/v1/groups/#{@group.id}"
+    assert_match(/max-age=30/, response.headers["Cache-Control"].to_s)
+
+    # It personalizes now, so a response carrying private badges must not be
+    # stored anywhere shared.
+    get "/api/v1/groups/#{@group.id}", headers: auth_headers(@member)
+    assert_no_match(/max-age=30/, response.headers["Cache-Control"].to_s)
   end
 
   test "a team-restricted board is visible to its team and to nobody else" do

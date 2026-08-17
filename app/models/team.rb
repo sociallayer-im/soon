@@ -22,6 +22,10 @@ class Team < ApplicationRecord
   validates :description, length: { maximum: 300 }, allow_blank: true
 
   scope :sorted, -> { order(sort: :desc, created_at: :asc) }
+  # Teams whose badge may be shown to someone outside the group. The roster
+  # itself is public, so this is what decides whether a team name travels with
+  # it. See MembershipBlueprint.
+  scope :publicly_visible, -> { where(is_public: true) }
   scope :listed, -> { where(archived: false) }
 
   # Sole writer, recomputed rather than incremented — the same rule the other

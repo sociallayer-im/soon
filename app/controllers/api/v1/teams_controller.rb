@@ -78,7 +78,6 @@ class Api::V1::TeamsController < Api::BaseController
 
   def team_params
     params.require(:team).permit(:group_id, :name, :slug, :description, :color,
-                                 :sort, :archived)
+                                 :sort, :archived, :is_public)
   end
-
 end

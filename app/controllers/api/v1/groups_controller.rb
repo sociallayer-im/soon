@@ -24,11 +24,15 @@ class Api::V1::GroupsController < Api::BaseController
 
   # :id accepts a TSID or the group's slug (Group.resolve!).
   def show
-    # Never personalizes (no authenticate_optional! here), so this is always
-    # safe to cache regardless of whether a token was sent.
+    # Personalizes in exactly one way: a member of the group sees its private
+    # team badges on the roster, an outsider sees only the public ones. Still
+    # safe to cache for anonymous callers — cache_when_anonymous! no-ops as
+    # soon as there is a current_user, so a signed-in response is never stored.
+    authenticate_optional!
     cache_when_anonymous!(max_age: 30)
     group = Group.with_detail_associations.resolve!(params[:id])
-    render json: GroupBlueprint.render(group, view: :detail)
+    render json: GroupBlueprint.render(group, view: :detail,
+                                       member_group_ids: member_group_ids)
   end
 
   # POST /api/v1/groups/:id/freeze
