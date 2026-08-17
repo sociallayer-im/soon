@@ -590,3 +590,133 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
 - [ ] i18n 两个语言文件都有，且无重复 key
 
 在以上全部通过之前，`discussion` 分支不合并。
+
+---
+
+## 11. 改动清单（表与字段）
+
+### 11.1 改动的现有表：只有 `groups`
+
+```ruby
+# db/migrate/*_add_discussion_to_groups.rb
+add_column :groups, :discussion_enabled, :boolean, null: false, default: false
+add_column :groups, :can_post_topic,     :string,  default: "member",
+           comment: "manager | member | everyone"
+```
+
+`can_post_topic` 的取值刻意与既有的 `can_publish_event` / `can_join_event` /
+`can_view_event` 同形（同样的三档、同样的字符串），设置页因此可以直接复用组件。
+注意这套词汇与 `memberships.role`（`member | admin | owner`）不是一回事，前者是
+权限档位，后者是角色名 —— 既有列已经是这么分的，跟着走。
+
+两列都要进 `groups_controller` 的 permit 列表和 SDK 的 `updateGroup` 请求体
+（§0.1 的 ⚠️）。
+
+**其余现有表一律不动。** 特别是：
+
+- `comments` —— 收藏复用它，**无 schema 变更**。§5 要做的 `item_type` 白名单
+  是模型层校验，不是列。
+- `activities` —— 通知复用它，`action` 是字符串，加新值不需要 migration。
+- `users` —— 不加计数列。"某人发了多少帖"按需 COUNT，见 §1.1 的理由。
+
+### 11.2 新建 4 张表
+
+全部 TSID 字符串主键，全部按仓库既有习惯加 `add_foreign_key`（schema.rb 里
+已有 76 条，不是可选项）。
+
+```ruby
+# 1. db/migrate/*_create_categories.rb
+create_table :categories, id: :string do |t|
+  t.string   :group_id,     null: false
+  t.string   :name,         null: false          # 展示名，可中文
+  t.string   :slug,         null: false          # URL 片段，小写
+  t.string   :summary
+  t.integer  :sort,         null: false, default: 0
+  t.integer  :topics_count, null: false, default: 0
+  t.boolean  :archived,     null: false, default: false
+  t.string   :visibility,   null: false, default: "public",
+             comment: "public | member | manager | invited"
+  t.timestamps
+  t.index [:group_id, :slug], unique: true
+  t.index [:group_id, :sort]
+  t.index [:group_id, :visibility]
+end
+add_foreign_key :categories, :groups
+
+# 2. db/migrate/*_create_category_members.rb   （visibility = invited 才用到）
+create_table :category_members, id: :string do |t|
+  t.string :category_id, null: false
+  t.string :user_id,     null: false
+  t.timestamps
+  t.index [:category_id, :user_id], unique: true
+  t.index :user_id
+end
+add_foreign_key :category_members, :categories
+add_foreign_key :category_members, :users
+
+# 3. db/migrate/*_create_topics.rb
+create_table :topics, id: :string do |t|
+  t.string   :group_id,    null: false
+  t.string   :category_id, null: false
+  t.string   :user_id,     null: false
+  t.string   :title,       null: false
+  t.text     :content
+  t.string   :content_type, default: "text"
+  t.string   :image_url
+  t.string   :tags,   default: [], array: true
+  t.string   :status, null: false, default: "published",
+             comment: "published | closed | hidden"
+  t.datetime :pinned_at
+  t.datetime :closed_at
+
+  # 反规范化的"最后回复"缓存，见 §1.1；唯一写入者是 Topic#refresh_last_reply!
+  t.string   :last_reply_id
+  t.string   :last_reply_user_id
+  t.datetime :replied_at
+  t.integer  :replies_count,   null: false, default: 0
+  t.integer  :stars_count,     null: false, default: 0
+  t.bigint   :last_active_mark, null: false      # 排序键，Unix 秒
+
+  t.datetime :deleted_at
+  t.timestamps
+  t.index [:group_id, :status, :last_active_mark]
+  t.index [:category_id, :status, :last_active_mark]
+  t.index [:group_id, :pinned_at]
+  t.index :user_id
+  t.index :deleted_at
+  t.index :tags, using: :gin
+end
+add_foreign_key :topics, :groups
+add_foreign_key :topics, :categories
+add_foreign_key :topics, :users
+
+# 4. db/migrate/*_create_replies.rb
+create_table :replies, id: :string do |t|
+  t.string   :topic_id, null: false
+  t.string   :user_id,  null: false
+  t.text     :content,  null: false
+  t.string   :content_type, default: "text"
+  t.datetime :deleted_at
+  t.timestamps
+  t.index [:topic_id, :created_at]
+  t.index :user_id
+  t.index :deleted_at
+end
+add_foreign_key :replies, :topics
+add_foreign_key :replies, :users
+```
+
+`topics.last_reply_id` 和 `last_reply_user_id` **不加外键**：回复被硬删时外键会
+挡住，而这两列本来就是可以指向已消失记录的缓存。读取一律 `includes` + 判空。
+
+### 11.3 表名冲突检查
+
+已核对当前 `db/schema.rb`（54 张表）：`categories`、`category_members`、
+`topics`、`replies` **均不存在**，`groups` 上也没有 `discussion_enabled` /
+`can_post_topic`。4 张新表 + 2 个新列，无重名。
+
+### 11.4 不是 schema 的改动
+
+- `DISCUSSION_ENABLED` —— 环境变量，进 `ginger.yml` / `ginger.cn.yml` 的 env
+- `NEXT_PUBLIC_DISCUSSION` —— 前端 `.env`，只藏 UI
+- `Comment` 的 `item_type` 白名单（`%w[Event Group Topic]`）—— 模型校验
