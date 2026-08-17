@@ -19,7 +19,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     # the attendees of a draft or private one. Matching EventPolicy#show? ties
     # the list to the same visibility rule as the event that owns it.
     authorize @event, :show?
-    render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
+    # :fed_actor as well as :user — ParticipantBlueprint reads it for every
+    # federated attendee's remote_author, one query each without this.
+    render_collection @event.participants.active.includes(:user, :fed_actor), blueprint: ParticipantBlueprint
   end
 
   # POST /api/v1/events/:event_id/participants

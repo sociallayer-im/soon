@@ -20,6 +20,18 @@ class User < ApplicationRecord
   has_many :owned_badges, class_name: "Badge", foreign_key: "owner_id", dependent: :destroy
   has_many :created_badges, class_name: "Badge", foreign_key: "creator_id", dependent: :destroy
 
+  # A local user's RSVPs to REMOTE events. Federation created the table with a
+  # live FK and no association, so every path that destroys a user raised
+  # ActiveRecord::InvalidForeignKey the moment the user had one —
+  # AuthController#merge_wechat_account! as well as UserMerger.
+  #
+  # Destroyed rather than kept: the row is only meaningful while the actor URL
+  # it was joined under still resolves, and that URL is this user. UserMerger
+  # repoints them onto the surviving account BEFORE it destroys this one, so
+  # an admin merge preserves them and only a genuinely discarded account loses
+  # them.
+  has_many :fed_participations, dependent: :destroy
+
   # OAuth. Every one of these carries a live FK to users, so without
   # `dependent:` a UserMerger run on anyone who has ever authorized an app dies
   # with ActiveRecord::InvalidForeignKey — the same trap that service already

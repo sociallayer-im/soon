@@ -8,11 +8,20 @@
 # (AuthController#merge_wechat_account!) with its own uniqueness rules. This
 # service only moves *data*; `from` keeps its identity until destroyed.
 #
-# NOT handled: db/schema.rb defines fed_participations.user_id with a live FK
-# and a unique(user_id, fed_event_id) index, but no FedParticipation model
-# exists on main (only on the federation branch(es)) — the schema was carried
-# over without the model. If `from` ever has rows there, `from.destroy!` will
-# raise ActiveRecord::InvalidForeignKey. Revisit once federation lands on main.
+# fed_participations (a local user's RSVP to a REMOTE event) is repointed like
+# any other table, with the dedup its unique(user_id, fed_event_id) index
+# needs. Until federation landed on this branch there was no model for it and
+# `from.destroy!` simply raised InvalidForeignKey.
+#
+# KNOWN GAP, and it is a remote one rather than a local one: the origin server
+# recorded the Join under `from`'s actor URL, which is derived from the user id
+# and stops resolving once `from` is destroyed. Repointing keeps the row
+# locally consistent — `into` sees the event in My Events — but a later Leave
+# goes out as `into`'s actor for a Join the origin filed under `from`'s, and
+# Mobilizon matches on actor + object, so it will not take. Withdrawing as
+# `from` and re-joining as `into` before the merge would fix that, at the cost
+# of sending the participation back to pending for the origin to Accept again.
+# That is a product decision, not a bug fix.
 class UserMerger
   # Tables where a duplicate (from, into) row would collide with a DB-level
   # uniqueness constraint once repointed — these need per-row dedup instead of
@@ -25,7 +34,8 @@ class UserMerger
     form_submissions: [ :form_id ],
     # Both accounts can already be in the same team, so a blind repoint would
     # hit the unique index on [team_id, user_id].
-    team_memberships: [ :team_id ]
+    team_memberships: [ :team_id ],
+    fed_participations: [ :fed_event_id ]
   }.freeze
 
   # Straight FK repoints — no uniqueness risk on these tables.
@@ -55,6 +65,9 @@ class UserMerger
       dedupe_and_repoint(:participants, :event_id)
       dedupe_and_repoint(:track_roles, :track_id)
       dedupe_and_repoint(:form_submissions, :form_id)
+      # Before @from.destroy!, or the has_many :dependent on User deletes these
+      # instead of moving them.
+      dedupe_and_repoint(:fed_participations, :fed_event_id)
 
       REPOINT_OWNER_ID.each { |table| repoint(table, "owner_id") }
       repoint("stripe_settings", "user_id")
