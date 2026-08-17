@@ -1,0 +1,32 @@
+design/DISCUSSION_PLAN.md
+  s_e9ed806a3d225c::t_8513bb6e2f39f1 511-518,521-523
+  s_e9ed806a3d225c::t_f31b434035c12b 555-558,560-565
+  s_e9ed806a3d225c::t_58ce77b711092f 110-176
+  s_e9ed806a3d225c::t_143c57130f6113 378-381
+  s_e9ed806a3d225c::t_3bc383f0f019fd 453-457
+  s_e9ed806a3d225c::t_3f1dcc588f5148 312-313,316-318
+  s_e9ed806a3d225c::t_149af497d7e36f 435-440
+  s_e9ed806a3d225c::t_fab427548da582 320-322,325-327
+  s_e9ed806a3d225c::t_9524fe5cca3131 34-74
+  s_e9ed806a3d225c::t_4bf7bf26b72365 94-95,99
+  s_e9ed806a3d225c::t_f8f77a5e7cf356 336-338,340,342,345-347
+  s_e9ed806a3d225c::t_f411eb6f1e2798 369-370
+  s_e9ed806a3d225c::t_14ade890ba3a52 17
+  s_e9ed806a3d225c::t_ef7ee5b5107861 348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f18eb6f5b82d1a06b5dbbbc20788637932d913bc",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
