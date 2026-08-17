@@ -5,8 +5,8 @@
 > 测试方案）。
 >
 > 本文档记录**过程**：做了什么、按什么顺序、为什么这么决定、踩到什么、以及
-> 下一个人接手需要知道的东西。截至 2026-08-02，代码在两个仓库的 `federation`
-> 分支上，**未合并、未上生产**。
+> 下一个人接手需要知道的东西。截至 2026-08-17，代码在两个仓库的 `federation`
+> 分支上，**未合并、未上生产**；该分支已 rebase 到当日的 `main`（见 §13）。
 
 ---
 
@@ -300,3 +300,80 @@ group_params——绑定是运维动作）。WebFinger 双向闭环：绑定域�
   User 侧无 alias/move API（服务层支持，入口只开了 Group）。
 
 测试：966 runs / 3056 assertions / 0 failures（新增 15 例）。
+
+---
+
+## 13. Rebase 到 main，以及交界处暴露的三个缺陷（2026-08-17）
+
+分支自 2026-08-12 起落后 main 21 个提交（soon）/ 42 个（seastar-app），期间 main
+上线了 OAuth provider、独立表单、以及**统一的 handle 规则与 `domains` 注册表**。
+本轮把 `federation` rebase 到 `main`：soon 46 个提交全部重放 + 1 个集成修复
+（`816a136`）+ 1 个缺陷修复（`3669433`）；seastar-app 15 个 + 1 个修补（`f4d4bf8`）。
+rebase 前的分支保留为 `federation-pre-rebase-2026-08-17`。
+
+**`db/schema.rb` 用临时合并驱动处理**。46 个提交每个都改这个生成文件，逐个手工
+合并既无意义又易错。做法是 `git config merge.keepours.driver true` +
+`.git/info/attributes` 让它全程保持 upstream 版本，rebase 结束后在全新数据库上从零
+迁移（54 个 migration）并与提交的 schema 逐字节比对，一致。**驱动和 attributes
+事后已删除**——留着会在将来静默吞掉真正的 schema 冲突。
+
+**migration 顺序**：`24abdf5` 当初把联邦 migration 重编号为"排在 main 之后"，
+rebase 后 main 又多了 8 个（`20260812120000`～`20260816120000`），联邦的
+`202608121000xx` 反而排在前面。实测从零迁移无依赖问题（联邦 migration 只碰
+users/groups/participants/comments 这些既有表），但**那个提交的意图已不成立**，
+若要恢复需再编号一次。
+
+### 交界处的三个缺陷（都不是冲突，是自动合并"成功"后的语义错误）
+
+**① 座位计数双写。** main 把 `participant_count` 移进了 `Participant#transition!`
+内部，而联邦侧仍保留手写的 `increment!`/`decrement!`。测试直接抓到：远端 Leave 让
+计数变成 **-1**，远端 Join 多加一次。合并后的规则是**新建行走 `save!` 自己记计数，
+状态流转由 `transition!` 记**——`ParticipationService.join` 的 `increment!` 因此移进
+新建分支，`leave` 的 `decrement!` 整行删除。
+
+**② handle 带连字符后联邦全线失效。** main 把用户名规则从 `[a-z0-9_]{6,30}` 改成
+6-20 且**用连字符取代下划线**，并把生产上所有下划线名字做了转换。而旧规则被抄了
+四份，其中三份会真的失效：`/users/:handle` 的路由约束、webfinger 的 URI 解析、
+inbox 的 URI 解析——**路由 404，入站活动被静默丢弃**。现统一到
+`Federation::Urls::HANDLE_SEGMENT`，并刻意比 `HandleName::FORMAT` 宽：规则约束
+"能取什么名"，这里必须匹配"实际存在什么"（含 canonical id 与历史遗留的 42 字符
+大写 `0x` 钱包名）。
+
+**③ `UserMerger` 遇到联邦报名 500。** `fed_participations.user_id` 是活外键且无
+ON DELETE，而 federation 从未在 `User` 上声明关联。main 的注释早就预言了
+（"revisit once federation lands"）。**两条销毁路径都要修**：`UserMerger`（管理员
+合并）在 `destroy!` 前做去重 repoint——`unique(user_id, fed_event_id)` 决定了不能
+盲目 repoint；`AuthController#merge_wechat_account!`（丢弃无名微信壳账号，而账号
+在取名前完全可以先报名远端活动）靠新增的 `has_many :fed_participations,
+dependent: :destroy`。**顺序是刻意的**：repoint 必须先于 destroy，否则 dependent
+会把本该转移的记录直接删掉。
+
+**③ 剩下的远端缺口（已知未做）**：源站按 `from` 的 actor URL 记录这次 Join，而该
+URL 由 user id 推导，`from` 一销毁就不再解析。本地 repoint 让 `into` 在 My Events
+里仍看得到，但他之后发出的 Leave 带的是 `into` 的 actor，Mobilizon 按 actor +
+object 匹配，不会认。要真修需在合并前以 `from` 退出、以 `into` 重新加入，代价是
+报名退回 pending 等源站重新 Accept——**产品决定，不在 bug 修复范围内**。
+
+### 前端需要人工判断的三处
+
+- **认证 cookie**：两侧修的是同一类"影子 cookie"的不同变体——main 清除无 Domain
+  属性的 host-only 版本，联邦清除写在父域上的版本。**两个驱逐互补，都保留**。
+- **参与者列表**：main 改为不再随活动详情下载参与者、走单独接口，联邦则在旧结构上
+  加了远端作者兜底。核对确认 `participants#index` 返回远端参与者（`active` 只按
+  status 过滤，`ParticipantBlueprint` 把 `user` 当可空并输出 `remote_author`），
+  故采用 main 的数据源 + 联邦的兜底渲染。联邦那段 `filteredParticipants` 是只赋值
+  从不读取的死代码，丢弃。
+- **语言字典重复 key**：`Search` 两侧值相同（无害但 TS 报错），`Name` 两侧**值不同**
+  ——CSV 里的人名（姓名）vs DNS 记录名（名称）。直接合并会让其中一处静默变错，
+  故 DNS 那个改名为 `Record name`。
+
+### 验证与未验证
+
+`bin/rails test` **1378 runs / 0 failures**；前端 `tsc` / `lint` / `build` 干净；
+从零迁移与 schema 比对一致。另做了**双向逐行核对**（两侧原本新增的每一行是否都在
+合并结果中），soon 缺 2 行、seastar-app 缺 3 行，全部是上述有意替换。
+
+**未验证：任何双实例互操作**。§7 记录的那些场景在本轮 rebase 后一次都没有重跑，
+`HANDLE_SEGMENT` 与计数修复只有单元/集成测试背书。分支上生产前必须重跑 §7。
+另：`participants#index` 已补 `:fed_actor` 预加载（原本渲染 `remote_author` 是 N+1）。
+
