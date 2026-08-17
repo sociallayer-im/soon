@@ -40,7 +40,7 @@ class Api::V1::GroupsController < Api::BaseController
   def freeze
     authorize @group
     @group.update!(active: false)
-    render json: GroupBlueprint.render(@group, view: :detail)
+    render json: GroupBlueprint.render(@group, view: :detail, member_group_ids: member_group_ids)
   end
 
   # POST /api/v1/groups/:id/send_email — manager broadcast to members.
@@ -75,7 +75,8 @@ class Api::V1::GroupsController < Api::BaseController
     # Enqueued after the transaction commits, not inside it — a job picked up
     # before the commit lands would look up a group that isn't there yet.
     GroupRegisteredMailJob.perform_later(group_id: group.id)
-    render json: GroupBlueprint.render(group, view: :detail), status: :created
+    render json: GroupBlueprint.render(group, view: :detail,
+                                       member_group_ids: member_group_ids), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -85,7 +86,8 @@ class Api::V1::GroupsController < Api::BaseController
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group_params[:parent_id])
 
     if @group.update(group_params)
-      render json: GroupBlueprint.render(@group, view: :detail)
+      render json: GroupBlueprint.render(@group, view: :detail,
+                                         member_group_ids: member_group_ids)
     else
       render_error(@group.errors.full_messages.join(", "))
     end

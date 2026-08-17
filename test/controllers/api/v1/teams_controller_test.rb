@@ -199,6 +199,29 @@ class Api::V1::TeamsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ secret.id, shown.id ].sort, json_response.first["teams"].map { |t| t["id"] }.sort
   end
 
+  test "a platform admin sees private badges the way they see everything else" do
+    secret = create_team(group: @group, users: [ @member ])
+    admin = create_user
+    admin.update!(admin: true)
+
+    get "/api/v1/groups/#{@group.id}", headers: auth_headers(admin)
+    badges = json_response["memberships"].find { |m| m["user"]["id"] == @member.id }["teams"]
+    assert_equal [ secret.id ], badges.map { |t| t["id"] }
+  end
+
+  # Every group-detail renderer has to pass the viewer, not just #show —
+  # otherwise a manager who edits the group gets a response with the private
+  # badges stripped out and the roster appears to lose them.
+  test "the group update response still carries the viewer's badges" do
+    secret = create_team(group: @group, users: [ @member ])
+
+    patch "/api/v1/groups/#{@group.id}", params: { group: { bio: "hi" } },
+          headers: auth_headers(@owner)
+    assert_response :success
+    badges = json_response["memberships"].find { |m| m["user"]["id"] == @member.id }["teams"]
+    assert_equal [ secret.id ], badges.map { |t| t["id"] }
+  end
+
   test "a signed-in group detail response is never cached" do
     get "/api/v1/groups/#{@group.id}"
     assert_match(/max-age=30/, response.headers["Cache-Control"].to_s)

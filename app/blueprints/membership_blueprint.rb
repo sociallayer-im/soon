@@ -23,7 +23,9 @@ class MembershipBlueprint < Blueprinter::Base
   # reverse on the next.
   field :teams do |membership, options|
     mine = membership.user.teams.select { |t| t.group_id == membership.group_id }
-    mine = mine.select(&:is_public) unless options[:member_group_ids]&.include?(membership.group_id)
+    viewer = options[:member_group_ids]
+    sees_all = viewer == :all || viewer&.include?(membership.group_id)
+    mine = mine.select(&:is_public) unless sees_all
     TeamRefBlueprint.render_as_hash(mine.sort_by { |t| [ -t.sort, t.id ] })
   end
 

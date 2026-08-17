@@ -88,7 +88,16 @@ class Api::BaseController < ActionController::API
   # it to decide whether to render a group's private team badges; doing it per
   # membership row would be one query per member.
   def member_group_ids
-    @member_group_ids ||= current_user ? current_user.memberships.pluck(:group_id).to_set : Set.new
+    @member_group_ids ||= if current_user.nil?
+      Set.new
+    elsif current_user.platform_admin?
+      # Consistent with Category.visible_to, which returns everything to a
+      # platform admin. Being the only surface that hides something from them
+      # would be the surprise, not the other way round.
+      :all
+    else
+      current_user.memberships.pluck(:group_id).to_set
+    end
   end
 
   def cache_when_anonymous!(max_age:)
