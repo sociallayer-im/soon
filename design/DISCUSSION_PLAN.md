@@ -80,40 +80,32 @@ SDK 的 `updateGroup` 请求体。`group_params` 用的是
 三张新表，全部沿用 `soon` 的 TSID 字符串主键（`ApplicationRecord` 的
 `before_create :set_tsid_primary_key`），**不是** homeland 的 `id: :serial`。
 
-### 1.0 命名：模型叫 `DiscussionCategory`，路由叫 `categories`
-
-定下的规则是**内部名带前缀，对外路径不带**：
+### 1.0 命名：模型就叫 `Category`
 
 | 场合 | 用什么 |
 |---|---|
-| 模型 / 表 | `DiscussionCategory` / `discussion_categories` |
-| 外键 | `discussion_category_id` |
-| REST 路径 | `/api/v1/categories`（`resources :discussion_categories, path: "categories"`） |
+| 模型 / 表 | `Category` / `categories` |
+| 外键 | `category_id` |
+| REST 路径 | `/api/v1/categories` |
 | 查询参数 | `category_id` / `category_slug` |
-| Blueprint 里的字段名 | `category` |
+| Blueprint 字段 | `category` |
 | SDK / 前端 / i18n | `category` / 板块 |
 
-理由：`Category` 是个裸名词，将来活动分类、徽章分类都会想要它，模型名先占掉
-就锁死了；而 URL 和前端类型里带上 `discussion_` 前缀只是噪音 —— 路径已经在
-`/api/v1` 下，不存在第二个 categories 资源要区分。这与 `resources :oauth_
-applications, path: "oauth/applications"` 是同一手法，仓库里已有先例。
+从模型到 URL 到前端类型是同一个词，没有翻译层。附带的好处是所有自动生成的
+索引名都在 Postgres 的 63 字符上限内，不用手写 `name:`。
 
-**代价（一次性，记在这里省得实现时重新发现）：** Postgres 标识符上限 63 字符，
-`discussion_category_` 前缀会让两个自动生成的索引名越界：
+**代价，写在这里以免以后当成疏忽：** `Category` 是个裸名词，`soon` 里只能有
+一个。将来若要做活动分类或徽章分类，它们**不能**再叫 `Category`，得叫
+`EventCategory` / `BadgeCategory` —— 也就是说，先到先得的这一个归了论坛。
+接受这一点是本次的明确决定，不是没想到。
 
-```
-71  index_discussion_category_members_on_discussion_category_id_and_user_id
-70  index_topics_on_discussion_category_id_and_status_and_last_active_mark
-```
+对应地，`categories` 这张表**必须**有 `group_id`：它不是全站分类表，只是论坛
+板块。任何以为"categories 是通用分类"的后续代码都是误解，注释里要写死。
 
-这两处必须手写 `name:`（下面的建表代码里已经写上）。Rails 会在 migration 时
-直接报 "Index name is too long"，不会静默截断，所以漏掉不会造成隐患，只会让
-migration 跑不过。
-
-### `discussion_categories`（板块）
+### `categories`（板块）
 
 ```ruby
-create_table :discussion_categories, id: :string do |t|
+create_table :categories, id: :string do |t|
   t.string   :group_id,     null: false
   t.string   :name,         null: false          # 展示名，可中文
   t.string   :slug,         null: false          # URL 片段，小写
@@ -153,12 +145,11 @@ end
 前三档不需要额外存储，直接查现有的 `memberships`。只有 `invited` 需要一张表：
 
 ```ruby
-create_table :discussion_category_members, id: :string do |t|
-  t.string :discussion_category_id, null: false
-  t.string :user_id,                null: false
+create_table :category_members, id: :string do |t|
+  t.string :category_id, null: false
+  t.string :user_id,     null: false
   t.timestamps
-  t.index [:discussion_category_id, :user_id], unique: true,
-          name: "index_category_members_on_category_and_user"   # 自动名超 63 字符
+  t.index [:category_id, :user_id], unique: true
   t.index :user_id
 end
 ```
@@ -174,8 +165,8 @@ end
 一个 scope：
 
 ```ruby
-# DiscussionCategory.visible_to(user, group)  → 返回 category 关系
-# Topic.in_visible_categories(user)           → where(discussion_category_id: ...)
+# Category.visible_to(user, group)   → 返回 category 关系
+# Topic.in_visible_categories(user)  → where(category_id: ...)
 ```
 
 **移动帖子到另一个板块会改变它的可见性。** 把帖子从 public 板块移进 manager
@@ -210,7 +201,7 @@ end
 ```ruby
 create_table :topics, id: :string do |t|
   t.string   :group_id,               null: false
-  t.string   :discussion_category_id, null: false
+  t.string   :category_id,            null: false
   t.string   :user_id,                null: false
   t.string   :title,                  null: false
   t.text     :content
@@ -232,8 +223,7 @@ create_table :topics, id: :string do |t|
   t.datetime :deleted_at                         # 软删除
   t.timestamps
   t.index [:group_id, :status, :last_active_mark]
-  t.index [:discussion_category_id, :status, :last_active_mark],
-          name: "index_topics_on_category_and_status_and_active" # 同上
+  t.index [:category_id, :status, :last_active_mark]
   t.index [:group_id, :pinned_at]
   t.index :user_id
   t.index :deleted_at
@@ -290,7 +280,7 @@ end
 
 | 现有 | 关系 |
 |---|---|
-| `Group` | 论坛的归属；`has_many :discussion_categories, :topics` |
+| `Group` | 论坛的归属；`has_many :categories, :topics` |
 | `User` | 作者、回复者 |
 | `Comment` | 收藏（`comment_type: "star"`, `item: Topic`） |
 | `Activity` | 通知/动态（**复用，不引入 homeland 的 `notifications`**） |
@@ -304,7 +294,7 @@ homeland 的 `notifications` 表有 `target` / `second_target` / `third_target`
 
 ## 1.1 计数器：重算，不增减
 
-`topics.replies_count` 和 `discussion_categories.topics_count` **一律全量重算**，
+`topics.replies_count` 和 `categories.topics_count` **一律全量重算**，
 不用 `counter_cache`，也不用 `increment!`。
 
 原因和 `Participant#transition!` / `sync_event_seat!` 踩过的坑是同一类：软删除
@@ -407,7 +397,7 @@ DELETE /replies/:id
 
 ### Blueprint
 
-- `DiscussionCategoryBlueprint` — 默认视图即全部字段（表很小），含
+- `CategoryBlueprint` — 默认视图即全部字段（表很小），含
   `visibility`；`invited` 名单**不在**默认视图里，走
   `:members` 视图并单独鉴权 —— 名单是一份用户清单，和
   `GroupInvite#receiver_address` 同类，不能顺手渲染出去
@@ -416,7 +406,7 @@ DELETE /replies/:id
   `category`（用 ref blueprint）、`user`、`last_reply_user`、计数、`is_starred`
 - `TopicBlueprint` `:detail` 视图 — 加 `content`、`is_starred`、`can_edit`
 - `ReplyBlueprint` — `content` + `user` + `created_at` + `can_edit`
-- `DiscussionCategoryRefBlueprint` — 嵌在 topic 里的轻量形状。按既有约定，
+- `CategoryRefBlueprint` — 嵌在 topic 里的轻量形状。按既有约定，
   **另建 ref blueprint，而不是给 category blueprint 加 view**。
 
 ---
@@ -545,7 +535,7 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 平铺回复 · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
 卡片与详情页 UI
 
-`invited` 档（`discussion_category_members` 表 + 名单管理 UI）可以推到二期，
+`invited` 档（`category_members` 表 + 名单管理 UI）可以推到二期，
 但 **`visibility` 列一期就要建，且 scope 从一开始就按 §1.2 的单一 scope 写**。
 补一个枚举值是加一行，把散落各处的可见性判断收回一个 scope 是重写。
 
