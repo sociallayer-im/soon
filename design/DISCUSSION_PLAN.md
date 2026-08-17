@@ -14,7 +14,7 @@ group**（即 event home 所属的那个社群），不是全站单一论坛。
 
 ---
 
-## 0. 先说四个已定的结论
+## 0. 先说五个已定的结论
 
 1. **category = homeland 的 node，但它是 group 内的一张新表，不是 `groups`。**
    曾考虑复用 `groups.parent_id` 把板块做成子 group，否决了：子 group 有成员、
@@ -31,6 +31,47 @@ group**（即 event home 所属的那个社群），不是全站单一论坛。
 4. **回复是平铺的，回给帖子，不回给人。** 不做楼中楼，不做 `reply_to_id`。
    homeland 有 `replies.reply_to_id`，但它也只是"引用了谁"的弱指针，不构成树；
    我们连这个都不需要。
+5. **两级开关：部署级 env + group 级列。** 见 §0.1。板块可以是私有的，
+   可见性是板块自己的属性，帖子继承它 —— 见 §1.2。
+
+---
+
+## 0.1 两级开关
+
+照搬 `soon` 已有的三个部署开关（`PHONE_LOGIN_ENABLED` / `STRIPE_ENABLED` /
+`WECHAT_PAY_ENABLED`）的形状，一字不改：
+
+**部署级（全局）** —— `DISCUSSION_ENABLED=true`，在 `ginger.yml` /
+`ginger.cn.yml` 的 env 里设。`Api::BaseController` 加：
+
+```ruby
+def discussion_enabled? = ENV["DISCUSSION_ENABLED"] == "true"
+def require_discussion_enabled! = render_not_found unless discussion_enabled?
+```
+
+**所有** discussion 端点（含公开读）挂 `before_action :require_discussion_enabled!`
+—— 关闭时**返回 404 而不是 403**，和 `/auth/*_phone*` 一致：功能没上线时，
+端点就该看起来不存在。
+
+前端 `NEXT_PUBLIC_DISCUSSION`，只用来藏 UI，**后端那个才是权威的**。这个主从
+关系必须在 `config.ts` 的注释里写明，`PHONE_LOGIN` 和 `STRIPE_ENABLED` 都是这么
+注的。
+
+**group 级** —— `groups.discussion_enabled`，boolean，**默认 `false`**。
+
+默认值是个产品决定，不是技术细节。CLAUDE.md 记着 `admin_notification` 默认 `true`
+那次教训：在 CN（1 个成员）上正确，在国际站上给 841 个 owner/manager 订阅了没人
+要的邮件，而邮件发出去收不回来。这里同理 —— 默认 `true` 会让**每一个**现存
+group 的首页突然长出一个空论坛 tab。默认 `false`，由 group 管理员在设置页主动
+打开。
+
+两级是 AND 关系：`DISCUSSION_ENABLED` 关 → 端点 404（group 那列的值无关紧要）；
+env 开而 group 关 → 该 group 的论坛端点 404，首页不显示 tab。
+
+⚠️ `discussion_enabled` 必须同时加进 `groups_controller` 的 permit 列表**和**
+SDK 的 `updateGroup` 请求体。`group_params` 用的是
+`params.require(:group).permit(...)`，**不在列表里的字段静默丢弃**，这在这个
+仓库里已经造成过真实的数据丢失。设置页能保存但值不落库，是这个坑最典型的表现。
 
 ---
 
@@ -50,9 +91,12 @@ create_table :discussion_categories, id: :string do |t|
   t.integer  :sort,         null: false, default: 0
   t.integer  :topics_count, null: false, default: 0
   t.boolean  :archived,     null: false, default: false
+  t.string   :visibility,   null: false, default: "public",
+             comment: "public | member | manager | invited"
   t.timestamps
   t.index [:group_id, :slug], unique: true
   t.index [:group_id, :sort]
+  t.index [:group_id, :visibility]
 end
 ```
 
@@ -62,6 +106,73 @@ end
 `slug` 在 group 内唯一而非全局唯一：板块 URL 是
 `/event/<group>/discussion?category=<slug>`，本来就带 group 前缀，全局唯一没有
 意义，也不该去挤 `domains` 那个命名空间。
+
+板块由 group 的 manager 创建（`GroupPolicy#manage?`，父 group 的 manager 也算）。
+
+### 1.2 私有板块
+
+`visibility` 四档，从宽到严：
+
+| 值 | 谁能看 |
+|---|---|
+| `public` | 任何人，包括未登录 |
+| `member` | 该 group 的成员（含 manager / owner） |
+| `manager` | 该 group 的 manager / owner（含父 group 的 manager） |
+| `invited` | 显式名单，见下表 |
+
+前三档不需要额外存储，直接查现有的 `memberships`。只有 `invited` 需要一张表：
+
+```ruby
+create_table :discussion_category_members, id: :string do |t|
+  t.string :discussion_category_id, null: false
+  t.string :user_id,                null: false
+  t.timestamps
+  t.index [:discussion_category_id, :user_id], unique: true
+  t.index :user_id
+end
+```
+
+为什么不是"一张表通吃"（所有档都写名单）：`member` 档要跟着 group 成员变动自动
+生效，物化成名单就要在每次加入/退出 group 时同步，那是一个必然会漂移的副本。
+名单只在**没有现成集合可查**的 `invited` 档才存在。
+
+#### 可见性是板块的属性，帖子继承它
+
+`topics` **不重复存可见性**。一个帖子能不能看，取决于它所在的板块 —— 单一真相
+来源。代价是每个 topic 查询都要能拿到"当前用户可见的板块 id 集合"，所以统一走
+一个 scope：
+
+```ruby
+# DiscussionCategory.visible_to(user, group)  → 返回 category 关系
+# Topic.in_visible_categories(user)           → where(discussion_category_id: ...)
+```
+
+**移动帖子到另一个板块会改变它的可见性。** 把帖子从 public 板块移进 manager
+板块等于把它藏起来，反过来等于公开它 —— 移动操作必须只有 manager 能做，并且
+在 UI 上说清楚会发生什么。
+
+#### 私有板块最容易漏的地方，是别的端点
+
+板块列表和帖子列表上做过滤是显然的。真正的风险在**绕过列表的路径**，每一条都
+必须过同一个 scope：
+
+- `GET /topics/:id` 直接按 id 取（拿到过 id 的人）
+- `GET /topics/:topic_id/replies` 楼层列表
+- 搜索（`search` 参数）
+- `starred_id` 收藏列表 —— **收藏之后板块才变私有**，或者用户被移出名单
+- `user_id` 过滤（"某人发过的帖"）
+- `activities` 通知 —— 有人回复了私有板块的帖，通知落到 receiver 身上；
+  之后此人失去权限，通知里的标题还在
+- 未来的联邦出站（`fed_uri`）—— 私有板块的帖**绝不能**进 outbox
+
+这不是可以靠"记得加条件"解决的，必须是**一个 scope，所有读路径都从它出发**，
+并且每条路径都有测试。
+
+#### 不可见时返回 404，不返回 403
+
+访问看不到的私有板块或其中的帖子，一律 `render_not_found`。403 等于确认"这里
+有个东西但你看不到"，对私有板块本身就是信息泄漏（板块名往往就是内容，比如
+`acquisition-talks`）。这与 §0.1 里 env 关闭时返回 404 是同一条原则。
 
 ### `topics`（主题帖）
 
@@ -198,17 +309,22 @@ homeland 里 `alias_method :destroy!, :destroy` 把原始的硬删除挂到了 `
 
 复用 Pundit 与 `groups` 已有的权限列，**不新增权限模型**：
 
-- 看板块/主题：`can_view_event` 的同一套可见性判断（group 私有则需成员）
+- 看板块/主题：group 本身的可见性 **AND** 板块的 `visibility`（§1.2）。
+  两层都要过 —— 一个 public 板块挂在私有 group 下，仍然只有成员能看。
 - 发主题：新增 `groups.can_post_topic`（`manager | member | everyone`），
   默认 `member`。与 `can_publish_event` 同形，这样后台设置页可以直接复用组件。
-- 回复：同 `can_post_topic`
+  **但它被板块可见性收紧**：看不见的板块自然发不了帖；`manager` 档的板块里，
+  `can_post_topic: everyone` 也只有 manager 能发。取两者的交集，不是并集。
+- 回复：同上
 - 编辑/删除自己的：作者本人
-- 置顶、锁帖、移动板块、删他人帖：`GroupPolicy#manage?`（group manager，
-  且按现有规则，父 group 的 manager 也管得了子 group）
+- 建/改/删板块、改板块可见性、管理 `invited` 名单、置顶、锁帖、移动板块、
+  删他人帖：`GroupPolicy#manage?`（group manager，且按现有规则，父 group 的
+  manager 也管得了子 group）
 
 ⚠️ **`group_params` 的 permit 列表是静默丢弃的**（CLAUDE.md 有记录，已造成过真实
-数据丢失）。新增 `can_post_topic` 必须同时改 `groups_controller` 的 permit 列表
-和 SDK 的 `updateGroup` 请求体，两处都要，否则设置页保存了但值不落库。
+数据丢失）。新增 `can_post_topic` 和 `discussion_enabled` 必须同时改
+`groups_controller` 的 permit 列表和 SDK 的 `updateGroup` 请求体，两处都要，
+否则设置页保存了但值不落库。
 
 ---
 
@@ -217,11 +333,18 @@ homeland 里 `alias_method :destroy!, :destroy` 把原始的硬删除挂到了 `
 全部在 `/api/v1` 下，列表一律走 `render_collection`（Pagy，`{data, meta}`，
 默认 20，上限 `PAGY_MAX_LIMIT = 500`）。
 
+全部端点挂 `before_action :require_discussion_enabled!`（§0.1），并在取到
+group 后校验 `group.discussion_enabled`，不满足一律 404。
+
 ```
-GET    /discussion_categories?group_id=      板块列表（公开）
+GET    /discussion_categories?group_id=      板块列表（只返回可见的）
 POST   /discussion_categories                建板块（manager）
-PATCH  /discussion_categories/:id
+PATCH  /discussion_categories/:id            含改 visibility（manager）
 DELETE /discussion_categories/:id
+
+GET    /discussion_categories/:id/members    invited 名单（manager）
+POST   /discussion_categories/:id/members    加人（manager）
+DELETE /discussion_categories/:id/members/:user_id
 
 GET    /topics                               列表；filters 见下（公开）
 GET    /topics/:id                           详情（公开）
@@ -243,7 +366,8 @@ DELETE /replies/:id
 `unanswered` 即 `replies_count = 0`）。
 
 `starred_id` 直接照搬 `events_controller` 已有的写法（从 `comments` 里取
-`comment_type: "star"` 的 item_id 子查询），行为一致。
+`comment_type: "star"` 的 item_id 子查询），行为一致 —— 但**必须再套一层
+`in_visible_categories`**，否则收藏列表会漏出后来变私有的帖（§1.2）。
 
 **所有公开读端点必须 `skip_before_action :authenticate!`**，并在需要个性化时
 （`is_starred`、`is_author`）加 `authenticate_optional!`。这是 CLAUDE.md 里明写
@@ -251,7 +375,10 @@ DELETE /replies/:id
 
 ### Blueprint
 
-- `DiscussionCategoryBlueprint` — 默认视图即全部字段（表很小）
+- `DiscussionCategoryBlueprint` — 默认视图即全部字段（表很小），含
+  `visibility`；`invited` 名单**不在**默认视图里，走
+  `:members` 视图并单独鉴权 —— 名单是一份用户清单，和
+  `GroupInvite#receiver_address` 同类，不能顺手渲染出去
 - `TopicBlueprint` — 默认视图**不含 `content`**（列表页不需要正文，
   照 `EventBlueprint` 把 `content` 放 `:extended` 的先例）；含
   `category`（用 ref blueprint）、`user`、`last_reply_user`、计数、`is_starred`
@@ -305,6 +432,12 @@ Comment.find_or_initialize_by(user: current_user,
 落点是 `src/app/(normal)/event/[grouphandle]/GroupEventHome.tsx` —— 即
 `x-event-home` 命中时首页渲染的那个组件（`(normal)/page.tsx` 里分流）。
 
+**tab 只在 `DISCUSSION && groupDetail.discussion_enabled` 都为真时渲染。**
+两者有一个为假就完全不渲染 tab 栏 —— 不是渲染一个禁用态。只有一个 tab 的 tab
+栏是视觉噪音，而现在的首页本来就没有 tab 栏。相应地，`?tab=discussion` 在
+未开启的 group 上要落回 event（和无法识别的值同样处理），否则分享出去的链接
+在关掉功能后会显示空白。
+
 在左侧主内容区（`flex-1 md:max-w-[648px]`）**顶部**加一个两项 tab：
 `Event | Discussion`。右侧 328px 边栏（社群信息、日程、banner、场地、建活动、
 发徽章、管理入口）**两个 tab 共用，不随切换变化**——它描述的是社群本身，不是
@@ -316,6 +449,11 @@ URL 用 `?tab=discussion`，和 group 页 `?tab=members` 的既有写法一致�
 
 Discussion tab 内部的 filter 行复用 `EventHomeFilter` 的视觉：左侧是
 category 横向选择器（相当于现在的 collection 切换），右侧是搜索框。
+
+category 选择器里，私有板块**要有一个锁标记**（`uil-lock`）。看得见它的人本来
+就有权限，标记的作用是让发帖的人知道这条会发到哪里 —— 私有板块最常见的事故是
+以为在私密处说话、其实在公开处，或者反过来。发帖页的板块选择器同理，并在
+选中私有板块时显示一行"仅 X 可见"。
 
 ### 7.2 卡片
 
@@ -370,12 +508,19 @@ category 和活跃度，不是日期。置顶帖单独一段排在最上。
 ## 8. 分期
 
 **一期（可上线的最小闭环）**
-板块 CRUD（manager）· 发帖/编辑/软删 · 平铺回复 · 列表（category 过滤 +
-最新排序）· 详情 · 收藏 · 首页 tab · 卡片与详情页 UI
+两级开关（env + `groups.discussion_enabled` + 设置页开关）· 板块 CRUD
+（manager）· 板块可见性 `public`/`member`/`manager` · 发帖/编辑/软删 ·
+平铺回复 · 列表（category 过滤 + 最新排序）· 详情 · 收藏 · 首页 tab ·
+卡片与详情页 UI
+
+`invited` 档（`discussion_category_members` 表 + 名单管理 UI）可以推到二期，
+但 **`visibility` 列一期就要建，且 scope 从一开始就按 §1.2 的单一 scope 写**。
+补一个枚举值是加一行，把散落各处的可见性判断收回一个 scope 是重写。
 
 **二期**
-tag 过滤与 tag 管理（复用 group 的 `*_tag_list` 形状）· 置顶/锁帖 ·
-搜索（先 ILIKE）· 通知接入 `activities`（有人回复我的帖）
+`invited` 板块与名单管理 · tag 过滤与 tag 管理（复用 group 的 `*_tag_list`
+形状）· 置顶/锁帖 · 搜索（先 ILIKE）· 通知接入 `activities`（有人回复我的帖，
+**注意通知本身会泄漏私有板块的标题**，见 §1.2）
 
 **三期（各自独立评估，不要顺手做）**
 @ 提醒 · 浏览量（Redis）· 全文检索（`search_documents` + GIN）·
@@ -407,9 +552,17 @@ Markdown 编辑器增强 · 联邦（`topics` 也许该有 `fed_uri`，但联邦
 - [ ] `npx tsc --noEmit` 干净
 - [ ] 匿名访问 `GET /topics`、`GET /topics/:id`、`GET /replies` 不 401
       （逐个 curl，不靠"应该没问题"）
+- [ ] `DISCUSSION_ENABLED` 未设时，**每一个** discussion 端点都 404
+      （逐个 curl；漏掉一个就是绕过全局开关的后门）
+- [ ] `groups.discussion_enabled = false` 的 group，其论坛端点 404、
+      首页不出 tab、`?tab=discussion` 落回 event
 - [ ] 私有 group 的论坛对非成员不可见（curl 验证，不只看策略代码）
-- [ ] `groups.can_post_topic` 从设置页保存后**确实落库**（permit 列表 + SDK
-      请求体两处都验）
+- [ ] **私有板块逐路径验证**：§1.2 列的每一条（按 id 直取详情、楼层、搜索、
+      收藏列表、按作者过滤、通知）都用一个无权限的 token curl 一遍，
+      且返回 404 而非 403
+- [ ] 移出 `invited` 名单后，此人立刻看不到该板块的帖（含已收藏的）
+- [ ] `groups.can_post_topic` 和 `discussion_enabled` 从设置页保存后**确实
+      落库**（permit 列表 + SDK 请求体两处都验）
 - [ ] 首页两个 tab 的 URL 前进/后退正常，刷新后停在同一 tab
 - [ ] 移动端断点下卡片布局与活动卡片一致
 - [ ] i18n 两个语言文件都有，且无重复 key
