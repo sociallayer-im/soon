@@ -2,9 +2,174 @@
 
 All notable changes to `soon/` are recorded here.
 
+## 2026-08-17 — one handle rule, and the uniqueness constraint that had quietly lapsed
+
+Deployed to SG and CN as `9a637bc`, with frontend `seastar-app@e547e7c`. No
+migration, so a rollback restores the code cleanly — but the data steps below
+are not undone by one, and were run deliberately after the deploy for that
+reason.
+
+### There were three rules for one thing
+
+A user name was `[a-z0-9_]{6,30}`, a group handle `[a-z0-9_-]{3,30}`, and the
+frontend enforced a third shape again — 6-20, hyphens, no underscores — for
+groups, while the register screen carried its own copy of the user rule.
+Somebody picking a handle had no way to know which of the three they were up
+against.
+
+One shape now, in `HandleName` and mirrored character-for-character by
+`verifyHandle` in the frontend: **6-20 lowercase letters, digits and hyphens,
+with a hyphen only between two other characters** — no leading, trailing or
+repeated hyphen. Hyphen rather than underscore because it is what a URL slug
+conventionally uses and what most live handles already do.
+
+### `domains` is not a dead table
+
+The review of the above turned this up, and it is the part worth remembering.
+`users.name` and `groups.name` are each uniquely indexed, but **separately** —
+nothing in either column stops a user and a group claiming the same handle.
+What stops it is `domains`: one uniquely-indexed row per handle, whoever holds
+it, across both models.
+
+sails maintained that registry. soon stopped writing it at the 2026-07-29
+cutover and **nothing noticed for three weeks, because nothing reads the
+table** — the constraint simply ceased to exist while every symptom of having
+it remained. One pair had already collided: `infinitacity` was a user from
+2025-01-07 and a group from two days later.
+
+`HandleName` validates against the registry and writes it inside the save
+transaction, so a row can never outlive the name it records. Duplicate rows for
+one item are collapsed on rename — `UserMerger` repoints an absorbed account's
+row at the survivor, so an item really can hold two, and production had such
+rows (`henrich` and `henrichai` were one account).
+
+### The guard is the load-bearing part
+
+Both the format check and the reserved check are `if: :will_save_change_to_name?`.
+Live data predates every version of this rule: 97 users are below the length
+floor, 11 above the ceiling (mostly `0x…` wallet addresses an older backend
+assigned), 6 groups out of range, one user called `success`, one name ending in
+a hyphen. Validating unconditionally would mean none of those rows could be
+saved again — for a change to any column. **The rule applies to a name being
+chosen, not to one already held.** `Group` never had this guard; it does now.
+
+### Reserved handles
+
+`HandleName::RESERVED` blocks handles that would shadow a frontend route rather
+than resolve to their own page — a group named `create` lives at
+`/group/create`, which is the group creation screen. Derived from the real
+static siblings of the dynamic segments in seastar-app, not invented. There was
+no such check before.
+
+### The dry run was wrong and the real run was right
+
+Worth recording as a mistake. `handles:backfill_domains` derived "items that
+still have a row" by subtracting stale items from all items, so an item holding
+one good row and one stale row looked like it had none — the preview reported
+42 conflicts the real run would never have hit, because the real run recomputed
+from the database after deleting. A preview that disagrees with the run is
+worse than no preview. Both paths now read the same partition.
+
+### The production migration
+
+Three rake tasks rather than migrations: `ginger rollback` does not run `down`
+migrations, a collision has to be reported rather than raise (a raising
+migration means the container never starts, under `bash -e` in
+`bin/docker-entrypoint`), and renaming people should not happen unwatched
+during a deploy. All three are dry-run unless `APPLY=1`, and must run in this
+order, each clearing the way for the next:
+
+```
+bin/rails "handles:rename[User,infinitacity,infinita-city]"
+bin/rails handles:underscores_to_hyphens
+bin/rails handles:backfill_domains
+```
+
+Run on both after the deploy. SG: one rename, 6 underscore conversions, 47
+registry rows deleted and 181 created, **zero unresolved conflicts**. CN: no
+underscores, registry was entirely empty, 49 rows created. End state on both —
+every handle distinct, every registry row agreeing with its owner, no item
+without a row, no underscore left:
+
+```
+SG:  handles=31437  distinct=31437  domain rows=31437  disagreeing=0  missing=0
+CN:  handles=49     distinct=49     domain rows=49     disagreeing=0  missing=0
+```
+
+An empty duplicate group (`infinita-city`, no nickname, 0 events, 1 member —
+its owner being the same account, already `active: false`) was deleted first to
+free the name. Its row and membership were archived to the deploy log before
+the delete.
+
+**Seven profile URLs changed and old links to them 404**: the six underscore
+names (`jiang_zuzalu`, `mini_mochi`, `sonic_test_52821`, `ssh_kis`,
+`stephanieee_ho`, `weiwei_ooi`) and `infinitacity` → `infinita-city`.
+
+### Frontend
+
+`verifyUsername` — the group-handle validator, despite its name — became
+`verifyHandle` and is now used by both screens. The keystroke filter used to
+test the whole value and ignore the edit when it failed, so pasting
+`Alice_Wong` left the field empty with nothing said; `toHandleInput`
+normalises instead (lowercase, underscore → hyphen, everything else dropped).
+Hyphen *placement* is deliberately not normalised — someone typing `edge-city`
+is momentarily at `edge-`, and stripping that makes the hyphen impossible to
+type. Group creation also shows the rules now instead of revealing them one
+rejected keystroke at a time.
+
+## 2026-08-17 — a submission you can see, and take away
+
+Frontend only, deployed as `seastar-app@e547e7c` (the change itself is
+`fb33ccd`, made earlier and held until this release).
+
+### Submitting lands on a receipt
+
+Filling in a standalone form left you sitting in the editor you had just
+completed, your own answers in inputs, with "submit again" as the obvious next
+action — nothing said the submission had been recorded except a toast. There is
+now a read-only `/forms/[slug]/submission`, and that is where submitting goes.
+The form's thank-you message moved there too: it used to render on the editor
+after `done`, which submitting now navigates away from, so it would never have
+been seen.
+
+`router.refresh()` runs before the push, because the router caches the RSC
+payload for a path it has seen — without it, changing an answer and submitting
+can land on the previous version of your own submission.
+
+### The hub's tab is in the URL
+
+`?tab=filled`. It was React state only, so a reload, a shared link and the back
+button all dropped you back on "My Forms". Read from `searchParams` on the
+server rather than `useSearchParams`, and updated with `replace` so switching
+tabs twice does not take two presses of the back button to leave the page.
+
+### A standalone submission has no status
+
+The status badge is shown for event registrations only. A status is a decision
+somebody made — approved, rejected, pending review — and nobody reviews a
+survey response, so the `pending` the API stores for a standalone form read as
+"still waiting on someone". The value is still written: it carries a real
+constraint, that editing answers behind an approval sends the submission back
+to pending.
+
+### CSV export, author only
+
+Built in the browser from the rows the page already fetched — the server has no
+more than this, and an export that hit the API again could disagree with what
+is on screen. Every cell is quoted (a long-text answer routinely contains a
+comma, a quote or a newline) and the file carries a UTF-8 BOM, without which
+Excel opens Chinese answers as mojibake.
+
+Gated on `can_edit` rather than on the editor link, so an event's organizer
+gets the spreadsheet even though their form is edited on the event. A public
+responses page is readable by anyone, but handing a stranger a one-click
+spreadsheet of everyone's answers is not the same as letting them read the
+page.
+
 ## 2026-08-16 — public responses, more question types, and a form the editor could not see
 
-Not deployed. **Has a migration** (`forms.public_submissions`), so unlike the
+Deployed to SG and CN as `c51c080`, with frontend `seastar-app@bd4498f`.
+**Has a migration** (`forms.public_submissions`), so unlike the
 last release a rollback here does not undo the schema — the column is additive
 and defaults to false, so an older image runs fine against it.
 
@@ -100,7 +265,8 @@ matters or leaves the fallback wrong.
 
 ## 2026-08-15 — forms stand on their own; a failed registration can be undone
 
-Three related changes to registration and forms. Not deployed.
+Three related changes to registration and forms. Deployed to SG and CN as
+`ee74059`, with frontend `seastar-app@00a317b`.
 
 ### Backing out of a registration that never completed
 
