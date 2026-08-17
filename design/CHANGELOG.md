@@ -101,6 +101,24 @@ its owner being the same account, already `active: false`) was deleted first to
 free the name. Its row and membership were archived to the deploy log before
 the delete.
 
+### A merged-away account keeps its handle
+
+`UserMerger` repoints the source user's registry row onto the survivor, so
+after a merge the survivor holds two rows: its own handle and the absorbed
+one. Nobody else can take the old handle — which is the point, since it is the
+name a real person was known by; the survivor itself may still rename into it.
+
+Confirmed as intended on 2026-08-17, but it started life as a side effect of
+that one repoint line, so it reads like an accident in the code. **It does not
+yet survive `handles:backfill_domains`**, which deletes any row whose name
+disagrees with its owner and cannot tell a reservation from a row left stale by
+a rename — the two are the same shape. Making it stick needs a marker on the
+row.
+
+Note also that a plain rename does *not* reserve the old handle:
+`sync_handle_domain!` keeps one row per item and renames it. If "a name you
+were known by stays yours" is the rule, it currently applies to merges only.
+
 **Seven profile URLs changed and old links to them 404**: the six underscore
 names (`jiang_zuzalu`, `mini_mochi`, `sonic_test_52821`, `ssh_kis`,
 `stephanieee_ho`, `weiwei_ooi`) and `infinitacity` → `infinita-city`.
