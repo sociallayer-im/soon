@@ -1,0 +1,21 @@
+test/models/discussion_test.rb
+  s_e9ed806a3d225c::t_2b68c516755b25 152-155,160-165
+app/models/category.rb
+  s_e9ed806a3d225c::t_2b68c516755b25 37-39,41-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "629a684a958dcb26cb20a96ccd4380fbc1f665d5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
