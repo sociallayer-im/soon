@@ -13,6 +13,7 @@ app/models/fed_inbound_activity.rb
   s_e9ed806a3d225c::t_613140e07431df 31,36
 app/controllers/api/v1/participants_controller.rb
   s_e9ed806a3d225c::t_c1c5fd3b93ea35 174,178,179-183,199-204,232-233
+  s_e9ed806a3d225c::t_d3bb92b7db2bb0 175-177
 test/integration/federation_hardening_test.rb
   s_e9ed806a3d225c::t_d34e8454c43f1f 35-36,38
   s_e9ed806a3d225c::t_930ab062d22693 1-34,37,39-64,72-111
