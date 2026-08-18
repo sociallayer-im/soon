@@ -391,4 +391,41 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :no_content
     assert_equal 1, group.reload.memberships_count
   end
+
+  # A manager may grow the team but not shrink it: peers being able to strip
+  # each other's role is how one manager removes the others, and the person
+  # demoted cannot undo it. Promotion is additive and an owner can reverse it.
+  test "a manager promotes a member but cannot demote anyone" do
+    owner = create_user
+    manager = create_user
+    peer = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: manager, group: group, role: "manager")
+    create_membership(user: peer, group: group, role: "manager")
+    create_membership(user: member, group: group)
+
+    set_role = ->(target, role, actor) {
+      membership = Membership.find_by(group: group, user: target)
+      patch "/api/v1/groups/#{group.id}/memberships/#{membership.id}",
+            params: { membership: { role: role } }, headers: auth_headers(actor)
+    }
+
+    set_role.(member, "manager", manager)
+    assert_response :success
+    assert_equal "manager", Membership.find_by(group: group, user: member).role
+
+    set_role.(peer, "member", manager)
+    assert_response :forbidden
+    assert_equal "manager", Membership.find_by(group: group, user: peer).role
+
+    # Not even their own — stepping down is still the owner's call.
+    set_role.(manager, "member", manager)
+    assert_response :forbidden
+
+    # The owner may do both.
+    set_role.(peer, "member", owner)
+    assert_response :success
+    assert_equal "member", Membership.find_by(group: group, user: peer).role
+  end
 end

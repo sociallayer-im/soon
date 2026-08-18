@@ -90,12 +90,23 @@ class Api::V1::MembershipsController < Api::BaseController
     GroupPolicy.new(current_user, @group).manage?         # managers remove members/admins
   end
 
-  # A direct group admin/owner may set any role. A parent-group manager may
-  # only toggle the "manager" role specifically (promote to it or demote from
-  # it) — see GroupPolicy#can_assign_manager?.
+  # Who may change whose role.
+  #
+  # An owner (or a platform admin) may set any role. A manager may only grow
+  # the team: member → manager, never the reverse. Peers being able to strip
+  # each other's role is how one manager removes the others; promotion is
+  # additive and reversible by the owner, demotion is not something the person
+  # losing it can undo.
+  #
+  # A parent group's manager keeps the two-way toggle it was given in the
+  # 2026-07-29 narrowing (GroupPolicy#can_assign_manager?), and that asymmetry
+  # is deliberate: oversight from outside the group is exactly the case where
+  # taking a role away should be possible.
   def can_change_role?(current_role, new_role)
     policy = GroupPolicy.new(current_user, @group)
-    return true if policy.manage?
+    return true if group_owner? || current_user.platform_admin?
+    return current_role == "member" && new_role == "manager" if policy.manage?
+
     policy.can_assign_manager? && [ current_role, new_role ].include?("manager")
   end
 
