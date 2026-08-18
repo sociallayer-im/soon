@@ -87,7 +87,13 @@ class Api::V1::MembershipsController < Api::BaseController
   def can_remove?(membership)
     return true if membership.user_id == current_user.id  # self-leave
     return group_owner? if membership.role == "owner"     # only owners remove owners
-    GroupPolicy.new(current_user, @group).manage?         # managers remove members/admins
+    # A manager may not remove another manager, for the same reason they may
+    # not demote one (can_change_role?): peers removing each other is how one
+    # manager clears out the rest, and removal is strictly worse than demotion.
+    # Owners and platform admins still can.
+    return group_owner? || current_user.platform_admin? if membership.role == "manager"
+
+    GroupPolicy.new(current_user, @group).manage?         # managers remove plain members
   end
 
   # Who may change whose role.
@@ -98,16 +104,17 @@ class Api::V1::MembershipsController < Api::BaseController
   # additive and reversible by the owner, demotion is not something the person
   # losing it can undo.
   #
-  # A parent group's manager keeps the two-way toggle it was given in the
-  # 2026-07-29 narrowing (GroupPolicy#can_assign_manager?), and that asymmetry
-  # is deliberate: oversight from outside the group is exactly the case where
-  # taking a role away should be possible.
+  # Demotion is the owner's alone — including for a parent group's manager,
+  # whose 2026-07-29 grant reads as a two-way toggle
+  # (GroupPolicy#can_assign_manager?) but is narrowed here to the promoting
+  # half. One rule, stated once: nobody but an owner takes the manager role
+  # away.
   def can_change_role?(current_role, new_role)
     policy = GroupPolicy.new(current_user, @group)
     return true if group_owner? || current_user.platform_admin?
-    return current_role == "member" && new_role == "manager" if policy.manage?
+    return false unless policy.manage? || policy.can_assign_manager?
 
-    policy.can_assign_manager? && [ current_role, new_role ].include?("manager")
+    current_role == "member" && new_role == "manager"
   end
 
   # The setting only governs mail sent to owners and managers, so it is only

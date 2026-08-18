@@ -14,8 +14,12 @@ class GroupPolicy < ApplicationPolicy
   def members? = group_member?(record) || manages?(record)
 
   # Interim design decision (2026-07-29, see soon/design/CHANGELOG.md): a
-  # parent-group manager's ONLY capability over a child group is promoting/
-  # demoting a member to/from that child group's manager role — nothing else
+  # parent-group manager's ONLY capability over a child group is promoting a
+  # member to that child group's manager role — nothing else
+  #
+  # Narrowed again 2026-08-18: it used to be a two-way toggle. Taking the
+  # manager role away is now the owner's alone, wherever you stand — see
+  # MembershipsController#can_change_role?.
   # (no update/destroy/venue/track/badge-class/invite/pin access). Wired into
   # MembershipsController#update, which checks this instead of #manage? when
   # the caller isn't a direct admin. Recorded as a deliberate narrowing, not

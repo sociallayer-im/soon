@@ -89,7 +89,10 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "manager", membership.reload.role
   end
 
-  test "a parent-group manager may demote a child-group manager back to member" do
+  # Was allowed until 2026-08-18, when demotion became the owner's alone —
+  # one rule for everyone rather than one that changes with where you stand.
+  # The parent-group grant is now its promoting half only.
+  test "a parent-group manager may NOT demote a child-group manager" do
     parent_owner = create_user
     parent = create_group(owner: parent_owner)
     child = create_group(name: "child-group", parent_id: parent.id)
@@ -99,8 +102,8 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
 
     patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}", params: { membership: { role: "member" } },
       headers: auth_headers(parent_owner)
-    assert_response :success
-    assert_equal "member", membership.reload.role
+    assert_response :forbidden
+    assert_equal "manager", membership.reload.role
   end
 
   test "a parent-group manager cannot grant the owner role on a child group" do
@@ -427,5 +430,60 @@ class Api::V1::MembershipsControllerTest < ActionDispatch::IntegrationTest
     set_role.(peer, "member", owner)
     assert_response :success
     assert_equal "member", Membership.find_by(group: group, user: peer).role
+  end
+
+  # The parent-group grant reads as a two-way toggle in GroupPolicy, but
+  # demotion is the owner's alone — one rule rather than two that differ by
+  # where you stand.
+  test "a parent group's manager may promote in a child group but not demote" do
+    parent_owner = create_user
+    parent = create_group(owner: parent_owner)
+    child = create_group(parent_id: parent.id)
+    child_owner = create_user
+    child.add_member(child_owner.id, "owner")
+    member = create_user
+    create_membership(user: member, group: child)
+
+    membership = Membership.find_by(group: child, user: member)
+    patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}",
+          params: { membership: { role: "manager" } }, headers: auth_headers(parent_owner)
+    assert_response :success
+
+    patch "/api/v1/groups/#{child.id}/memberships/#{membership.id}",
+          params: { membership: { role: "member" } }, headers: auth_headers(parent_owner)
+    assert_response :forbidden
+    assert_equal "manager", membership.reload.role
+  end
+
+  # Removal follows the same rule as demotion — it is strictly worse, so
+  # allowing it would have made the demotion rule decorative.
+  test "a manager removes a member but not another manager" do
+    owner = create_user
+    manager = create_user
+    peer = create_user
+    member = create_user
+    group = create_group(owner: owner)
+    create_membership(user: manager, group: group, role: "manager")
+    create_membership(user: peer, group: group, role: "manager")
+    create_membership(user: member, group: group)
+
+    remove = ->(target, actor) {
+      m = Membership.find_by(group: group, user: target)
+      delete "/api/v1/groups/#{group.id}/memberships/#{m.id}", headers: auth_headers(actor)
+    }
+
+    remove.(peer, manager)
+    assert_response :forbidden
+    assert Membership.exists?(group: group, user: peer)
+
+    remove.(member, manager)
+    assert_response :success
+    assert_not Membership.exists?(group: group, user: member)
+
+    # Owners still can, and anyone may still leave of their own accord.
+    remove.(peer, owner)
+    assert_response :success
+    remove.(manager, manager)
+    assert_response :success
   end
 end
