@@ -14,19 +14,20 @@ class GroupPolicy < ApplicationPolicy
   def members? = group_member?(record) || manages?(record)
 
   # Interim design decision (2026-07-29, see soon/design/CHANGELOG.md): a
-  # parent-group manager's ONLY capability over a child group is promoting a
-  # member to that child group's manager role — nothing else
-  #
-  # Narrowed again 2026-08-18: it used to be a two-way toggle. Taking the
-  # manager role away is now the owner's alone, wherever you stand — see
-  # MembershipsController#can_change_role?.
-  # (no update/destroy/venue/track/badge-class/invite/pin access). Wired into
+  # parent-group manager's ONLY capability over a child group is the manager
+  # role on one of its members — nothing else (no update/destroy/venue/track/
+  # badge-class/invite/pin access, and no teams). Wired into
   # MembershipsController#update, which checks this instead of #manage? when
   # the caller isn't a direct admin. Recorded as a deliberate narrowing, not
   # an oversight — a parent-manager previously had full #manage? over child
   # groups (matching CLAUDE.md's original "Parent-Child Groups" contract);
   # whether to restore broader parent access is intentionally left open for a
   # later product decision, not resolved here.
+  #
+  # Narrowed again 2026-08-18: it used to be a two-way toggle. Granting the
+  # role is still theirs, taking it away is the owner's alone — wherever you
+  # stand. See MembershipsController#can_change_role?, and
+  # design/PERMISSIONS.md for the whole model in one place.
   def can_assign_manager?
     return false unless record
     return true if user&.platform_admin?

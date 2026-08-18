@@ -505,6 +505,8 @@ homeland 里 `alias_method :destroy!, :destroy` 把原始的硬删除挂到了 `
 
 ## 3. 权限
 
+> 全局的权限模型见 `design/PERMISSIONS.md`。
+
 复用 Pundit 与 `groups` 已有的权限列，**不新增权限模型**：
 
 - 看板块/主题：group 本身的可见性 **AND** 板块的 `visibility`（§1.2）。

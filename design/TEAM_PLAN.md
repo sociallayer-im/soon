@@ -93,6 +93,8 @@ deploy），所以这里是直接删表改值，不需要数据迁移。这是�
 
 ## 2. 权限
 
+> 全局的权限模型见 `design/PERMISSIONS.md` —— 那份是现状记录，本节只讲 team。
+
 - 建 / 改 / 删 team、增删 team 成员：`GroupPolicy#manage?`
   （group 的 manager / owner，platform admin；**父 group 的管理员不算** ——
   与 2026-07-29 的收窄一致，见 `GroupPolicy` 注释）
