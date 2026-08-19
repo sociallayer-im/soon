@@ -1,0 +1,19 @@
+design/SHOP_PLAN.md
+  s_e9ed806a3d225c::t_a9eeebbcf1ad5b 264-267,286-293,885-887
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "89c07e4823b04685196a5a0f6cdb470e90b03a9f",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
