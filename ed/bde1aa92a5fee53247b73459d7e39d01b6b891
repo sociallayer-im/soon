@@ -1,0 +1,29 @@
+design/SHOP_PLAN.md
+  s_e9ed806a3d225c::t_10d78fb5e8acca 579
+  s_e9ed806a3d225c::t_92d7d3a92a9957 790,792-793,795,797-799,801-804
+  s_e9ed806a3d225c::t_afb0c9c5525f55 8,10
+  s_e9ed806a3d225c::t_2e8ae422ac3634 11,55,118,123,578
+  s_e9ed806a3d225c::t_81981644fdd438 124
+  s_e9ed806a3d225c::t_8376cb7d66104b 548-552
+  s_e9ed806a3d225c::t_522a2b2668b977 56-59,61,64-66,69-71,73-74,78,81-83,85-87
+  s_e9ed806a3d225c::t_5bcf4aa981765f 26
+  s_e9ed806a3d225c::t_f1cbe2ffdca613 27-28,72,75-77,79-80,527-531,698,700-702,704-709,711-712,714-715,717-719,766-768,770,806-807
+  s_e9ed806a3d225c::t_0c811a437b9984 115-117,189,581,590-592,866-867
+  s_e9ed806a3d225c::t_4e5fd9a893e202 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "edbde1aa92a5fee53247b73459d7e39d01b6b891",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
