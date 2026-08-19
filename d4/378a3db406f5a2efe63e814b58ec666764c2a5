@@ -1,0 +1,25 @@
+app/models/shipping_address.rb
+  s_e9ed806a3d225c::t_7ef2437888947a 12-18
+app/models/shipping_rate_zone.rb
+  s_e9ed806a3d225c::t_7ef2437888947a 8-15
+test/controllers/api/v1/shop_cart_test.rb
+  s_e9ed806a3d225c::t_8161b56236fa04 91-133
+app/models/concerns/cn_province.rb
+  s_e9ed806a3d225c::t_7ef2437888947a 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d4378a3db406f5a2efe63e814b58ec666764c2a5",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
