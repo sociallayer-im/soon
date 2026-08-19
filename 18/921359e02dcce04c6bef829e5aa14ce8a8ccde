@@ -1,0 +1,74 @@
+app/controllers/api/v1/shops_controller.rb
+  s_e9ed806a3d225c::t_b29a4ec0e3fc4e 36
+  s_e9ed806a3d225c::t_1550e9a4efa724 52,55-59
+  s_e9ed806a3d225c::t_12b8f8e8841346 68
+  s_e9ed806a3d225c::t_36ebc431d981b8 75
+  s_e9ed806a3d225c::t_86c028ac750f43 44-51,53-54,60-67,69-74,76-79,82-84
+  s_e9ed806a3d225c::t_b22cbe6a53e228 7
+  s_e9ed806a3d225c::t_90517a9248313f 85
+app/controllers/api/v1/after_sale_requests_controller.rb
+  s_e9ed806a3d225c::t_ce96530c3282c4 96
+  s_e9ed806a3d225c::t_6c7cd628ecb552 123,142-158
+app/controllers/api/v1/orders_controller.rb
+  s_e9ed806a3d225c::t_2a844b33259c13 3
+  s_e9ed806a3d225c::t_cbdc166f327772 37-48
+app/controllers/api/v1/products_controller.rb
+  s_e9ed806a3d225c::t_b29a4ec0e3fc4e 56-60,72,85
+  s_e9ed806a3d225c::t_8297ed8c9c4028 5,39-48
+  s_e9ed806a3d225c::t_2fa2f86ac74fac 49-50
+app/models/product.rb
+  s_e9ed806a3d225c::t_5008317b49245d 8
+  s_e9ed806a3d225c::t_ba8283b29f8788 2-3
+  s_e9ed806a3d225c::t_a210ba22aa859e 72-90
+  s_e9ed806a3d225c::t_5d0b6466f19182 32-35
+app/models/shop.rb
+  s_e9ed806a3d225c::t_87118fb5beac9f 30
+  s_e9ed806a3d225c::t_48ca0bce65ed0d 2-3
+  s_e9ed806a3d225c::t_5008317b49245d 14
+  s_e9ed806a3d225c::t_c3e660892ebee6 31-32
+  s_e9ed806a3d225c::t_c6bf6de4804568 46-54
+  s_e9ed806a3d225c::t_aec5b3178fbc97 55-70
+app/models/product_variant.rb
+  s_e9ed806a3d225c::t_d4acaf6f89a0a7 64-84
+  s_e9ed806a3d225c::t_a8dfff0b90d46b 2-3
+  s_e9ed806a3d225c::t_acefbdabdb2450 53-61
+  s_e9ed806a3d225c::t_ca0204ea2ef4ab 14-24
+test/controllers/api/v1/shop_audit_test.rb
+  s_e9ed806a3d225c::t_12b8f8e8841346 223
+  s_e9ed806a3d225c::t_ddef5bc7eb4119 1-222,224-261
+app/jobs/wechat_pay_webhook_job.rb
+  s_e9ed806a3d225c::t_604df14efa5915 86-96
+  s_e9ed806a3d225c::t_9132eb1350f5df 148-156
+  s_e9ed806a3d225c::t_10721d8ed44fb9 166-183
+test/controllers/api/v1/shop_payment_test.rb
+  s_e9ed806a3d225c::t_6db7eaf392bf12 362-414
+app/models/ticketing/activity.rb
+  s_e9ed806a3d225c::t_dc4950d8746e2d 35-44
+app/blueprints/ticketing_activity_blueprint.rb
+  s_e9ed806a3d225c::t_37683864f6c6b1 23-29
+config/routes.rb
+  s_e9ed806a3d225c::t_a2eea055cec98c 204-212,227
+app/models/order.rb
+  s_e9ed806a3d225c::t_5008317b49245d 11-13
+  s_e9ed806a3d225c::t_a1f1d3209fe0ef 133-135,137-139
+app/models/concerns/shop_audited.rb
+  s_e9ed806a3d225c::t_641d313f07402e 1
+  s_e9ed806a3d225c::t_643074411db466 20-24
+  s_e9ed806a3d225c::t_f3b3d6dafdd78e 2-19,25-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "18921359e02dcce04c6bef829e5aa14ce8a8ccde",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
