@@ -1,0 +1,20 @@
+app/models/product.rb
+  s_e9ed806a3d225c::t_6e1e9c54fe5e27 23-27,65-67
+  s_e9ed806a3d225c::t_e3a150fdbbeaaf 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fc3cc6c2182b27abdf8d52279b33bca954c6e8f2",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
