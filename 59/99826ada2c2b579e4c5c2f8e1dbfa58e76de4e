@@ -1,0 +1,56 @@
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_145e036044c7f2 84-106
+db/migrate/20260820120001_add_owner_to_coupons.rb
+  s_e9ed806a3d225c::t_73b6359e5f083f 1-40
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_145e036044c7f2 42-49
+db/migrate/20260820120002_create_coupon_redemptions.rb
+  s_e9ed806a3d225c::t_73b6359e5f083f 1-25
+db/migrate/20260820120000_create_orders.rb
+  s_e9ed806a3d225c::t_24dc3db425d4ed 1-90
+config/routes.rb
+  s_e9ed806a3d225c::t_2104fe40d1dbde 207-210
+app/blueprints/order_item_blueprint.rb
+  s_e9ed806a3d225c::t_34d1fb3a377e89 1-10
+app/models/coupon.rb
+  s_e9ed806a3d225c::t_ad52f2200ca9ee 2-12,16,18,35-77,114-124
+  s_e9ed806a3d225c::t_167f75d2738d4c 125
+app/models/order_item.rb
+  s_e9ed806a3d225c::t_df5a92fe4acbcf 1-12
+app/blueprints/order_blueprint.rb
+  s_e9ed806a3d225c::t_34d1fb3a377e89 1-28
+app/services/shopping/checkout.rb
+  s_e9ed806a3d225c::t_faf130e4c6223d 83-89
+  s_e9ed806a3d225c::t_befe4af213d869 100-107,109,159-160,168
+  s_e9ed806a3d225c::t_b53a79519b0b18 1-82,90-99,108,110-158,161-167,169-194
+app/controllers/api/v1/orders_controller.rb
+  s_e9ed806a3d225c::t_2104fe40d1dbde 1-115
+app/models/coupon_redemption.rb
+  s_e9ed806a3d225c::t_df5a92fe4acbcf 1-9
+app/models/order.rb
+  s_e9ed806a3d225c::t_859263f14e7c2c 51-53,63,71-72
+  s_e9ed806a3d225c::t_df5a92fe4acbcf 1-50,54-62,64-70,73-83
+test/controllers/api/v1/shop_order_test.rb
+  s_e9ed806a3d225c::t_befe4af213d869 183-186,206,211,214-224
+  s_e9ed806a3d225c::t_ba059cccdeac54 1-182,187-205,207-210,212-213,225-456
+app/jobs/shopping_sweeper_job.rb
+  s_e9ed806a3d225c::t_2d3766fc4e0945 1-32
+db/schema.rb
+  s_e9ed806a3d225c::t_3eef39733b3b73 13,172-184,186,192,196,198-200,208,764-826,1383-1385,1425-1427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5999826ada2c2b579e4c5c2f8e1dbfa58e76de4e",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
