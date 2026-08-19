@@ -1,0 +1,25 @@
+app/controllers/api/v1/orders_controller.rb
+  s_e9ed806a3d225c::t_9e689beb494cab 6-10,12-15,22-24
+  s_e9ed806a3d225c::t_8ba33bcfc494bb 16-21
+test/controllers/api/v1/shop_shipping_test.rb
+  s_e9ed806a3d225c::t_8ba33bcfc494bb 279-283,286-287
+  s_e9ed806a3d225c::t_9e689beb494cab 249-278,284-285,288-290
+app/controllers/api/v1/shipments_controller.rb
+  s_e9ed806a3d225c::t_2d2af1e8bbf4ca 3-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9ea6f092586462982c366cf4ad2e7387b3014633",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
