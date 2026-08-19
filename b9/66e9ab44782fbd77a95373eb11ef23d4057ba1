@@ -1,0 +1,55 @@
+config/routes.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 209-217
+test/controllers/api/v1/shop_after_sale_test.rb
+  s_e9ed806a3d225c::t_fa0fbb1fbaa654 307-329
+  s_e9ed806a3d225c::t_9616bf60d614f2 1-306,330-442
+app/services/shopping/refund_processor.rb
+  s_e9ed806a3d225c::t_5d8698b284606c 1-116
+app/models/after_sale_item.rb
+  s_e9ed806a3d225c::t_61ac2e983baace 1-7
+app/jobs/wechat_pay_webhook_job.rb
+  s_e9ed806a3d225c::t_2110fdd6626afc 104-109,146-168
+  s_e9ed806a3d225c::t_fe6b321e0959d9 169-170
+db/migrate/20260820140001_create_after_sale_requests.rb
+  s_e9ed806a3d225c::t_2f82c3cce17959 1-58
+app/models/after_sale_request.rb
+  s_e9ed806a3d225c::t_d022e2a660bbe4 1-27,33-99,106-126
+  s_e9ed806a3d225c::t_d14237e0e51e5f 28-32,100-105
+app/jobs/shopping_after_sale_timeout_job.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 1-43
+app/services/wechat_pay_gateway.rb
+  s_e9ed806a3d225c::t_2110fdd6626afc 165-181,185-186,189-191,194
+app/controllers/api/v1/after_sale_requests_controller.rb
+  s_e9ed806a3d225c::t_6bb40dd7abe1d9 1-72,77-164
+  s_e9ed806a3d225c::t_d14237e0e51e5f 73-76
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 55-59
+app/models/order.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 9-10
+db/migrate/20260820140000_add_refundable_to_refunds.rb
+  s_e9ed806a3d225c::t_2f82c3cce17959 1-46
+app/blueprints/after_sale_request_blueprint.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 1-20
+app/blueprints/after_sale_item_blueprint.rb
+  s_e9ed806a3d225c::t_eddb9b6026e554 1-13
+app/models/refund.rb
+  s_e9ed806a3d225c::t_9133e88f4266b5 7-15,17,21-39
+db/schema.rb
+  s_e9ed806a3d225c::t_256fef94cb2eff 13,33-70,987,995-996,999,1001-1002,1434-1438
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b966e9ab44782fbd77a95373eb11ef23d4057ba1",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
