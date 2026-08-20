@@ -1,0 +1,105 @@
+app/views/shop_mailer/order_paid.html.erb
+  s_e9ed806a3d225c::t_6c066e4b59a3ea 1-45
+test/controllers/api/v1/shop_shipping_test.rb
+  s_e9ed806a3d225c::t_386f6bf286586b 383-391
+  s_e9ed806a3d225c::t_6b64a0126212dd 304,309
+db/migrate/20260820150000_add_idempotency_key_to_orders.rb
+  s_e9ed806a3d225c::t_8cd043c0e011c2 1-24
+app/helpers/mailer_helper.rb
+  s_e9ed806a3d225c::t_d7bfb1a3a3a755 7-15
+app/models/after_sale_request.rb
+  s_e9ed806a3d225c::t_d87736de7b7494 60-64
+  s_e9ed806a3d225c::t_364101572c249b 48-53
+app/models/ticketing/activity.rb
+  s_e9ed806a3d225c::t_3e387dfb6606b2 45-51
+app/controllers/api/v1/after_sale_requests_controller.rb
+  s_e9ed806a3d225c::t_a5fa68c659070c 83-88
+app/views/shop_mailer/order_placed.html.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-29
+app/views/shop_mailer/order_shipped.html.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-30
+app/jobs/shop_notification_job.rb
+  s_e9ed806a3d225c::t_51138570cff1cc 24-27
+  s_e9ed806a3d225c::t_fe8a89288caf61 1-23,28-67
+app/models/order.rb
+  s_e9ed806a3d225c::t_7939206a40e8de 152-162
+test/controllers/api/v1/shop_review_fixes_test.rb
+  s_e9ed806a3d225c::t_194a8a592375fc 1-328
+app/services/shopping/eligibility.rb
+  s_e9ed806a3d225c::t_ed39e89936d916 1-72
+app/views/shop_mailer/order_shipped.text.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-13
+app/controllers/api/v1/shipments_controller.rb
+  s_e9ed806a3d225c::t_cafca7d52abae9 40-44
+  s_e9ed806a3d225c::t_8c65add5aa7b55 32-34,36-39
+app/jobs/shopping_refund_reconciliation_job.rb
+  s_e9ed806a3d225c::t_e23a831c6a6cbd 1-108
+app/services/wechat_pay_gateway.rb
+  s_e9ed806a3d225c::t_526263f75924a3 199-213
+app/views/shop_mailer/refund_succeeded.html.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-8
+app/views/shop_mailer/refund_succeeded.text.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-7
+app/views/shop_mailer/order_paid.text.erb
+  s_e9ed806a3d225c::t_6c066e4b59a3ea 1-21
+app/services/shopping/checkout.rb
+  s_e9ed806a3d225c::t_a35798dd43b819 174-184
+  s_e9ed806a3d225c::t_59e76a08d8ffd2 44-49
+  s_e9ed806a3d225c::t_c80e4501530362 130
+  s_e9ed806a3d225c::t_4021c75df58786 21-22,29,33-39
+  s_e9ed806a3d225c::t_e9f253e520714c 203-208
+app/services/shopping/refund_processor.rb
+  s_e9ed806a3d225c::t_4c485abda29e5a 88-93,112
+  s_e9ed806a3d225c::t_0eb347d4a8f67a 157
+  s_e9ed806a3d225c::t_ac9194d7fcc6b5 194-198
+  s_e9ed806a3d225c::t_f63008d556f288 121-128
+  s_e9ed806a3d225c::t_be0ce753a9852c 120
+  s_e9ed806a3d225c::t_9d8032ef74aa3c 111,117-119,132-156,158-193,199-205
+  s_e9ed806a3d225c::t_20f79f48b86c13 206
+app/controllers/api/v1/orders_controller.rb
+  s_e9ed806a3d225c::t_b7ac2438c45912 138-142
+  s_e9ed806a3d225c::t_58e6b198af1c4d 69-75,77-83
+  s_e9ed806a3d225c::t_211081fde34640 22-24,28-30
+  s_e9ed806a3d225c::t_5e9bd7e85a18fe 76
+  s_e9ed806a3d225c::t_0536c5efc51fed 118-123
+test/jobs/shop_async_test.rb
+  s_e9ed806a3d225c::t_e597ffd8a32589 107
+  s_e9ed806a3d225c::t_a0985cdce1c94b 21,27,73
+  s_e9ed806a3d225c::t_bb15ad54ece30a 1-20,22-26,28-56,60-72,74-82,87-106,108-180
+  s_e9ed806a3d225c::t_2fa1fba06147cc 57-59,83-86
+app/views/shop_mailer/after_sale_requested.text.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-12
+app/services/shopping/shipping_calculator.rb
+  s_e9ed806a3d225c::t_c4e14a50d25134 32-35
+  s_e9ed806a3d225c::t_2d8783357c35a9 7-18,30,36-55,58-73,75-77,79-80,82-87,89-91
+app/views/shop_mailer/after_sale_requested.html.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-31
+test/mailers/shop_mailer_test.rb
+  s_e9ed806a3d225c::t_064d113da38bc8 1-135
+app/blueprints/order_blueprint.rb
+  s_e9ed806a3d225c::t_4a637336b3d8b8 14-21,23-25
+app/mailers/shop_mailer.rb
+  s_e9ed806a3d225c::t_13ee379cbce5e4 1-78
+app/views/shop_mailer/order_placed.text.erb
+  s_e9ed806a3d225c::t_82a78defd376e6 1-10
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_709639d0cbb04d 60-69
+db/schema.rb
+  s_e9ed806a3d225c::t_be78cc0e232f7d 13,835,864
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b2f2e0d94f5937a307c342a14b2974ae138775ac",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
