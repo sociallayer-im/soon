@@ -1,0 +1,23 @@
+app/controllers/api/v1/after_sale_requests_controller.rb
+  s_e9ed806a3d225c::t_1af9a503806991 16-28
+  s_e9ed806a3d225c::t_4f8be167cc0458 29-37
+test/controllers/api/v1/shop_after_sale_test.rb
+  s_e9ed806a3d225c::t_6316b23d1d9ac1 447,449
+  s_e9ed806a3d225c::t_0a4833eea88576 442-446,448,450-468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d3c0fbb467c688ef04fa91d0f916316b4694109a",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
