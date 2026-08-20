@@ -1,0 +1,19 @@
+app/views/shop_mailer/after_sale_requested.html.erb
+  s_e9ed806a3d225c::t_85b7cd2698bdd8 31-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d40a93a4732f8dd2cab439db5b2b284bd7af3cef",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
