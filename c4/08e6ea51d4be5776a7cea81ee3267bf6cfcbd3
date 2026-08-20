@@ -1,0 +1,30 @@
+app/controllers/api/v1/after_sale_requests_controller.rb
+  s_e9ed806a3d225c::t_accd283d7268ab 44-80
+  s_e9ed806a3d225c::t_881f46434f3fd9 95-96,103-108,113
+config/routes.rb
+  s_e9ed806a3d225c::t_accd283d7268ab 219-220
+app/services/shopping/after_sale_quote.rb
+  s_e9ed806a3d225c::t_6c2c7be773e9ad 1-88
+test/controllers/api/v1/shop_after_sale_test.rb
+  s_e9ed806a3d225c::t_643fad721552d7 469-577,609-611
+  s_e9ed806a3d225c::t_2748ca873ce1e9 578-608
+app/models/after_sale_request.rb
+  s_e9ed806a3d225c::t_2748ca873ce1e9 110-127
+  s_e9ed806a3d225c::t_5d2855896808a0 20-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c408e6ea51d4be5776a7cea81ee3267bf6cfcbd3",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
