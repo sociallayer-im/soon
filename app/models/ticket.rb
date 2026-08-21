@@ -7,7 +7,9 @@ class Ticket < ApplicationRecord
   accepts_nested_attributes_for :payment_methods, allow_destroy: true
 
   validates :status, inclusion: { in: %w(normal nosale hidden inactive) }
-  validates :ticket_type, inclusion: { in: %w(event group) }
+  validates :ticket_type, inclusion: { in: %w(event group membership_card) }
+  validates :membership_duration_days, numericality: { greater_than: 0 },
+    if: -> { ticket_type == "membership_card" }
 
   before_save :inherit_group_ticket_type
 
@@ -33,12 +35,16 @@ class Ticket < ApplicationRecord
   private
 
   # Tickets on the group's designated ticket event grant membership, so they
-  # are group tickets whatever the caller asked for. Keyed off
+  # default to group tickets whatever the caller asked for. Keyed off
   # groups.group_ticket_event_id — the previous check (event.kind ==
   # "group_ticket") never fired, because nothing ever set that kind.
+  #
+  # membership_card is exempt from the override: it's an explicit choice on
+  # this same event (a 30-day renewable membership instead of a permanent
+  # one), not something that should be silently downgraded to "group".
   def inherit_group_ticket_type
     return unless event&.group_ticket_event?
-    self.ticket_type = "group"
+    self.ticket_type = "group" unless ticket_type == "membership_card"
     self.group_id = event.group_id
   end
 end

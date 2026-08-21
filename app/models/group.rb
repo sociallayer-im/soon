@@ -111,12 +111,37 @@ class Group < ApplicationRecord
   # of silently returning a membership whose write didn't actually persist —
   # every caller must be able to trust that a returned membership is saved.
   # memberships_count is maintained by Membership's counter_cache, not here.
+  # Grants permanent membership, so it also clears any expires_at left over
+  # from a prior membership_card purchase — a manager grant or a permanent
+  # group-ticket purchase should not leave the row set to lapse.
   def add_member(user_id, role)
     membership = memberships.find_by(user_id: user_id)
     if membership
-      membership.update!(role: role)
+      membership.update!(role: role, expires_at: nil)
     else
       membership = memberships.create!(user_id: user_id, role: role, active: true)
+    end
+    membership
+  end
+
+  # membership_card purchase grant: stacks the new 30-day window onto whatever
+  # is left of the current one rather than resetting from now, so renewing
+  # early never wastes remaining time. A lapsed or first-time buyer starts
+  # fresh from now.
+  #
+  # A manager/owner already has permanent, unrestricted access — setting an
+  # expires_at on their row would downgrade it to a lapsing membership, so a
+  # membership_card purchase by one is a no-op on the membership itself (the
+  # order/payment still records normally).
+  def grant_or_extend_membership(user_id, duration)
+    membership = memberships.find_by(user_id: user_id)
+    return membership if membership && membership.role != "member"
+
+    base = [ Time.current, membership&.expires_at ].compact.max
+    if membership
+      membership.update!(expires_at: base + duration)
+    else
+      membership = memberships.create!(user_id: user_id, role: "member", active: true, expires_at: base + duration)
     end
     membership
   end

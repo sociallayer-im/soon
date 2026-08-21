@@ -58,4 +58,11 @@ class TicketTest < ActiveSupport::TestCase
     assert_equal "group", ticket.ticket_type
     assert_equal @group.id, ticket.group_id
   end
+
+  test "inherit_group_ticket_type still sets group_id but does not clobber an explicit membership_card type" do
+    group_ticket_event = create_group_ticket_event(group: @group, owner: @owner)
+    ticket = create_ticket(event: group_ticket_event, ticket_type: "membership_card")
+    assert_equal "membership_card", ticket.ticket_type
+    assert_equal @group.id, ticket.group_id
+  end
 end

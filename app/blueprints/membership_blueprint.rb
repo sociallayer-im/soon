@@ -4,7 +4,9 @@ class MembershipBlueprint < Blueprinter::Base
   # admin_notification is only meaningful on an owner/manager row, but it is in
   # the default view rather than a named one so the member roster — the single
   # place the setting is shown and toggled — doesn't need a second request.
-  fields :role, :active, :admin_notification, :created_at
+  # expires_at is nil for a permanent membership (managers/owners, and plain
+  # group-ticket grants) — only a membership_card purchase ever sets it.
+  fields :role, :active, :admin_notification, :created_at, :expires_at
   association :user, blueprint: UserBlueprint
 
   # Which teams this person is in, within this group.

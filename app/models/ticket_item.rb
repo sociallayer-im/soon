@@ -38,7 +38,7 @@ class TicketItem < ApplicationRecord
   }.freeze
 
   validates :status, inclusion: { in: TRANSITIONS.keys }
-  validates :ticket_type, inclusion: { in: %w(event group) }
+  validates :ticket_type, inclusion: { in: %w(event group membership_card) }
 
   enum :auth_type, { free: "free", payment: "payment", badge: "badge", invite: "invite" }
 
@@ -116,6 +116,13 @@ class TicketItem < ApplicationRecord
     attrs[:sender_address] = sender_address if sender_address.present?
 
     newly_paid = participant && participant.payment_status != "succeeded"
+    # membership_card's grant EXTENDS on every call — unlike the "group"
+    # branch below, it has no exists?-based idempotency to fall back on — so
+    # it must only run on the transition that actually pays this order, not
+    # on a repeat webhook/callback for an order that was already succeeded
+    # (Stripe and friends deliver webhooks at-least-once; this method is
+    # explicitly written to tolerate repeat calls, see newly_paid above).
+    first_confirmation = status != "succeeded"
     transaction do
       if status == "succeeded"
         # Already-paid items (free path creates them succeeded directly, and
@@ -124,8 +131,10 @@ class TicketItem < ApplicationRecord
       else
         transition!(:succeeded, source: source, actor: actor, **attrs)
       end
-      if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
+      if ticket_type == "group" && group && !group.memberships.active.exists?(user_id: user_id)
         group.add_member(user_id, "member")
+      elsif ticket_type == "membership_card" && group && first_confirmation
+        group.grant_or_extend_membership(user_id, ticket.membership_duration_days.days)
       end
       participant.refresh_payment_status! if participant
     end

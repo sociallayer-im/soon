@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_22_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_030000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -712,10 +712,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_22_010001) do
     t.boolean "admin_notification", default: true, null: false
     t.datetime "created_at", null: false
     t.jsonb "data", default: {}
+    t.datetime "expires_at"
     t.string "group_id", null: false
     t.string "role", null: false, comment: "member | admin | owner"
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
+    t.index ["expires_at"], name: "index_memberships_on_expires_at"
     t.index ["group_id", "role"], name: "index_memberships_on_group_id_and_role"
     t.index ["group_id"], name: "index_memberships_on_group_id"
     t.index ["user_id", "group_id"], name: "index_memberships_on_user_id_and_group_id", unique: true
@@ -1240,6 +1242,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_22_010001) do
     t.datetime "end_time"
     t.string "event_id", null: false
     t.string "group_id"
+    t.integer "membership_duration_days", default: 30, null: false
     t.boolean "need_approval"
     t.integer "quantity"
     t.date "start_date"
