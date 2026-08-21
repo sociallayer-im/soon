@@ -30,6 +30,39 @@ class Api::V1::RecurringControllerTest < ActionDispatch::IntegrationTest
     assert_equal 14, events.last.start_time.utc.hour
   end
 
+  # event_attributes used to omit image_url/image_note, so every occurrence in
+  # a new series was created with no cover regardless of what the form sent —
+  # the single-event path (events_controller#event_params) never had this gap.
+  test "a new series carries the cover image onto every occurrence" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 3,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601,
+      title: "Weekly", image_url: "https://example.com/cover.png", image_note: "credit: someone"
+    }, headers: auth_headers(@owner)
+    assert_response :created
+
+    events = Event.where(recurring_id: json_response["id"])
+    assert_equal 3, events.count
+    assert events.all? { |e| e.image_url == "https://example.com/cover.png" }
+    assert events.all? { |e| e.image_note == "credit: someone" }
+  end
+
+  test "updating a series with selector all can set the cover image on every occurrence" do
+    post "/api/v1/recurring", params: {
+      group_id: @group.id, interval: "week", event_count: 2,
+      start_time: base_start.iso8601, end_time: (base_start + 1.hour).iso8601, title: "Orig"
+    }, headers: auth_headers(@owner)
+    recurring_id = json_response["id"]
+
+    patch "/api/v1/recurring/#{recurring_id}", params: {
+      selector: "all", image_url: "https://example.com/new-cover.png"
+    }, headers: auth_headers(@owner)
+    assert_response :success
+
+    events = Event.where(recurring_id: recurring_id)
+    assert events.all? { |e| e.image_url == "https://example.com/new-cover.png" }
+  end
+
   test "a naive start_time is interpreted in the series timezone, not UTC" do
     post "/api/v1/recurring", params: {
       group_id: @group.id, interval: "day", event_count: 1, timezone: "Asia/Shanghai",

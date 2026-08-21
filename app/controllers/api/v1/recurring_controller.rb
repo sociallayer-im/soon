@@ -213,6 +213,6 @@ class Api::V1::RecurringController < Api::BaseController
   def event_attributes
     params.permit(:title, :content, :timezone, :status, :visibility, :place_id,
       :track_id, :meeting_url, :external_url, :max_participant, :require_approval,
-      :category, :kind, tags: [], requirement_tags: []).to_h.symbolize_keys
+      :category, :kind, :image_url, :image_note, tags: [], requirement_tags: []).to_h.symbolize_keys
   end
 end
