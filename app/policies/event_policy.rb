@@ -2,11 +2,28 @@ class EventPolicy < ApplicationPolicy
   def index?  = true
 
   # Draft/archived events are visible only to the owner or a group manager.
-  # Public events are visible to anyone; private events to group members.
+  # normal/open_registration events are visible to anyone; unlisted events to
+  # group members only.
   def show?
     return owner?(record) || group_admin?(record.group) if %w[draft archived].include?(record.status)
-    return true if record.visibility == "public"
-    owner?(record) || group_member?(record.group) # private
+    return true if %w[normal open_registration].include?(record.visibility)
+    owner?(record) || group_member?(record.group) # unlisted
+  end
+
+  # Whether the current user may join (become a participant in) this event.
+  # Gated by the group's can_join_event (manager|member|everyone, default
+  # everyone) — unless the event itself is marked open_registration, which
+  # bypasses that restriction so a member-only group can still run one event
+  # open to everyone.
+  def join?
+    return true if owner?(record) || group_admin?(record.group)
+    return true if record.visibility == "open_registration"
+
+    case record.group.can_join_event
+    when "member" then group_member?(record.group)
+    when "manager" then false # only admins may join; already allowed above
+    else true # "everyone", unset, or unrecognized — unrestricted
+    end
   end
 
   # Mirrors the frontend's canPublishEvent logic (seastar-app src/utils/index.ts) —

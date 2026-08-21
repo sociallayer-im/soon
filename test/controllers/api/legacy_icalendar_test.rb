@@ -8,7 +8,7 @@ class Api::LegacyIcalendarTest < ActionDispatch::IntegrationTest
     @user  = create_user
     @group = create_group(owner: @user, ref_id: "498")
     @event = create_event(group: @group, owner: @user,
-      title: "Public Meetup", visibility: "public", status: "published")
+      title: "Public Meetup", visibility: "normal", status: "published")
   end
 
   test "resolves by group_name, the form subscription URLs actually use" do
@@ -42,9 +42,9 @@ class Api::LegacyIcalendarTest < ActionDispatch::IntegrationTest
 
   test "draft and private events stay out of the feed" do
     create_event(group: @group, owner: @user, title: "Secret Draft",
-      visibility: "public", status: "draft")
+      visibility: "normal", status: "draft")
     create_event(group: @group, owner: @user, title: "Private Thing",
-      visibility: "private", status: "published")
+      visibility: "unlisted", status: "published")
 
     get "/group/icalendar", params: { group_name: @group.name }
 

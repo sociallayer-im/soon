@@ -55,7 +55,7 @@ class Api::LegacyIdTest < ActionDispatch::IntegrationTest
 
   test "an event's calendar feed is reachable by legacy id" do
     create_event(group: @group, owner: @user, ref_id: "11399",
-      visibility: "public", status: "published")
+      visibility: "normal", status: "published")
 
     get "/api/v1/events/11399/calendar.ics"
 

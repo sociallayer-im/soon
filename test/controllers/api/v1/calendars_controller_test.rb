@@ -8,7 +8,7 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
 
   test "event feed is public, returns text/calendar for a public published event" do
     event = create_event(group: @group, owner: @owner, title: "Public One",
-      visibility: "public", status: "published", timezone: "America/New_York",
+      visibility: "normal", status: "published", timezone: "America/New_York",
       start_time: Time.utc(2026, 7, 16, 14, 0, 0), end_time: Time.utc(2026, 7, 16, 16, 0, 0))
 
     get "/api/v1/events/#{event.id}/calendar.ics" # no auth header
@@ -19,11 +19,11 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "event feed hides a draft/private event" do
-    draft = create_event(group: @group, owner: @owner, status: "draft", visibility: "public")
+    draft = create_event(group: @group, owner: @owner, status: "draft", visibility: "normal")
     get "/api/v1/events/#{draft.id}/calendar.ics"
     assert_response :not_found
 
-    private_event = create_event(group: @group, owner: @owner, status: "published", visibility: "private")
+    private_event = create_event(group: @group, owner: @owner, status: "published", visibility: "unlisted")
     get "/api/v1/events/#{private_event.id}/calendar.ics"
     assert_response :not_found
   end
@@ -32,13 +32,13 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
   # status list and left both out, so a cancelled or not-yet-approved event
   # still exported a normal ICS entry.
   test "event feed hides a cancelled event" do
-    cancelled = create_event(group: @group, owner: @owner, status: "cancelled", visibility: "public")
+    cancelled = create_event(group: @group, owner: @owner, status: "cancelled", visibility: "normal")
     get "/api/v1/events/#{cancelled.id}/calendar.ics"
     assert_response :not_found
   end
 
   test "event feed hides an event awaiting manager approval" do
-    pending = create_event(group: @group, owner: @owner, status: "pending", visibility: "public")
+    pending = create_event(group: @group, owner: @owner, status: "pending", visibility: "normal")
     get "/api/v1/events/#{pending.id}/calendar.ics"
     assert_response :not_found
   end
@@ -49,9 +49,9 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "group feed lists published public events as a named subscribable calendar" do
-    create_event(group: @group, owner: @owner, title: "Shown", status: "published", visibility: "public",
+    create_event(group: @group, owner: @owner, title: "Shown", status: "published", visibility: "normal",
       start_time: Time.utc(2026, 7, 16, 14, 0, 0), end_time: Time.utc(2026, 7, 16, 15, 0, 0))
-    create_event(group: @group, owner: @owner, title: "Hidden Draft", status: "draft", visibility: "public",
+    create_event(group: @group, owner: @owner, title: "Hidden Draft", status: "draft", visibility: "normal",
       start_time: Time.utc(2026, 7, 17, 14, 0, 0), end_time: Time.utc(2026, 7, 17, 15, 0, 0))
 
     get "/api/v1/groups/#{@group.id}/calendar.ics" # public, no auth

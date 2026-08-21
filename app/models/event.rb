@@ -16,7 +16,14 @@ class Event < ApplicationRecord
   accepts_nested_attributes_for :coupons, allow_destroy: true
 
   STATUSES = %w(draft pending published archived closed cancelled).freeze
-  VISIBILITIES = %w(public private).freeze
+  # normal            — default; publicly listed, joining follows the group's
+  #                      can_join_event setting like any other event.
+  # open_registration — publicly listed like normal, but bypasses the group's
+  #                      can_join_event restriction: anyone can join even when
+  #                      the group requires member/manager to join events.
+  # unlisted           — not in public listings; visible via direct link to
+  #                      the owner or group members only (was "private").
+  VISIBILITIES = %w(normal open_registration unlisted).freeze
 
   validates :title, presence: true
   validates :start_time, presence: true
@@ -56,7 +63,7 @@ class Event < ApplicationRecord
     # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
     # which would silently drop every legacy row that has none.
     where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
-      "(events.visibility = 'public' AND events.status NOT IN ('draft', 'pending', 'archived')) " \
+      "(events.visibility IN ('normal', 'open_registration') AND events.status NOT IN ('draft', 'pending', 'archived')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed)",
       uid: user&.id, managed: managed
     )

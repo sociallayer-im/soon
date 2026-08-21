@@ -24,6 +24,8 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # POST /api/v1/events/:event_id/participants
   def create
+    authorize @event, :join?
+
     if @event.form_id
       required_field_ids = FormField.where(form_id: @event.form_id, required: true, for_admin: false).pluck(:id)
       if required_field_ids.any?

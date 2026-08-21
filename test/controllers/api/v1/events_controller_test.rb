@@ -101,7 +101,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
     assert_response :success
@@ -112,7 +112,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     viewer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_comment(user: viewer, item: event, comment_type: "star")
     create_participant(event: event, user: viewer)
 
@@ -127,7 +127,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     viewer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_participant(event: event, user: viewer)
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(viewer)
@@ -140,7 +140,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     viewer = create_user
     other = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_participant(event: event, user: viewer)
     create_participant(event: event, user: other)
 
@@ -155,7 +155,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     viewer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
 
     get "/api/v1/events/#{event.id}?include_participants=false", headers: auth_headers(viewer)
     assert_response :success
@@ -166,7 +166,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     viewer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_participant(event: event, user: viewer, status: "cancelled")
 
     get "/api/v1/events/#{event.id}?include_participants=false", headers: auth_headers(viewer)
@@ -178,7 +178,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "show omits current_participant entirely for an anonymous viewer" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
 
     get "/api/v1/events/#{event.id}?include_participants=false"
     assert_response :success
@@ -188,7 +188,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "show omits is_starred/is_attending/is_owner for an anonymous viewer" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
 
     get "/api/v1/events/#{event.id}"
     assert_response :success
@@ -198,7 +198,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "show includes payment_methods on nested tickets (extended view)" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     ticket = create_ticket(event: event)
     create_payment_method(item: ticket, chain: "stripe", price: 1000)
 
@@ -228,7 +228,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     outsider = create_user
     group = create_group(owner: owner)
     create_membership(user: member, group: group, role: "member")
-    event = create_event(group: group, owner: owner, status: "published", visibility: "private")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
     assert_response :forbidden
@@ -242,9 +242,9 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     member = create_user
     group = create_group(owner: owner)
     create_membership(user: member, group: group, role: "member")
-    published = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    published = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_event(group: group, owner: owner, status: "draft")
-    create_event(group: group, owner: owner, status: "published", visibility: "private")
+    create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
 
     get "/api/v1/events", headers: auth_headers(member)
     assert_response :success
@@ -270,8 +270,8 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     create_membership(user: submitter, group: group, role: "member")
     create_membership(user: outsider, group: group, role: "member")
-    published = create_event(group: group, owner: owner, status: "published", visibility: "public")
-    pending = create_event(group: group, owner: submitter, status: "pending", visibility: "public")
+    published = create_event(group: group, owner: owner, status: "published", visibility: "normal")
+    pending = create_event(group: group, owner: submitter, status: "pending", visibility: "normal")
 
     # The submitter still sees their own pending submission (owner_id clause)...
     get "/api/v1/events", headers: auth_headers(submitter)
@@ -285,7 +285,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "index drops a cancelled event from a random viewer's browse listing" do
     owner = create_user
     group = create_group(owner: owner)
-    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "normal")
 
     get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(create_user)
     assert_response :success
@@ -300,7 +300,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     manager = create_user
     create_membership(group: group, user: manager, role: "manager")
-    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "normal")
 
     [owner, manager].each do |viewer|
       get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(viewer)
@@ -315,7 +315,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "index still lists an event whose status is NULL" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, visibility: "public")
+    event = create_event(group: group, owner: owner, visibility: "normal")
     event.update_column(:status, nil)
 
     get "/api/v1/events", params: { group_id: group.id }, headers: auth_headers(owner)
@@ -328,7 +328,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
   test "show still renders a cancelled public event" do
     owner = create_user
     group = create_group(owner: owner)
-    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "public")
+    cancelled = create_event(group: group, owner: owner, status: "cancelled", visibility: "normal")
 
     get "/api/v1/events/#{cancelled.id}"
     assert_response :success

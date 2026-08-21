@@ -21,7 +21,7 @@ class Api::V1::DiscoverController < Api::BaseController
                   .where.not("group_tags && ARRAY['hidden']::varchar[]")
                   .order(start_date: :desc).limit(50)
     events = Event.includes(:group, :place, :venue, :owner, :track)
-                  .where(visibility: "public", status: "published")
+                  .where(visibility: %w[normal open_registration], status: "published")
                   .where("end_time >= ?", Time.current).order(:start_time).limit(20)
 
     # The homepage's "社区" list: curated by the `pin` tag, capped at 40.
@@ -58,7 +58,7 @@ class Api::V1::DiscoverController < Api::BaseController
 
     like = "%#{Event.sanitize_sql_like(q)}%"
     events = Event.includes(:group, :place, :venue, :owner, :track)
-                  .where(visibility: "public", status: "published")
+                  .where(visibility: %w[normal open_registration], status: "published")
                   .where("title ILIKE ?", like).order(start_time: :desc).limit(10)
     groups = Group.where(active: true)
                   .where("name ILIKE :q OR nickname ILIKE :q", q: like).limit(10)

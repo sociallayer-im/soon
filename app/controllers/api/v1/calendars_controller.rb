@@ -52,7 +52,7 @@ class Api::V1::CalendarsController < Api::BaseController
   def render_group_feed(group)
     events = group.events
       .includes(:place)
-      .where(visibility: "public", status: "published")
+      .where(visibility: %w[normal open_registration], status: "published")
       .where("end_time IS NULL OR end_time > ?", 90.days.ago)
       .order(:start_time)
 

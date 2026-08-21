@@ -9,7 +9,7 @@ class EventBrowseTest < ActionDispatch::IntegrationTest
     group = create_group(owner: owner)
     published = create_event(group: group, owner: owner, status: "published")
     create_event(group: group, owner: owner, status: "draft")
-    create_event(group: group, owner: owner, status: "published", visibility: "private")
+    create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
 
     get "/api/v1/events", params: { group_id: group.name }
     assert_response :success

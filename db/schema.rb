@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_21_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -28,6 +28,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["initiator_id"], name: "index_activities_on_initiator_id"
     t.index ["item_type", "item_id"], name: "index_activities_on_item_type_and_item_id"
     t.index ["receiver_id"], name: "index_activities_on_receiver_id"
+  end
+
+  create_table "after_sale_items", id: :string, force: :cascade do |t|
+    t.string "after_sale_request_id", null: false
+    t.integer "amount", null: false
+    t.datetime "created_at", null: false
+    t.string "order_item_id", null: false
+    t.integer "quantity", null: false
+    t.datetime "updated_at", null: false
+    t.index ["after_sale_request_id", "order_item_id"], name: "idx_on_after_sale_request_id_order_item_id_6e7fef7f50", unique: true
+    t.index ["order_item_id"], name: "index_after_sale_items_on_order_item_id"
+    t.check_constraint "quantity > 0", name: "after_sale_items_quantity_positive"
+  end
+
+  create_table "after_sale_requests", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "deadline_at", comment: "seller silence past this is taken as agreement — see ShoppingAfterSaleTimeoutJob"
+    t.text "description"
+    t.string "evidence_urls", default: [], null: false, array: true
+    t.boolean "include_shipping", default: false, null: false, comment: "who pays the return postage; derived from `reason`, adjustable by the seller"
+    t.string "kind", null: false, comment: "refund_only | return_refund"
+    t.string "order_id", null: false
+    t.string "reason", null: false, comment: "no_reason | quality | wrong_item | damaged | other"
+    t.integer "refund_amount", null: false
+    t.string "request_no", null: false
+    t.datetime "requested_at", null: false
+    t.datetime "resolved_at"
+    t.string "return_carrier"
+    t.string "return_tracking_no"
+    t.string "seller_note"
+    t.string "shop_id", null: false
+    t.string "status", default: "requested", null: false, comment: "requested | approved | rejected | shipping | received | refunded | cancelled | closed"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["order_id"], name: "index_after_sale_requests_on_order_id"
+    t.index ["request_no"], name: "index_after_sale_requests_on_request_no", unique: true
+    t.index ["shop_id", "status", "created_at"], name: "index_after_sale_requests_on_shop_id_and_status_and_created_at"
+    t.index ["status", "deadline_at"], name: "index_after_sale_requests_on_status_and_deadline_at"
   end
 
   create_table "auth_codes", id: :string, force: :cascade do |t|
@@ -102,6 +140,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
   end
 
+  create_table "cart_items", id: :string, force: :cascade do |t|
+    t.string "cart_id", null: false
+    t.datetime "created_at", null: false
+    t.string "product_variant_id", null: false
+    t.integer "quantity", default: 1, null: false
+    t.datetime "updated_at", null: false
+    t.index ["cart_id", "product_variant_id"], name: "index_cart_items_on_cart_id_and_product_variant_id", unique: true
+    t.check_constraint "quantity > 0", name: "cart_items_quantity_positive"
+  end
+
+  create_table "carts", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "items_count", default: 0, null: false
+    t.string "shop_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id", "shop_id"], name: "index_carts_on_user_id_and_shop_id", unique: true
+  end
+
   create_table "categories", id: :string, force: :cascade do |t|
     t.boolean "archived", default: false, null: false
     t.datetime "created_at", null: false
@@ -150,17 +207,35 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["user_id"], name: "index_comments_on_user_id"
   end
 
+  create_table "coupon_redemptions", id: :string, force: :cascade do |t|
+    t.string "coupon_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "discount_amount", null: false
+    t.string "order_id", null: false
+    t.datetime "released_at", comment: "same meaning as orders.released_at: exactly-once, never inferred from status"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["coupon_id", "order_id"], name: "index_coupon_redemptions_on_coupon_id_and_order_id", unique: true
+    t.index ["coupon_id", "user_id"], name: "index_coupon_redemptions_on_coupon_id_and_user_id", where: "(released_at IS NULL)"
+    t.index ["order_id"], name: "index_coupon_redemptions_on_order_id"
+  end
+
   create_table "coupons", id: :string, force: :cascade do |t|
+    t.string "applicable_product_ids", default: [], array: true
     t.string "applicable_ticket_ids", array: true
     t.string "code"
     t.datetime "created_at", null: false
     t.integer "discount", comment: "basis points of 10000 for ratio, smallest unit for amount"
     t.string "discount_type", comment: "ratio | amount"
-    t.string "event_id", null: false
+    t.string "event_id"
     t.datetime "expires_at"
     t.string "label"
     t.integer "max_allowed_usages"
+    t.integer "min_order_amount", comment: "spend threshold in minor units; the ticket side never had one"
     t.integer "order_usage_count", default: 0
+    t.string "owner_id"
+    t.string "owner_type", comment: "Event | Shop"
+    t.integer "per_user_limit", comment: "null = unlimited"
     t.string "receiver_address"
     t.boolean "removed", default: false
     t.string "selector_type", comment: "code | email | badge"
@@ -168,6 +243,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.datetime "updated_at", null: false
     t.index ["code"], name: "index_coupons_on_code"
     t.index ["event_id"], name: "index_coupons_on_event_id"
+    t.index ["owner_type", "owner_id"], name: "index_coupons_on_owner_type_and_owner_id"
   end
 
   create_table "domains", id: :string, force: :cascade do |t|
@@ -229,7 +305,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.string "track_id"
     t.datetime "updated_at", null: false
     t.string "venue_id"
-    t.string "visibility", default: "public", comment: "public | private"
+    t.string "visibility", default: "normal", comment: "normal | open_registration | unlisted"
     t.index ["form_id"], name: "index_events_on_form_id"
     t.index ["group_id"], name: "index_events_on_group_id"
     t.index ["owner_id"], name: "index_events_on_owner_id"
@@ -723,6 +799,71 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["token_digest"], name: "index_oauth_refresh_tokens_on_token_digest", unique: true
   end
 
+  create_table "order_items", id: :string, force: :cascade do |t|
+    t.string "badge_id", comment: "the badge this line issued, if any"
+    t.datetime "created_at", null: false
+    t.string "image_url"
+    t.string "order_id", null: false
+    t.string "product_id", null: false
+    t.string "product_title", null: false
+    t.string "product_variant_id", null: false
+    t.integer "quantity", null: false
+    t.integer "refunded_amount", default: 0, null: false
+    t.integer "refunded_quantity", default: 0, null: false
+    t.string "sku"
+    t.string "status", default: "normal", null: false, comment: "normal | refunding | refunded"
+    t.integer "subtotal_amount", null: false
+    t.integer "unit_amount", null: false
+    t.datetime "updated_at", null: false
+    t.string "variant_title", null: false
+    t.index ["order_id"], name: "index_order_items_on_order_id"
+    t.index ["product_variant_id"], name: "index_order_items_on_product_variant_id"
+    t.check_constraint "quantity > 0", name: "order_items_quantity_positive"
+  end
+
+  create_table "orders", id: :string, force: :cascade do |t|
+    t.string "buyer_message"
+    t.string "cancel_reason"
+    t.datetime "cancelled_at"
+    t.string "chain"
+    t.datetime "completed_at"
+    t.string "coupon_id", comment: "redemption itself is a coupon_redemptions row"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "cny", null: false
+    t.integer "discount_amount", default: 0, null: false
+    t.string "group_id", null: false, comment: "denormalised, for the seller's lists"
+    t.string "idempotency_key", comment: "client-generated, one per checkout attempt; a retry returns the same order"
+    t.integer "items_amount", null: false
+    t.string "order_no", null: false, comment: "human-readable; the PK is still a TSID"
+    t.datetime "paid_at"
+    t.string "payment_method_id"
+    t.string "payment_provider", comment: "wechat | stripe | evm | free"
+    t.integer "platform_fee_amount"
+    t.string "provider_ref"
+    t.integer "refunded_amount", default: 0, null: false
+    t.datetime "released_at", comment: "stock and coupon released exactly once, guarded here — never inferred from status"
+    t.datetime "reserved_until", comment: "the sweeper expires unpaid orders past this"
+    t.string "settlement_status"
+    t.datetime "shipped_at"
+    t.jsonb "shipping_address", default: {}, null: false, comment: "snapshot, not a reference"
+    t.integer "shipping_amount", default: 0, null: false
+    t.string "shop_id", null: false
+    t.string "status", default: "pending", null: false, comment: "pending | paid | shipped | completed | cancelled | timeout | closed"
+    t.string "stripe_setting_id"
+    t.integer "total_amount", null: false
+    t.string "txhash"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "wechat_pay_setting_id", comment: "the merchant that took the money; refunds go back through it"
+    t.index ["order_no"], name: "index_orders_on_order_no", unique: true
+    t.index ["provider_ref"], name: "index_orders_on_provider_ref", unique: true, where: "(provider_ref IS NOT NULL)"
+    t.index ["shop_id", "status", "created_at"], name: "index_orders_on_shop_id_and_status_and_created_at"
+    t.index ["status", "reserved_until"], name: "index_orders_sweeper"
+    t.index ["txhash"], name: "index_orders_on_txhash", unique: true, where: "(txhash IS NOT NULL)"
+    t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
+    t.index ["user_id", "idempotency_key"], name: "index_orders_idempotency_per_user", unique: true, where: "(idempotency_key IS NOT NULL)"
+  end
+
   create_table "participants", id: :string, force: :cascade do |t|
     t.string "badge_id"
     t.datetime "cancelled_at"
@@ -779,6 +920,61 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["name"], name: "index_places_on_name"
   end
 
+  create_table "product_variants", id: :string, force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.integer "compare_at_amount", comment: "struck-through price, display only"
+    t.datetime "created_at", null: false
+    t.string "image_url"
+    t.integer "member_price_amount", comment: "reserved, not implemented"
+    t.string "option_values", default: [], null: false, comment: "same order as products.options", array: true
+    t.integer "price_amount", null: false, comment: "minor units (分)"
+    t.string "product_id", null: false
+    t.string "sku", comment: "seller's own code; unique where present"
+    t.integer "sold_count", default: 0, null: false
+    t.integer "sort", default: 0, null: false
+    t.integer "stock", default: 0, null: false
+    t.integer "stock_locked", default: 0, null: false
+    t.string "title", null: false, comment: "display name, e.g. 「黑色 / L」"
+    t.datetime "updated_at", null: false
+    t.integer "weight_gram", default: 0, null: false
+    t.index ["product_id", "option_values"], name: "index_product_variants_on_product_id_and_option_values", unique: true
+    t.index ["product_id", "sort"], name: "index_product_variants_on_product_id_and_sort"
+    t.index ["sku"], name: "index_product_variants_on_sku", unique: true, where: "(sku IS NOT NULL)"
+    t.check_constraint "price_amount >= 0", name: "product_variants_price_non_negative"
+    t.check_constraint "stock >= 0", name: "product_variants_stock_non_negative"
+    t.check_constraint "stock_locked >= 0", name: "product_variants_stock_locked_non_negative"
+  end
+
+  create_table "products", id: :string, force: :cascade do |t|
+    t.string "badge_class_id", comment: "issued on payment (P4), null = none"
+    t.string "buyer_scope", default: "everyone", null: false, comment: "manager | member | everyone"
+    t.text "content", comment: "markdown; heavy, only rendered in the :detail view"
+    t.string "cover_image_url"
+    t.datetime "created_at", null: false
+    t.boolean "free_shipping", default: false, null: false
+    t.string "fulfillment_type", default: "physical", null: false, comment: "physical | digital | redeemable | booking — only physical is implemented"
+    t.string "group_id", null: false, comment: "denormalised; avoids a join on every list query"
+    t.string "image_urls", default: [], null: false, array: true
+    t.integer "max_price_amount"
+    t.integer "min_price_amount"
+    t.boolean "no_reason_return_excluded", default: false, null: false, comment: "see design/SHOP_COMPLIANCE_NOTES.md §2"
+    t.string "no_reason_return_excluded_reason"
+    t.jsonb "options", default: [], null: false
+    t.integer "purchase_limit", comment: "per-buyer cap, null = unlimited"
+    t.string "shipping_rate_id", comment: "null = the shop's default template (P1)"
+    t.string "shop_id", null: false
+    t.integer "sold_count", default: 0, null: false
+    t.integer "sort", default: 0, null: false
+    t.string "status", default: "draft", null: false, comment: "draft | active | soldout | archived"
+    t.integer "stock_total", default: 0, null: false
+    t.string "summary"
+    t.string "tag_list", default: [], null: false, array: true
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id", "status"], name: "index_products_on_group_id_and_status"
+    t.index ["shop_id", "status", "sort"], name: "index_products_on_shop_id_and_status_and_sort"
+  end
+
   create_table "recurrings", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "end_time"
@@ -790,6 +986,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
   end
 
   create_table "refunds", id: :string, force: :cascade do |t|
+    t.string "after_sale_request_id", comment: "the shop's after-sale case this refund settles, when there is one"
     t.integer "amount", null: false, comment: "minor units; equal to the item amount for a full refund"
     t.datetime "created_at", null: false
     t.string "currency", default: "usd", null: false
@@ -797,12 +994,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.boolean "full_refund", default: true, null: false, comment: "full refunds release the seat; partial move money only"
     t.string "provider_ref", comment: "Stripe re_… id"
     t.string "reason"
+    t.string "refundable_id"
+    t.string "refundable_type", comment: "TicketItem | Order"
     t.string "requested_by_user_id", null: false
     t.string "status", default: "pending", null: false, comment: "pending | succeeded | failed"
-    t.string "ticket_item_id", null: false
+    t.string "ticket_item_id"
     t.datetime "updated_at", null: false
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_on_refundable_type_and_refundable_id"
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
-    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
 
   create_table "replies", id: :string, force: :cascade do |t|
@@ -825,6 +1026,92 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
     t.index ["topic_id", "created_at"], name: "index_replies_on_topic_and_created_alive", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["topic_id", "created_at"], name: "index_replies_on_topic_id_and_created_at"
     t.index ["user_id"], name: "index_replies_on_user_id"
+  end
+
+  create_table "shipment_items", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "order_item_id", null: false
+    t.integer "quantity", null: false
+    t.string "shipment_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["order_item_id"], name: "index_shipment_items_on_order_item_id"
+    t.index ["shipment_id", "order_item_id"], name: "index_shipment_items_on_shipment_id_and_order_item_id", unique: true
+    t.check_constraint "quantity > 0", name: "shipment_items_quantity_positive"
+  end
+
+  create_table "shipments", id: :string, force: :cascade do |t|
+    t.string "carrier", null: false, comment: "code from Shipment::CARRIERS"
+    t.string "carrier_name", null: false, comment: "snapshot of the label at the time"
+    t.datetime "created_at", null: false
+    t.datetime "delivered_at"
+    t.string "operator_user_id", null: false, comment: "which manager sent it"
+    t.string "order_id", null: false
+    t.datetime "shipped_at", null: false
+    t.string "status", default: "shipped", null: false, comment: "shipped | delivered | returned"
+    t.string "tracking_no", null: false
+    t.datetime "updated_at", null: false
+    t.index ["carrier", "tracking_no"], name: "index_shipments_on_carrier_and_tracking_no"
+    t.index ["order_id"], name: "index_shipments_on_order_id"
+  end
+
+  create_table "shipping_addresses", id: :string, force: :cascade do |t|
+    t.string "city", null: false
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.string "detail", null: false
+    t.string "district", null: false
+    t.boolean "is_default", default: false, null: false
+    t.string "name", null: false
+    t.string "phone", null: false
+    t.string "postcode"
+    t.string "province", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id"], name: "index_shipping_addresses_on_user_id", where: "(deleted_at IS NULL)"
+  end
+
+  create_table "shipping_rate_zones", id: :string, force: :cascade do |t|
+    t.integer "additional_amount", default: 0, null: false
+    t.integer "additional_quantity", default: 1, null: false
+    t.datetime "created_at", null: false
+    t.integer "first_amount", null: false
+    t.integer "first_quantity", default: 1, null: false
+    t.string "provinces", default: [], null: false, comment: "empty = the fallback zone", array: true
+    t.string "shipping_rate_id", null: false
+    t.boolean "unavailable", default: false, null: false, comment: "this zone is not shipped to at all"
+    t.datetime "updated_at", null: false
+    t.index ["shipping_rate_id"], name: "index_shipping_rate_zones_on_shipping_rate_id"
+  end
+
+  create_table "shipping_rates", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "free_above_amount", comment: "free shipping at/above this subtotal FOR THIS TEMPLATE's lines, not the whole order"
+    t.boolean "is_default", default: false, null: false
+    t.string "name", null: false
+    t.string "shop_id", null: false
+    t.string "unit", default: "piece", null: false, comment: "piece | weight — only piece is implemented"
+    t.datetime "updated_at", null: false
+    t.index ["shop_id"], name: "index_shipping_rates_on_shop_id"
+  end
+
+  create_table "shops", id: :string, force: :cascade do |t|
+    t.text "announcement", comment: "markdown"
+    t.integer "auto_complete_days", default: 7, null: false
+    t.string "contact_name"
+    t.string "contact_phone"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "cny", null: false
+    t.string "group_id", null: false
+    t.string "name", null: false
+    t.integer "no_reason_return_days", default: 7, null: false, comment: "0 = this shop offers no no-reason returns"
+    t.datetime "opened_at", null: false
+    t.string "opened_by_user_id", null: false, comment: "the platform admin who approved this shop"
+    t.integer "products_count", default: 0, null: false
+    t.integer "reserve_minutes", default: 15, null: false, comment: "how long an unpaid order holds its stock"
+    t.jsonb "return_address", default: {}, null: false, comment: "same shape as orders.shipping_address"
+    t.string "status", default: "draft", null: false, comment: "draft | open | closed — only `open` accepts orders"
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_shops_on_group_id", unique: true
   end
 
   create_table "stripe_events", id: :string, force: :cascade do |t|
@@ -1146,12 +1433,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
 
   add_foreign_key "activities", "users", column: "initiator_id"
   add_foreign_key "activities", "users", column: "receiver_id"
+  add_foreign_key "after_sale_items", "after_sale_requests"
+  add_foreign_key "after_sale_items", "order_items"
+  add_foreign_key "after_sale_requests", "orders"
+  add_foreign_key "after_sale_requests", "shops"
+  add_foreign_key "after_sale_requests", "users"
   add_foreign_key "badge_classes", "groups"
   add_foreign_key "badge_classes", "users", column: "creator_id"
   add_foreign_key "badges", "badge_classes"
   add_foreign_key "badges", "users", column: "creator_id"
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
+  add_foreign_key "cart_items", "carts"
+  add_foreign_key "cart_items", "product_variants"
+  add_foreign_key "carts", "shops"
+  add_foreign_key "carts", "users"
   add_foreign_key "categories", "groups"
   add_foreign_key "category_teams", "categories"
   add_foreign_key "category_teams", "teams"
@@ -1160,6 +1456,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
   add_foreign_key "comments", "comments", column: "reply_parent_id"
   add_foreign_key "comments", "fed_actors", on_delete: :cascade
   add_foreign_key "comments", "users"
+  add_foreign_key "coupon_redemptions", "coupons"
+  add_foreign_key "coupon_redemptions", "orders"
+  add_foreign_key "coupon_redemptions", "users"
   add_foreign_key "coupons", "events"
   add_foreign_key "event_roles", "events"
   add_foreign_key "events", "forms"
@@ -1199,13 +1498,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_150000) do
   add_foreign_key "oauth_refresh_tokens", "oauth_access_tokens", column: "access_token_id"
   add_foreign_key "oauth_refresh_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_refresh_tokens", "users"
+  add_foreign_key "order_items", "orders"
+  add_foreign_key "orders", "shops"
+  add_foreign_key "orders", "users"
   add_foreign_key "participants", "badges"
   add_foreign_key "participants", "events"
   add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
   add_foreign_key "participants", "vouchers"
+  add_foreign_key "product_variants", "products"
+  add_foreign_key "products", "groups"
+  add_foreign_key "products", "shops"
   add_foreign_key "replies", "topics"
   add_foreign_key "replies", "users"
+  add_foreign_key "shipment_items", "order_items"
+  add_foreign_key "shipment_items", "shipments"
+  add_foreign_key "shipments", "orders"
+  add_foreign_key "shipments", "users", column: "operator_user_id"
+  add_foreign_key "shipping_addresses", "users"
+  add_foreign_key "shipping_rate_zones", "shipping_rates"
+  add_foreign_key "shipping_rates", "shops"
+  add_foreign_key "shops", "groups"
+  add_foreign_key "shops", "users", column: "opened_by_user_id"
   add_foreign_key "team_memberships", "teams"
   add_foreign_key "team_memberships", "users"
   add_foreign_key "teams", "groups"

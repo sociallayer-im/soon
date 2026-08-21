@@ -203,7 +203,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_participant(event: event, user: attendee)
 
     # The detail page can now ask for the event without the embedded attendee
@@ -218,7 +218,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "private")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
     create_participant(event: event, user: owner)
 
     # This action used to require a token but never check it against the event,
@@ -249,7 +249,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     withdrawn = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, status: "published", visibility: "public")
+    event = create_event(group: group, owner: owner, status: "published", visibility: "normal")
     create_participant(event: event, user: attendee)
     create_participant(event: event, user: withdrawn, status: "cancelled")
 
