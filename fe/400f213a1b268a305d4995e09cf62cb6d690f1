@@ -1,0 +1,35 @@
+app/blueprints/group_blueprint.rb
+  s_e9ed806a3d225c::t_124931aaf48f2a 16
+app/controllers/api/v1/groups_controller.rb
+  s_e9ed806a3d225c::t_dbc276656ea3e5 126
+db/migrate/20260822010001_add_require_event_approval_to_groups.rb
+  s_e9ed806a3d225c::t_40f2a70b08d4c4 1-2,4-5
+  s_e9ed806a3d225c::t_270a14f28a4c56 3
+app/controllers/api/v1/events_controller.rb
+  s_e9ed806a3d225c::t_d1bf9cc5cb5109 45
+  s_e9ed806a3d225c::t_cc38e85b28075d 74
+  s_e9ed806a3d225c::t_472f19cce6c72b 310-323
+  s_e9ed806a3d225c::t_7eb1e16205dde8 324-338
+  s_e9ed806a3d225c::t_f368b82fe5494e 141-143
+test/controllers/api/v1/events_controller_test.rb
+  s_e9ed806a3d225c::t_a2186f4ba15831 415-457
+  s_e9ed806a3d225c::t_7b86865ee94d5d 458-487
+db/schema.rb
+  s_e9ed806a3d225c::t_ffc8d14584f83c 13,677
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fe400f213a1b268a305d4995e09cf62cb6d690f1",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
