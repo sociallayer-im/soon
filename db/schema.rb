@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_22_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -674,6 +674,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_22_010000) do
     t.string "parent_id"
     t.string "permissions", default: [], array: true
     t.string "ref_id"
+    t.boolean "require_event_approval", default: false, null: false
     t.string "requirement_tag_list", default: [], array: true
     t.jsonb "social_links", default: {}
     t.date "start_date"

@@ -13,7 +13,7 @@ class GroupBlueprint < Blueprinter::Base
     fields :bio, :location, :timezone, :start_date, :end_date, :active,
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
-           :can_publish_event, :can_join_event, :can_view_event,
+           :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,
            # Whether this group shows discussion boards, and who may start a
            # topic. The frontend decides whether to draw the tab from the
            # first of these, so it has to travel with the group.

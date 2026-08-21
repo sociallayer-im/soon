@@ -412,6 +412,79 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal member.id, event.owner_id
   end
 
+  test "create forces status to pending for a non-manager when the group requires event approval" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner, require_event_approval: true)
+    create_membership(user: member, group: group, role: "member")
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id, status: "published" }
+    }, headers: auth_headers(member)
+    assert_response :created
+    assert_equal "pending", Event.find(json_response["id"]).status
+  end
+
+  test "create leaves status alone for a manager even when the group requires event approval" do
+    owner = create_user
+    group = create_group(owner: owner, require_event_approval: true)
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id, status: "published" }
+    }, headers: auth_headers(owner)
+    assert_response :created
+    assert_equal "published", Event.find(json_response["id"]).status
+  end
+
+  test "create leaves a draft as a draft even when the group requires event approval" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner, require_event_approval: true)
+    create_membership(user: member, group: group, role: "member")
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id, status: "draft" }
+    }, headers: auth_headers(member)
+    assert_response :created
+    assert_equal "draft", Event.find(json_response["id"]).status
+  end
+
+  test "an event owner cannot self-publish a pending event via update" do
+    owner = create_user
+    member = create_user
+    group = create_group(owner: owner, require_event_approval: true)
+    create_membership(user: member, group: group, role: "member")
+    place = create_place
+
+    post "/api/v1/events", params: {
+      event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour,
+                group_id: group.id, place_id: place.id, status: "published" }
+    }, headers: auth_headers(member)
+    event = Event.find(json_response["id"])
+    assert_equal "pending", event.status
+
+    patch "/api/v1/events/#{event.id}", params: { event: { status: "published" } }, headers: auth_headers(member)
+    assert_response :success
+    assert_equal "pending", event.reload.status
+  end
+
+  test "a manager may still publish a pending event via ordinary update" do
+    owner = create_user
+    group = create_group(owner: owner, require_event_approval: true)
+    place = create_place
+    event = create_event(group: group, owner: owner, status: "pending")
+
+    patch "/api/v1/events/#{event.id}", params: { event: { status: "published", place_id: place.id } }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "published", event.reload.status
+  end
+
   test "create atomically persists inline event_roles and tickets in one request" do
     owner = create_user
     cohost = create_user

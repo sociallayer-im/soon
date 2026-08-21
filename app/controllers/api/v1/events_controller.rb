@@ -42,6 +42,7 @@ class Api::V1::EventsController < Api::BaseController
     attrs = event_params.to_h
     group = Group.find_by(id: attrs[:group_id])
     gate_pinned!(attrs, group)
+    gate_approval!(attrs, group)
     normalize_times!(attrs, group: group)
     event = Event.new(attrs.merge(owner: current_user))
     authorize event
@@ -70,6 +71,7 @@ class Api::V1::EventsController < Api::BaseController
     # group. venue/track references are re-validated against the current group.
     attrs = event_params.to_h.except("group_id")
     gate_pinned!(attrs, @event.group)
+    gate_pending_status!(attrs, @event)
     normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
     @event.assign_attributes(attrs)
     if (err = reference_error(@event))
@@ -136,6 +138,9 @@ class Api::V1::EventsController < Api::BaseController
     when "upcoming" then scope.where("end_time >= ?", now).order(:start_time)
     when "past"     then scope.where("end_time < ?", now).order(start_time: :desc)
     when "ongoing"  then scope.where("start_time <= ? AND end_time >= ?", now, now).order(:start_time)
+    # visible_to (applied above, in #index) already limits pending events to
+    # their owner or the group's managers/owner — nothing extra to gate here.
+    when "pending"  then scope.where(status: "pending").order(:start_time)
     else scope.order(:start_time)
     end
 
@@ -300,6 +305,35 @@ class Api::V1::EventsController < Api::BaseController
   def gate_pinned!(attrs, group)
     return unless attrs.key?("pinned")
     attrs.delete("pinned") unless group && GroupPolicy.new(current_user, group).manage?
+  end
+
+  # When a group requires review, a non-manager's submission is forced into
+  # "pending" server-side — trusting the client's own `status` here would let
+  # anyone bypass the review by simply not sending it (or sending
+  # "published"). A manager/owner's own event skips review, matching
+  # #notify_group_admins_of_submission's "not news to themselves" logic. Draft
+  # is left alone: saving a draft isn't a submission yet.
+  def gate_approval!(attrs, group)
+    return unless group&.require_event_approval
+    return if attrs[:status] == "draft"
+    return if GroupPolicy.new(current_user, group).manage?
+
+    attrs[:status] = "pending"
+  end
+
+  # #update allows the event's own owner (and co-hosts) to edit — but a
+  # pending event is a submission awaiting a manager's review, and update?
+  # doesn't distinguish "editing my details" from "editing myself into
+  # published". Without this, the owner could bypass the entire approval gate
+  # by simply PATCHing status back to "published" themselves. Silently drop
+  # the attempted status change (matching gate_pinned!'s style) rather than
+  # 403 the whole update over one field.
+  def gate_pending_status!(attrs, event)
+    return unless attrs.key?("status")
+    return unless event.status == "pending"
+    return if GroupPolicy.new(current_user, event.group).manage?
+
+    attrs.delete("status")
   end
 
   # Create co-hosts/speakers passed inline with the event. Guards item_type
