@@ -261,6 +261,15 @@ Rails.application.routes.draw do
         end
       end
 
+      # Present only when WECHAT_PAY_ENABLED (the controller 404s otherwise).
+      get "withdrawals/groups",  to: "withdrawals#groups"
+      get "withdrawals/balance", to: "withdrawals#balance"
+      resources :withdrawals, only: %i[index create]
+      # Platform admins only — gated on users.admin. NOT behind
+      # WECHAT_PAY_ENABLED: an SG admin should still be able to see/settle
+      # historical CN withdrawals if deployments are ever consolidated.
+      resources :admin_withdrawals, path: "admin/withdrawals", only: %i[index update]
+
       resources :vouchers, only: %i[index show create] do
         collection do
           post :send_badge
@@ -293,6 +302,7 @@ Rails.application.routes.draw do
       get  "tickets/check_coupon",            to: "tickets#check_coupon"
       get  "tickets/get_coupon",              to: "tickets#get_coupon"
       get  "tickets/coupon_price",            to: "tickets#coupon_price"
+      get  "tickets/order_summary",           to: "tickets#order_summary"
       get  "tickets/list",                    to: "tickets#list"
       get  "tickets/coupons",                 to: "tickets#coupons"
       get  "tickets/coupon",                  to: "tickets#coupon"

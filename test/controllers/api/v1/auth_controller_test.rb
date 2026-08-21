@@ -334,4 +334,90 @@ class Api::V1::AuthControllerTest < ActionDispatch::IntegrationTest
   ensure
     ENV.delete("NEXT_TOKEN")
   end
+
+  # ---------------------------------------------------- wechat nickname/avatar
+
+  test "trusted_signin backfills nickname and avatar on a brand-new WeChat account" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    post "/api/v1/auth/trusted_signin", params: {
+      next_token: "test-token", wechat_openid: "oNEW1", wechat_nickname: "小明", wechat_avatar_url: "https://wx.qq.com/a.jpg"
+    }
+    assert_response :success
+    user = User.last
+    assert_equal "小明", user.nickname
+    assert_equal "https://wx.qq.com/a.jpg", user.image_url
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "trusted_signin fills a blank nickname/avatar on an existing WeChat account, but never overwrites either" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    user = create_user(wechat_openid: "oOLD1", nickname: nil, image_url: nil)
+
+    post "/api/v1/auth/trusted_signin", params: {
+      next_token: "test-token", wechat_openid: "oOLD1", wechat_nickname: "老王", wechat_avatar_url: "https://wx.qq.com/b.jpg"
+    }
+    assert_response :success
+    user.reload
+    assert_equal "老王", user.nickname
+    assert_equal "https://wx.qq.com/b.jpg", user.image_url
+
+    # A second sign-in with a DIFFERENT WeChat nickname/avatar must not
+    # clobber what the person may have since set themselves.
+    post "/api/v1/auth/trusted_signin", params: {
+      next_token: "test-token", wechat_openid: "oOLD1", wechat_nickname: "换了个名", wechat_avatar_url: "https://wx.qq.com/c.jpg"
+    }
+    assert_response :success
+    user.reload
+    assert_equal "老王", user.nickname
+    assert_equal "https://wx.qq.com/b.jpg", user.image_url
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "trusted_signin never overwrites a nickname/avatar the account already had before WeChat sign-in" do
+    ENV["NEXT_TOKEN"] = "test-token"
+    user = create_user(wechat_openid: "oOLD2", nickname: "Already Set", image_url: "https://cdn.sola.day/mine.jpg")
+
+    post "/api/v1/auth/trusted_signin", params: {
+      next_token: "test-token", wechat_openid: "oOLD2", wechat_nickname: "微信昵称", wechat_avatar_url: "https://wx.qq.com/d.jpg"
+    }
+    assert_response :success
+    user.reload
+    assert_equal "Already Set", user.nickname
+    assert_equal "https://cdn.sola.day/mine.jpg", user.image_url
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "bind_wechat fills a blank nickname/avatar on the signed-in account" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user(nickname: nil, image_url: nil)
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_new", wechat_nickname: "小红", wechat_avatar_url: "https://wx.qq.com/e.jpg" },
+      headers: auth_headers(user)
+
+    assert_response :success
+    user.reload
+    assert_equal "小红", user.nickname
+    assert_equal "https://wx.qq.com/e.jpg", user.image_url
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
+
+  test "bind_wechat does not touch nickname/avatar when WeChat didn't send any" do
+    ENV["NEXT_TOKEN"] = "tok"
+    user = create_user(nickname: nil, image_url: nil)
+
+    post "/api/v1/auth/bind_wechat",
+      params: { next_token: "tok", wechat_openid: "o_new2" }, headers: auth_headers(user)
+
+    assert_response :success
+    user.reload
+    assert_nil user.nickname
+    assert_nil user.image_url
+  ensure
+    ENV.delete("NEXT_TOKEN")
+  end
 end

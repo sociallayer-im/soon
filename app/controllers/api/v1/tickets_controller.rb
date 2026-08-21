@@ -17,6 +17,7 @@ class Api::V1::TicketsController < Api::BaseController
   def create
     authorize @event, :update?
     return if stripe_setting_rejected?(@event)
+    return if wechat_organizer_rejected?(@event)
     ticket = @event.tickets.new(ticket_params)
     if ticket.save
       render json: TicketBlueprint.render(ticket, view: :extended), status: :created
@@ -30,6 +31,7 @@ class Api::V1::TicketsController < Api::BaseController
     authorize @event, :update?
     return render_not_found unless @ticket
     return if stripe_setting_rejected?(@event)
+    return if wechat_organizer_rejected?(@event)
 
     if @ticket.update(ticket_params)
       render json: TicketBlueprint.render(@ticket, view: :extended)
@@ -558,6 +560,41 @@ class Api::V1::TicketsController < Api::BaseController
     render json: TicketItemBlueprint.render(items.includes(:user), view: :with_profile)
   end
 
+  # GET /api/v1/tickets/order_summary?event_id= — organizer-only revenue
+  # rollup for the orders tab. Gross is broken out per rail+currency since an
+  # event can sell tickets on more than one rail; only wechat gets a fee
+  # breakdown/withdrawable figure, because it's the only rail where the
+  # platform (rather than the organizer's own merchant account or wallet)
+  # actually holds the money — see Withdrawal.
+  def order_summary
+    return render_error("not authorized", status: :forbidden) unless event_manager?(params[:event_id])
+
+    scope = TicketItem.where(event_id: params[:event_id], status: %w[succeeded partially_refunded])
+    breakdown = scope.group(:payment_provider, :currency).sum(:amount)
+    # Refunds netted per rail+currency so a partially-refunded WeChat order's
+    # ORIGINAL charge doesn't inflate withdrawable_amount — gross_amount
+    # itself stays un-netted on purpose, matching how the order list below
+    # always shows an order's original amount (refund history is separate).
+    refunded = Refund.joins(:ticket_item)
+                      .merge(scope)
+                      .where(status: "succeeded")
+                      .group("ticket_items.payment_provider", "ticket_items.currency")
+                      .sum(:amount)
+
+    summary = breakdown.map do |(provider, currency), gross_amount|
+      entry = { payment_provider: provider, currency: currency, gross_amount: gross_amount }
+      if provider == "wechat"
+        net_amount = gross_amount - refunded[[ provider, currency ]].to_i
+        entry[:wechat_fee_pct] = 1
+        entry[:sola_fee_pct] = 3
+        entry[:withdrawable_amount] = net_amount * Withdrawal::NET_NUM / Withdrawal::NET_DEN
+      end
+      entry
+    end
+
+    render json: { summary: summary }
+  end
+
   # GET /api/v1/tickets/coupons?event_id=
   def coupons
     event = Event.find(params[:event_id])
@@ -812,6 +849,30 @@ class Api::V1::TicketsController < Api::BaseController
     owned = StripeSetting.where(id: ids.uniq, user_id: event.owner_id).pluck(:id)
     if (ids.uniq - owned).any?
       render_error("stripe key must belong to the event owner")
+      return true
+    end
+    false
+  end
+
+  # WeChat's single-merchant model pools every organizer's revenue into the
+  # platform's own account (Withdrawal), and that pool is now shared at the
+  # GROUP level across all its managers — so a WeChat-paid ticket may only be
+  # set up by someone who is themselves accountable for that pool, and by an
+  # event whose owner is too. A plain member who can merely publish events
+  # (can_publish_event) could otherwise create a paid WeChat event nobody
+  # but the group's managers can ever withdraw for — or worse, one whose
+  # revenue nobody who touched it is authorized to see settled.
+  def wechat_organizer_rejected?(event)
+    return false unless Array(ticket_params[:payment_methods_attributes]).any? { |pm| pm[:chain] == "wechat" }
+
+    group_role = ->(user_id) { event.group.memberships.exists?(user_id: user_id, role: %w[manager owner]) }
+
+    unless group_role.call(current_user.id)
+      render_error("only a group manager or owner may set up a WeChat-paid ticket")
+      return true
+    end
+    unless event.owner_id.present? && group_role.call(event.owner_id)
+      render_error("the event owner must be a group manager or owner for a WeChat-paid ticket")
       return true
     end
     false

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1431,6 +1431,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_120000) do
     t.index ["user_id"], name: "index_wechat_pay_settings_on_user_id"
   end
 
+  create_table "withdrawals", id: :string, force: :cascade do |t|
+    t.bigint "amount", null: false
+    t.string "bank_account_name", null: false
+    t.string "bank_account_number", null: false
+    t.string "bank_name", null: false
+    t.datetime "created_at", null: false
+    t.string "currency", default: "cny", null: false
+    t.string "group_id", null: false
+    t.text "note"
+    t.datetime "processed_at"
+    t.string "processed_by_id"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["group_id"], name: "index_withdrawals_on_group_id"
+    t.index ["processed_by_id"], name: "index_withdrawals_on_processed_by_id"
+    t.index ["user_id", "status"], name: "index_withdrawals_on_user_id_and_status"
+    t.index ["user_id"], name: "index_withdrawals_on_user_id"
+  end
+
   add_foreign_key "activities", "users", column: "initiator_id"
   add_foreign_key "activities", "users", column: "receiver_id"
   add_foreign_key "after_sale_items", "after_sale_requests"
@@ -1545,4 +1565,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_120000) do
   add_foreign_key "vouchers", "badge_classes"
   add_foreign_key "vouchers", "users", column: "receiver_id"
   add_foreign_key "vouchers", "users", column: "sender_id"
+  add_foreign_key "withdrawals", "groups"
+  add_foreign_key "withdrawals", "users"
+  add_foreign_key "withdrawals", "users", column: "processed_by_id"
 end

@@ -1236,4 +1236,90 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/events/does-not-exist/tickets", headers: auth_headers(@owner)
     assert_response :not_found
   end
+
+  # ------------------------------------------------------------ order_summary
+
+  test "order_summary breaks gross down by rail and nets refunds out of wechat's withdrawable_amount" do
+    ticket = create_ticket(event: @event, quantity: 10)
+    buyer = create_user
+    wechat_item = TicketItem.create!(ticket: ticket, event: @event, user: buyer, ticket_type: "event",
+      status: "partially_refunded", amount: 10_000, currency: "cny", payment_provider: "wechat")
+    Refund.create!(ticket_item: wechat_item, requested_by: @owner, amount: 4_000, status: "succeeded")
+    TicketItem.create!(ticket: ticket, event: @event, user: buyer, ticket_type: "event",
+      status: "succeeded", amount: 500, currency: "usd", payment_provider: "stripe")
+
+    get "/api/v1/tickets/order_summary", params: { event_id: @event.id }, headers: auth_headers(@owner)
+    assert_response :success
+
+    wechat_row = json_response["summary"].find { |r| r["payment_provider"] == "wechat" }
+    stripe_row = json_response["summary"].find { |r| r["payment_provider"] == "stripe" }
+
+    # gross_amount is deliberately NOT netted — it mirrors the order's own
+    # original amount, same as the order list.
+    assert_equal 10_000, wechat_row["gross_amount"]
+    # withdrawable_amount IS netted: 96% of (10_000 - 4_000) = 5_760.
+    assert_equal 5_760, wechat_row["withdrawable_amount"]
+
+    assert_equal 500, stripe_row["gross_amount"]
+    assert_nil stripe_row["withdrawable_amount"]
+  end
+
+  test "order_summary requires event-manager access" do
+    outsider = create_user
+    get "/api/v1/tickets/order_summary", params: { event_id: @event.id }, headers: auth_headers(outsider)
+    assert_response :forbidden
+  end
+
+  # ------------------------------------------------------- wechat organizer gate
+
+  test "a plain member cannot create a wechat-paid ticket even for their own event" do
+    create_wechat_pay_setting
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+    event = create_event(group: @group, owner: member)
+
+    post "/api/v1/events/#{event.id}/tickets",
+      params: { ticket: { title: "Paid", ticket_type: "event",
+        payment_methods_attributes: [ { chain: "wechat", kind: "fiat", price: 100 } ] } },
+      headers: auth_headers(member)
+    assert_response :unprocessable_entity
+    assert_match(/group manager or owner/, json_response["error"])
+    assert_not event.tickets.exists?
+  end
+
+  test "a manager cannot create a wechat-paid ticket for an event owned by a plain member" do
+    create_wechat_pay_setting
+    manager = create_user
+    create_membership(user: manager, group: @group, role: "manager")
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+    event = create_event(group: @group, owner: member)
+
+    post "/api/v1/events/#{event.id}/tickets",
+      params: { ticket: { title: "Paid", ticket_type: "event",
+        payment_methods_attributes: [ { chain: "wechat", kind: "fiat", price: 100 } ] } },
+      headers: auth_headers(manager)
+    assert_response :unprocessable_entity
+    assert_match(/event owner must be/, json_response["error"])
+  end
+
+  test "a manager can create a wechat-paid ticket when the event owner is also a manager/owner" do
+    create_wechat_pay_setting
+    post "/api/v1/events/#{@event.id}/tickets",
+      params: { ticket: { title: "Paid", ticket_type: "event",
+        payment_methods_attributes: [ { chain: "wechat", kind: "fiat", price: 100 } ] } },
+      headers: auth_headers(@owner)
+    assert_response :created
+  end
+
+  test "a stripe-only ticket is unaffected by the wechat organizer gate" do
+    member = create_user
+    create_membership(user: member, group: @group, role: "member")
+    event = create_event(group: @group, owner: member)
+
+    post "/api/v1/events/#{event.id}/tickets",
+      params: { ticket: { title: "Free", ticket_type: "event" } },
+      headers: auth_headers(member)
+    assert_response :created
+  end
 end

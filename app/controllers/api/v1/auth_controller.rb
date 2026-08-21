@@ -290,6 +290,7 @@ class Api::V1::AuthController < Api::BaseController
     updates = {}
     updates[:wechat_openid] = openid if claimable?(:wechat_openid, openid, current_user)
     updates[:wechat_unionid] = unionid if unionid.present? && claimable?(:wechat_unionid, unionid, current_user)
+    updates.merge!(wechat_profile_updates(current_user))
     current_user.update!(updates) if updates.any?
 
     render json: UserBlueprint.render(current_user, view: :self)
@@ -317,7 +318,12 @@ class Api::V1::AuthController < Api::BaseController
 
     user = User.find_by(wechat_unionid: unionid) if unionid
     user ||= User.find_by(wechat_openid: openid) if openid
-    return User.create!(wechat_openid: openid, wechat_unionid: unionid) unless user
+    unless user
+      return User.create!(
+        wechat_openid: openid, wechat_unionid: unionid,
+        nickname: params[:wechat_nickname].presence, image_url: params[:wechat_avatar_url].presence
+      )
+    end
 
     # Only ever fills a blank, and only with an identifier nobody else holds —
     # never repoints one at a different WeChat account, which would silently
@@ -328,8 +334,24 @@ class Api::V1::AuthController < Api::BaseController
     updates = {}
     updates[:wechat_openid] = openid if claimable?(:wechat_openid, openid, user)
     updates[:wechat_unionid] = unionid if claimable?(:wechat_unionid, unionid, user)
+    updates.merge!(wechat_profile_updates(user))
     user.update(updates) if updates.any?
     user
+  end
+
+  # nickname/avatar are display-only (nickname is shown as the profile's
+  # display name — see UserBlueprint — never as `name`, the handle/login
+  # identifier, which has its own format rules and registration flow).
+  # Filled from WeChat only when blank, on every sign-in/bind, so this never
+  # clobbers something the person set themselves either here or on WeChat
+  # before we last synced.
+  def wechat_profile_updates(user)
+    updates = {}
+    nickname = params[:wechat_nickname].presence
+    avatar_url = params[:wechat_avatar_url].presence
+    updates[:nickname] = nickname if nickname && user.nickname.blank?
+    updates[:image_url] = avatar_url if avatar_url && user.image_url.blank?
+    updates
   end
 
   def claimable?(column, value, user)
@@ -372,7 +394,9 @@ class Api::V1::AuthController < Api::BaseController
     carry = {
       wechat_openid: from.wechat_openid,
       wechat_unionid: from.wechat_unionid,
-      phone: (from.phone if into.phone.blank?)
+      phone: (from.phone if into.phone.blank?),
+      nickname: (from.nickname if into.nickname.blank?),
+      image_url: (from.image_url if into.image_url.blank?)
     }.compact
 
     User.transaction do

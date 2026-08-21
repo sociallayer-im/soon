@@ -5,6 +5,7 @@ class Group < ApplicationRecord
   has_many :memberships, dependent: :delete_all
   has_many :users, through: :memberships
   has_many :events, dependent: :destroy, inverse_of: :group
+  has_many :withdrawals, dependent: :destroy
   has_many :markers, dependent: :destroy
   has_many :tracks, dependent: :destroy
   # Discussion boards. restrict_with_error rather than destroy: deleting a
