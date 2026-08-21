@@ -1,5 +1,5 @@
 service: soon
-image: home-registry.sola.day/sola/soon
+image: registry.sola.day/sola/soon
 
 # Default stack, stated explicitly: Nomad schedules the container, Traefik picks
 # it up from the container labels and routes to it. Only nomad+traefik and
@@ -12,9 +12,14 @@ servers:
     hosts: [homepod.sola.day]
     primary: true
 
-# 自建 registry（yatch）。2026-08-02 起不再经 ghcr。
+# 自建 registry（yatch）。2026-08-02 起不再经 ghcr。registry.sola.day is the
+# home-registry.sola.day instance under its new domain (added 2026-08-21) —
+# same host, same data. It syncs pushed tags to registry.juluo.xyz itself
+# (SYNC_TARGET_REGISTRY, opt-in per repo via /_admin/sync — see yatch's
+# Sync.fs), which is what lets ginger.cn.yml deploy with --skip-push instead
+# of building a second time.
 registry:
-  server: home-registry.sola.day
+  server: registry.sola.day
   username: sola
   password: YATCH_TOKEN
 
@@ -38,6 +43,10 @@ ssh:
 
 builder:
   arch: amd64
+  # Builds here already ran on homepod itself before the registry-topology
+  # change; capped at 3 GB via a dedicated `docker-container`-driver buildx
+  # builder (not a ginger setting — see DEPLOYMENT.md's build section) so a
+  # heavy build can't starve the production containers sharing this host.
   remote: ssh://ubuntu@homepod
   # ginger defaults to mode=min, which exports only the FINAL stage to
   # <image>:buildcache. This Dockerfile has three, and everything expensive is

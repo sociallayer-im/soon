@@ -1,5 +1,8 @@
 service: soon
-image: registry.juluo.xyz/soon
+# Must match SG's repo path (sola/soon in ginger.yml): sync mirrors by exact
+# repo, so the image registry.sola.day pushes to sola/soon lands at
+# registry.juluo.xyz/sola/soon, not registry.juluo.xyz/soon.
+image: registry.juluo.xyz/sola/soon
 
 runner: nomad
 egress: traefik
@@ -26,16 +29,18 @@ proxy:
 ssh:
   user: root
 
+# soon has no build-time-baked, region-specific config (all config is
+# read from the environment at runtime — see secrets.inject below), so
+# unlike seastar-app it doesn't need a CN-specific build at all: the same
+# image built for SG (ginger.yml) is synced by registry.sola.day itself to
+# registry.juluo.xyz on push. Deploy this config with `ginger deploy -c
+# ginger.cn.yml --skip-push` — building here would just produce a second,
+# redundant image under a different tag scheme with no way to converge with
+# SG's. (mirror-registry.sola.day, the old push_registry target this used
+# to route through, is retired as of this change.)
 builder:
   arch: amd64
-  # Build overseas where upstream (Debian/gems/npm) is fast and unfiltered — no
-  # China-mirror or proxy crutches needed.
-  remote: ssh://ubuntu@wamo.city
-  # Push to the Singapore mirror (clean wamo→SG link, no GFW). It shares OSS +
-  # Postgres with registry.juluo.xyz, so juluo pulls the same image fast.
-  push_registry: mirror-registry.sola.day
-  # See ginger.yml — mode=min would export only the final stage, leaving
-  # `bundle install` (rbsecp256k1 built from source) uncached in the registry.
+  remote: ssh://ubuntu@homepod
   cache: max
 
 # App joins the "ginger" docker network (default); Postgres is on the same
