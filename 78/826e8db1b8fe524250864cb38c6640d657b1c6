@@ -1,0 +1,25 @@
+test/models/ticket_item_test.rb
+  s_e9ed806a3d225c::t_fe1a830e19189a 112-127
+test/models/membership_test.rb
+  s_e9ed806a3d225c::t_dd1b885bca060e 31,33,36,39-46
+app/models/ticket_item.rb
+  s_e9ed806a3d225c::t_e20f965e435747 119-125,136
+app/models/membership.rb
+  s_e9ed806a3d225c::t_c49084b6e55367 11-12,17-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "78826e8db1b8fe524250864cb38c6640d657b1c6",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
