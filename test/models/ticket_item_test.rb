@@ -109,6 +109,22 @@ class TicketItemTest < ActiveSupport::TestCase
     assert_in_delta (first_expiry + 30.days).to_i, second_expiry.to_i, 5
   end
 
+  test "confirm_payment! on the SAME order does not re-extend membership on a repeat call" do
+    # Payment providers deliver webhooks at-least-once; confirm_payment! is
+    # explicitly written to tolerate a repeat call for an order that already
+    # succeeded (see the newly_paid guard) — the membership grant must not
+    # re-fire on that repeat call, or a retried webhook stacks a free extra
+    # duration onto a single purchase.
+    item = build_item(ticket_type: "membership_card", group: @group)
+    item.confirm_payment!
+    first_expiry = @group.memberships.find_by(user_id: @buyer.id).expires_at
+
+    item.confirm_payment!
+    second_expiry = @group.memberships.find_by(user_id: @buyer.id).expires_at
+
+    assert_in_delta first_expiry.to_i, second_expiry.to_i, 5
+  end
+
   test "confirm_payment! honours the ticket's own membership_duration_days, not a fixed 30" do
     weekly = create_ticket(event: @event, group_id: @group.id, ticket_type: "membership_card",
       membership_duration_days: 7)
