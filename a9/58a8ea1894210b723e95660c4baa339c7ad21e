@@ -1,0 +1,41 @@
+app/models/ticket.rb
+  s_e9ed806a3d225c::t_903bd8a63bd229 10
+db/migrate/20260822020000_add_expires_at_to_memberships.rb
+  s_e9ed806a3d225c::t_147d0cde7b4b66 1-6
+app/models/membership.rb
+  s_e9ed806a3d225c::t_34d32a9e327eb5 11-14
+  s_e9ed806a3d225c::t_9ac2dd97406ea7 15-20
+app/models/ticket_item.rb
+  s_e9ed806a3d225c::t_f85b5e57040dd0 129,131-132
+  s_e9ed806a3d225c::t_57a961c6e49e76 41
+  s_e9ed806a3d225c::t_5b9c5bd3243970 43
+  s_e9ed806a3d225c::t_897945f578c50c 42
+app/controllers/api/v1/tickets_controller.rb
+  s_e9ed806a3d225c::t_35412fc2bb9173 660
+test/models/ticket_item_test.rb
+  s_e9ed806a3d225c::t_e596d84040863b 89-142
+test/models/membership_test.rb
+  s_e9ed806a3d225c::t_af45d4eb62f7a2 30-53
+app/models/group.rb
+  s_e9ed806a3d225c::t_811390103bd49d 114-116,120
+  s_e9ed806a3d225c::t_8fa00e4b807202 126-129,136-137,140-141,143-147
+  s_e9ed806a3d225c::t_b7dfbbc23c715f 130-135,138-139,142
+db/schema.rb
+  s_e9ed806a3d225c::t_02e6ff5c10f226 13,715,720
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a958a8ea1894210b723e95660c4baa339c7ad21e",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
