@@ -1,6 +1,44 @@
-# 月费会员卡 (Membership Card) — Design
+# 会员卡 (Membership Card) — Design
 
-Status: approved 2026-08-22, implementation in progress on branch `feature/membership-card`.
+Status: v1 (fixed 30-day) implemented on branch `feature/membership-card`.
+v2 (configurable duration + multiple tiers) approved 2026-08-22, extending
+the same branch.
+
+## v2 addendum: multiple durations and tiers
+
+Requirement: durations besides 30 days (7 / 30 / 365, or any custom day
+count), and multiple card "tiers" at different prices (e.g. Silver/Gold/
+Platinum).
+
+**Tiers need no new modeling.** A `Ticket` is already "one buyable item, one
+price (via `payment_methods`), one event" and an event already supports
+several `Ticket` rows — that's exactly what "多种卡等级，不同的价格" is. A
+tier is just another `membership_card` ticket on the group's ticket event
+with its own title/price/duration. No schema change for tiers themselves.
+
+**Duration becomes a per-ticket field**, not a global constant:
+- Migration: `add_column :tickets, :membership_duration_days, :integer,
+  default: 30, null: false`. Only meaningful when `ticket_type ==
+  "membership_card"`; ignored otherwise (mirrors how `days_allowed`/
+  `tracks_allowed` are only meaningful for `"group"`).
+- `TicketItem#confirm_payment!`'s membership_card branch now calls
+  `group.grant_or_extend_membership(user_id, ticket.membership_duration_days.days)`
+  instead of the old hardcoded `MEMBERSHIP_CARD_DURATION` constant (removed).
+  `Group#grant_or_extend_membership` already took `duration` as a parameter,
+  so no change needed there — the stacking-onto-existing-expiry semantics
+  from v1 apply unchanged, just with whatever duration *this* ticket carries.
+  A user who buys a 7-day card then a 365-day card gets `now + 7d + 365d`, in
+  that purchase order — durations from different tiers stack just like same-
+  tier renewals do, since the grant only ever reads "this ticket's duration"
+  and "the membership's current expiry," never which ticket funded either.
+- Frontend `TicketForm.tsx`: the "Monthly membership card" toggle becomes a
+  "Membership card" toggle plus a duration control (preset chips: 7/30/365
+  days, falling back to a plain number input for a custom day count).
+  Renamed lang keys accordingly (`"Monthly membership card"` →
+  `"Membership card"`).
+- `TabMembers.tsx`'s "Member until" display needs no change — it already
+  renders whatever `expires_at` ended up being, regardless of which
+  duration(s) produced it.
 
 ## Problem
 

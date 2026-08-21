@@ -880,7 +880,7 @@ class Api::V1::TicketsController < Api::BaseController
 
   def ticket_params
     params.require(:ticket).permit(:title, :content, :check_badge_class_id, :quantity, :end_time,
-      :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date,
+      :need_approval, :status, :ticket_type, :group_id, :start_date, :end_date, :membership_duration_days,
       days_allowed: [], tracks_allowed: [], check_group_ids: [],
       payment_methods_attributes: [:id, :chain, :kind, :token_name, :token_address, :receiver_address, :price, :protocol, :currency, :stripe_setting_id, :_destroy, chains: []])
   end

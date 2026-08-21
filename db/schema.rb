@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_22_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_030000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1242,6 +1242,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_22_020000) do
     t.datetime "end_time"
     t.string "event_id", null: false
     t.string "group_id"
+    t.integer "membership_duration_days", default: 30, null: false
     t.boolean "need_approval"
     t.integer "quantity"
     t.date "start_date"

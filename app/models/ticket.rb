@@ -8,6 +8,8 @@ class Ticket < ApplicationRecord
 
   validates :status, inclusion: { in: %w(normal nosale hidden inactive) }
   validates :ticket_type, inclusion: { in: %w(event group membership_card) }
+  validates :membership_duration_days, numericality: { greater_than: 0 },
+    if: -> { ticket_type == "membership_card" }
 
   before_save :inherit_group_ticket_type
 
