@@ -8,6 +8,16 @@ class Membership < ApplicationRecord
   validates :user_id, uniqueness: { scope: :group_id, message: "can only join a group once" }
   validates :role, inclusion: { in: %w[member manager owner] }
 
+  # Query-side counterpart to #active? — for gates that need to filter/exists?
+  # rather than load a single row.
+  scope :active, -> { where("expires_at IS NULL OR expires_at > ?", Time.current) }
+
+  # expires_at nil means permanent (manager/owner rows, and plain group-ticket
+  # membership grants). Only a membership_card purchase ever sets it.
+  def active?
+    expires_at.nil? || expires_at.future?
+  end
+
   # A team groups a group's members, so leaving the group leaves its teams
   # too. Without this the tables keep rows for people who are no longer in the
   # community but still carry its identity — and, through a team-restricted

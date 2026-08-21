@@ -86,4 +86,58 @@ class TicketItemTest < ActiveSupport::TestCase
     assert_equal "succeeded", item.status
     assert item.paid_at.present?
   end
+
+  test "confirm_payment! on a membership_card grants a 30-day membership" do
+    item = build_item(ticket_type: "membership_card", group: @group)
+    item.confirm_payment!
+
+    membership = @group.memberships.find_by(user_id: @buyer.id)
+    assert membership.present?
+    assert_equal "member", membership.role
+    assert_in_delta 30.days.from_now.to_i, membership.expires_at.to_i, 5
+  end
+
+  test "confirm_payment! on a repeat membership_card purchase stacks onto the existing expiry" do
+    item1 = build_item(ticket_type: "membership_card", group: @group)
+    item1.confirm_payment!
+    first_expiry = @group.memberships.find_by(user_id: @buyer.id).expires_at
+
+    item2 = build_item(ticket_type: "membership_card", group: @group)
+    item2.confirm_payment!
+    second_expiry = @group.memberships.find_by(user_id: @buyer.id).expires_at
+
+    assert_in_delta (first_expiry + 30.days).to_i, second_expiry.to_i, 5
+  end
+
+  test "confirm_payment! on a lapsed membership_card starts a fresh 30 days from now, not from the old expiry" do
+    @group.memberships.create!(user_id: @buyer.id, role: "member", expires_at: 5.days.ago)
+
+    item = build_item(ticket_type: "membership_card", group: @group)
+    item.confirm_payment!
+
+    membership = @group.memberships.find_by(user_id: @buyer.id)
+    assert_in_delta 30.days.from_now.to_i, membership.expires_at.to_i, 5
+  end
+
+  test "confirm_payment! on a membership_card is a no-op for an existing manager" do
+    @group.memberships.create!(user_id: @buyer.id, role: "manager")
+
+    item = build_item(ticket_type: "membership_card", group: @group)
+    item.confirm_payment!
+
+    membership = @group.memberships.find_by(user_id: @buyer.id)
+    assert_equal "manager", membership.role
+    assert_nil membership.expires_at
+  end
+
+  test "confirm_payment! on a group ticket upgrades a lapsed membership_card member to permanent" do
+    @group.memberships.create!(user_id: @buyer.id, role: "member", expires_at: 5.days.ago)
+    group_ticket = create_ticket(event: @event, group_id: @group.id, ticket_type: "group")
+
+    item = build_item(ticket: group_ticket, ticket_type: "group", group: @group)
+    item.confirm_payment!
+
+    membership = @group.memberships.find_by(user_id: @buyer.id)
+    assert_nil membership.expires_at
+  end
 end

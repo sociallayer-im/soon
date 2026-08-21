@@ -38,7 +38,9 @@ class TicketItem < ApplicationRecord
   }.freeze
 
   validates :status, inclusion: { in: TRANSITIONS.keys }
-  validates :ticket_type, inclusion: { in: %w(event group) }
+  validates :ticket_type, inclusion: { in: %w(event group membership_card) }
+
+  MEMBERSHIP_CARD_DURATION = 30.days
 
   enum :auth_type, { free: "free", payment: "payment", badge: "badge", invite: "invite" }
 
@@ -124,8 +126,10 @@ class TicketItem < ApplicationRecord
       else
         transition!(:succeeded, source: source, actor: actor, **attrs)
       end
-      if ticket_type == "group" && group && !group.memberships.exists?(user_id: user_id)
+      if ticket_type == "group" && group && !group.memberships.active.exists?(user_id: user_id)
         group.add_member(user_id, "member")
+      elsif ticket_type == "membership_card" && group
+        group.grant_or_extend_membership(user_id, MEMBERSHIP_CARD_DURATION)
       end
       participant.refresh_payment_status! if participant
     end

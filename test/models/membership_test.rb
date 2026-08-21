@@ -27,4 +27,28 @@ class MembershipTest < ActiveSupport::TestCase
     assert_not dup.valid?
     assert_includes dup.errors[:user_id], "can only join a group once"
   end
+
+  test "active? is true for a permanent (expires_at nil) membership" do
+    membership = Membership.new(expires_at: nil)
+    assert membership.active?
+  end
+
+  test "active? is true before expiry and false after" do
+    future = Membership.new(expires_at: 1.day.from_now)
+    past = Membership.new(expires_at: 1.day.ago)
+    assert future.active?
+    assert_not past.active?
+  end
+
+  test "active scope excludes expired rows but keeps permanent and future-expiring ones" do
+    group = create_group
+    permanent = Membership.create!(user: create_user, group: group, role: "member")
+    future = Membership.create!(user: create_user, group: group, role: "member", expires_at: 1.day.from_now)
+    expired = Membership.create!(user: create_user, group: group, role: "member", expires_at: 1.day.ago)
+
+    active_ids = group.memberships.active.pluck(:id)
+    assert_includes active_ids, permanent.id
+    assert_includes active_ids, future.id
+    assert_not_includes active_ids, expired.id
+  end
 end

@@ -657,7 +657,7 @@ class Api::V1::TicketsController < Api::BaseController
   # Any listed group qualifies — the list is an OR, so a ticket can honour
   # several member communities at once.
   def member_of_required_group?(ticket)
-    current_user.memberships.exists?(group_id: ticket.check_group_ids)
+    current_user.memberships.active.exists?(group_id: ticket.check_group_ids)
   end
 
   # Consumes one coupon usage for a persisted ticket_item, re-checking
