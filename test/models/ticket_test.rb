@@ -65,4 +65,22 @@ class TicketTest < ActiveSupport::TestCase
     assert_equal "membership_card", ticket.ticket_type
     assert_equal @group.id, ticket.group_id
   end
+
+  test "a group/membership_card ticket cannot point group_id at a group other than the event's own" do
+    other_group = create_group
+    # @event belongs to @group, NOT other_group — nothing about @event grants
+    # authority over other_group, so a ticket here must not be able to grant
+    # membership there.
+    %w[group membership_card].each do |type|
+      ticket = Ticket.new(event: @event, title: "t", ticket_type: type, group_id: other_group.id)
+      assert_not ticket.valid?, "#{type} ticket should reject a group_id that isn't the event's own group"
+      assert_includes ticket.errors[:group_id], "must be the event's own group for a #{type} ticket"
+    end
+  end
+
+  test "an event ticket_type ticket is unaffected by the group_id/event-group check" do
+    other_group = create_group
+    ticket = Ticket.new(event: @event, title: "t", ticket_type: "event", group_id: other_group.id)
+    assert ticket.valid?, ticket.errors.full_messages.join(", ")
+  end
 end
