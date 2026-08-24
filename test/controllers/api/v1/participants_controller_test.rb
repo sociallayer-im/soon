@@ -214,20 +214,21 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, json_response["data"].size
   end
 
-  test "index hides a private event's attendees from a non-member" do
+  test "index shows an unlisted event's attendees to anyone, matching EventPolicy#show?" do
     owner = create_user
     outsider = create_user
     group = create_group(owner: owner)
     event = create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
     create_participant(event: event, user: owner)
 
-    # This action used to require a token but never check it against the event,
-    # so any signed-in user could enumerate a private event's attendees.
+    # Tied to EventPolicy#show? (see participants_controller.rb#index) — as of
+    # 2026-08-24 that means "visible via direct link to anyone," same as the
+    # event itself, not "group members only."
     get "/api/v1/events/#{event.id}/participants", headers: auth_headers(outsider)
-    assert_response :forbidden
+    assert_response :success
 
     get "/api/v1/events/#{event.id}/participants"
-    assert_response :forbidden
+    assert_response :success
   end
 
   test "index hides a draft event's attendees from everyone but its managers" do

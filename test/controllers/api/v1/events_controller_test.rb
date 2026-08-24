@@ -222,7 +222,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "show hides a private event from a non-member but shows it to a member" do
+  test "show is visible via direct link to anyone, member or not — unlisted only means excluded from listings" do
     owner = create_user
     member = create_user
     outsider = create_user
@@ -231,9 +231,12 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     event = create_event(group: group, owner: owner, status: "published", visibility: "unlisted")
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
-    assert_response :forbidden
+    assert_response :success
 
     get "/api/v1/events/#{event.id}", headers: auth_headers(member)
+    assert_response :success
+
+    get "/api/v1/events/#{event.id}"
     assert_response :success
   end
 

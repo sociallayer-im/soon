@@ -2,12 +2,14 @@ class EventPolicy < ApplicationPolicy
   def index?  = true
 
   # Draft/archived events are visible only to the owner or a group manager.
-  # normal/open_registration events are visible to anyone; unlisted events to
-  # group members only.
+  # normal/open_registration/unlisted are all visible to anyone who has the
+  # event's URL — "unlisted" only means excluded from public listings (see
+  # Event::VISIBILITIES), the same sense as an unlisted YouTube video, not a
+  # membership gate. It used to be, back when this value was called "private";
+  # the rename to "unlisted" wasn't matched here until 2026-08-24.
   def show?
     return owner?(record) || group_admin?(record.group) if %w[draft archived].include?(record.status)
-    return true if %w[normal open_registration].include?(record.visibility)
-    owner?(record) || group_member?(record.group) # unlisted
+    true
   end
 
   # Whether the current user may join (become a participant in) this event.

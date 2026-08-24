@@ -21,8 +21,11 @@ class Event < ApplicationRecord
   # open_registration — publicly listed like normal, but bypasses the group's
   #                      can_join_event restriction: anyone can join even when
   #                      the group requires member/manager to join events.
-  # unlisted           — not in public listings; visible via direct link to
-  #                      the owner or group members only (was "private").
+  # unlisted           — not in public listings; visible to anyone with a
+  #                      direct link, like an unlisted YouTube video (was
+  #                      "private", which really was owner/member-only —
+  #                      EventPolicy#show? wasn't updated to match the rename
+  #                      until 2026-08-24).
   VISIBILITIES = %w(normal open_registration unlisted).freeze
 
   validates :title, presence: true
