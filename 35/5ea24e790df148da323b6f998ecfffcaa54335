@@ -1,0 +1,23 @@
+app/services/object_store.rb
+  s_e9ed806a3d225c::t_f0367ab46fbfb5 4-9,11-17,23-29,32-36,38-44,49-55,59-64
+  s_e9ed806a3d225c::t_fb737d9ba962f8 104,109-111
+ginger.cn.yml
+  s_e9ed806a3d225c::t_8719081dbbbbd0 68
+  s_e9ed806a3d225c::t_983b504117d62f 78-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "355ea24e790df148da323b6f998ecfffcaa54335",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
