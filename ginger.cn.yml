@@ -65,6 +65,7 @@ env:
   # payments would then only ever confirm through the 5-minute sweeper.
   # WEB_URL (the frontend) is a different thing and would 404 the callback.
   API_URL: "https://api.juluo.xyz"
+  OBJECT_STORE_PROVIDER: "oss"
 
 secrets:
   load: [.env.cn.production]
@@ -74,14 +75,17 @@ secrets:
     - JWT_SECRET
     - NEXT_TOKEN
     - RESEND_API_KEY
-    # Same R2 bucket as SG — see ginger.yml. It matters more here: the
-    # imagedelivery.net URLs the old uploader produced are unreachable from
-    # mainland China, datastore.sola.day is not.
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_HOST
-    - AWS_BUCKET
-    - S3_URL
+    # Uploads go to Aliyun OSS here, not the R2 bucket SG uses (see
+    # ginger.yml) — R2 itself turned out to be unreachable from mainland
+    # China too (found 2026-08-26: uploads hung forever, never erroring,
+    # because the S3 client had no timeout). ObjectStore switches backend
+    # entirely on OBJECT_STORE_PROVIDER; the AWS_* vars are unused here.
+    - OSS_ACCESS_KEY_ID
+    - OSS_ACCESS_KEY_SECRET
+    - OSS_ENDPOINT
+    - OSS_REGION
+    - OSS_BUCKET
+    - OSS_PUBLIC_URL
     - MAIL_FROM
     - WEB_URL
     - APP_HOST
