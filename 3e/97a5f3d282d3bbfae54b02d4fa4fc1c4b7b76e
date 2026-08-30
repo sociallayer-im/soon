@@ -1,0 +1,27 @@
+app/jobs/withdrawal_requested_mail_job.rb
+  s_e9ed806a3d225c::t_4c52ef3c8672fd 1-16
+app/views/group_mailer/withdrawal_requested.text.erb
+  s_e9ed806a3d225c::t_620c36bfe710c7 1-10
+app/views/group_mailer/withdrawal_requested.html.erb
+  s_e9ed806a3d225c::t_4c41612d96592c 1-27
+app/mailers/group_mailer.rb
+  s_e9ed806a3d225c::t_348f95aba0ebe4 35-46
+app/controllers/api/v1/withdrawals_controller.rb
+  s_e9ed806a3d225c::t_613e75ed05f359 73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3e97a5f3d282d3bbfae54b02d4fa4fc1c4b7b76e",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
