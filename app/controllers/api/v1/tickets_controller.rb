@@ -176,6 +176,7 @@ class Api::V1::TicketsController < Api::BaseController
       return render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
     end
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
+    return unless approved_for_payment?(ticket_item)
 
     if ticket_item.amount.to_i > 0
       return unless payment_proof_ok?(ticket_item, chain: ticket_item.chain, txhash: params[:txhash])
@@ -247,6 +248,7 @@ class Api::V1::TicketsController < Api::BaseController
     return render_error("not authorized", status: :forbidden) unless ticket_item.user_id == current_user.id
     return render_error("ticket_item is not for stripe") unless ticket_item.payment_provider == "stripe"
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
+    return unless approved_for_payment?(ticket_item)
 
     setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
     unless setting&.status == "active"
@@ -304,6 +306,7 @@ class Api::V1::TicketsController < Api::BaseController
     return render_error("not authorized", status: :forbidden) unless ticket_item.user_id == current_user.id
     return render_error("ticket_item is not for wechat") unless ticket_item.payment_provider == "wechat"
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
+    return unless approved_for_payment?(ticket_item)
 
     setting = WechatPaySetting.find_by(id: ticket_item.wechat_pay_setting_id)
     return render_error("wechat pay is not configured for this ticket") unless setting&.status == "active"
@@ -789,6 +792,19 @@ class Api::V1::TicketsController < Api::BaseController
     return false unless order
 
     order["trade_state"] == "SUCCESS" && order.dig("amount", "total").to_i >= ticket_item.amount.to_i
+  end
+
+  # rsvp puts a participant into "pending" until a manager approves them
+  # (event.require_approval / form_id / ticket.need_approval), but that used
+  # to only affect seat counting — the TicketItem it built was payable right
+  # away, so a buyer could pay via any rail before ever being approved. This
+  # is the shared gate the three payment endpoints (checkout_session,
+  # wechat_prepay, verify_payment) all call before moving money.
+  def approved_for_payment?(ticket_item)
+    return true unless ticket_item.participant&.status == "pending"
+
+    render_error("registration is awaiting approval — payment is not available until then")
+    false
   end
 
   def build_paid_ticket_item(participant)
