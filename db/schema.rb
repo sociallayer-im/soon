@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_22_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -667,6 +667,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_22_030000) do
     t.string "image_url"
     t.string "location"
     t.string "logo_url"
+    t.boolean "map_enabled", default: false, null: false
     t.integer "memberships_count", default: 0, null: false
     t.string "name"
     t.string "nickname"

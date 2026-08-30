@@ -18,6 +18,10 @@ class GroupBlueprint < Blueprinter::Base
            # topic. The frontend decides whether to draw the tab from the
            # first of these, so it has to travel with the group.
            :discussion_enabled, :can_post_topic,
+           # Per-group opt-in for the Google Maps display (marker map, event
+           # map, group-home map view) — the deployment-wide
+           # NEXT_PUBLIC_ENABLE_GOOGLE_MAP flag is the other half of the gate.
+           :map_enabled,
            # The one event whose tickets grant group membership. At most one
            # per group; nil until a manager designates one.
            :group_ticket_event_id,
