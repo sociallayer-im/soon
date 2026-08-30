@@ -1,0 +1,27 @@
+<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">A withdrawal was requested</h1>
+<p style="margin: 0 0 16px; color: #4b5563;">
+  <strong><%= @requester.nickname.presence || @requester.name || @requester.id %></strong> requested a withdrawal from <strong><%= @group.display_name %></strong>'s WeChat Pay balance on <%= MailerHelper::BRAND_NAME %>.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 16px;">
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Group</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @group.name %></td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Amount</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @withdrawal.amount %> <%= @withdrawal.currency.upcase %></td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Bank account</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @withdrawal.bank_name %> · <%= @withdrawal.bank_account_name %></td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 0; color: #6b7280;">Requested</td>
+    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @withdrawal.created_at.strftime("%b %-d, %Y · %H:%M UTC") %></td>
+  </tr>
+</table>
+
+<p style="margin: 0; color: #6b7280; font-size: 13px;">
+  You're receiving this because your account is a platform administrator.
+</p>

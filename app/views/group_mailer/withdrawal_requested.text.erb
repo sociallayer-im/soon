@@ -1,0 +1,10 @@
+A withdrawal was requested
+
+<%= @requester.nickname.presence || @requester.name || @requester.id %> requested a withdrawal from <%= @group.display_name %>'s WeChat Pay balance on <%= MailerHelper::BRAND_NAME %>.
+
+Group: <%= @group.name %>
+Amount: <%= @withdrawal.amount %> <%= @withdrawal.currency.upcase %>
+Bank account: <%= @withdrawal.bank_name %> · <%= @withdrawal.bank_account_name %>
+Requested: <%= @withdrawal.created_at.strftime("%b %-d, %Y · %H:%M UTC") %>
+
+You're receiving this because your account is a platform administrator.

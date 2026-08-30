@@ -32,4 +32,16 @@ class GroupMailer < ApplicationMailer
     @buyer = @ticket_item.user
     mail(to: recipient, subject: "New ticket purchase — #{@group.display_name}")
   end
+
+  # Tells a platform admin that a manager/owner just requested a WeChat Pay
+  # withdrawal. Fanned out by WithdrawalRequestedMailJob, one delivery per
+  # admin address — withdrawals move real money out of the platform's pooled
+  # account, so an admin should hear about every request as it happens rather
+  # than discovering it later in the ledger.
+  def withdrawal_requested(withdrawal_id:, recipient:)
+    @withdrawal = Withdrawal.find(withdrawal_id)
+    @group = @withdrawal.group
+    @requester = @withdrawal.user
+    mail(to: recipient, subject: "Withdrawal requested — #{@group.display_name}")
+  end
 end

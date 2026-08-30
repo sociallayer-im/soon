@@ -70,6 +70,7 @@ class Api::V1::WithdrawalsController < Api::BaseController
     end
 
     if outcome[:withdrawal]
+      WithdrawalRequestedMailJob.perform_later(withdrawal_id: outcome[:withdrawal].id)
       render json: WithdrawalBlueprint.render(outcome[:withdrawal]), status: :created
     else
       render_error(outcome[:error])
