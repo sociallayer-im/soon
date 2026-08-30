@@ -2,7 +2,92 @@
 
 All notable changes to `soon/` are recorded here.
 
-## 2026-08-17 — one handle rule, and the uniqueness constraint that had quietly lapsed
+## 2026-08-26 — CN image uploads moved off R2 to Aliyun OSS
+
+Deployed to CN only as `355ea24` (SG unaffected — still R2). Reported as
+"creating an event, cover image upload fails" on juluo.xyz.
+
+The upload endpoint itself was never broken — 48h of logs showed every real
+`/api/v1/upload/image` request on CN completing with 200. The actual failure
+was silent: a request would log `Started`/`Processing`/`Parameters` and then
+never log `Completed` at all. `curl` from the juluo.xyz host straight to R2's
+endpoint (`b96d05...r2.cloudflarestorage.com`) confirmed why — connection
+timeout, no proxy, nothing GFW-adjacent logged as blocked, just silence. The
+S3 client had no timeout configured, so the request thread hung forever
+instead of failing. On a host running `RAILS_MAX_THREADS=3` /
+`GOOD_JOB_MAX_THREADS=1`, a few hung uploads is enough to stall the app
+entirely — this was a bigger risk than the symptom suggested.
+
+`ObjectStore` (`app/services/object_store.rb`) now picks its backend via
+`OBJECT_STORE_PROVIDER`, set to `oss` only in `ginger.cn.yml`; unset (SG)
+keeps behaving exactly as before, against R2. Both backends go through the
+same `aws-sdk-s3` client — Aliyun OSS ships an S3-compatible API, so no new
+gem was needed, just region-appropriate config (OSS wants its real region id
+as `region:`; R2 wants `"auto"`). The client now also sets
+`http_open_timeout`/`http_read_timeout` regardless of backend, so a future
+outage anywhere fails fast with a 502 instead of repeating this hang.
+
+New infrastructure, CN-only: bucket `juluo-assets` in `oss-cn-hangzhou`,
+public-read, bound to a custom domain `assets.juluo.xyz` with a Let's
+Encrypt certificate issued via `acme.sh`'s DNS-01 flow (reusing the Aliyun
+DNS API credentials already saved from the `wamo.juluo.xyz` cert — same
+account, different domain). Binding the custom domain required first
+turning off Aliyun's account-level "Block Public Access" toggle (no CLI
+path for it, console-only) before `public-read` ACL would take.
+`seastar-app`'s image-proxy CORS allowlist (`src/app/api/image-proxy/route.ts`,
+`d2c2b28`) was extended to include `assets.juluo.xyz` alongside
+`datastore.sola.day`, so the share-card capture feature keeps working for
+CN-uploaded images too.
+
+New objects on CN now live at `assets.juluo.xyz/<hash>` rather than
+`datastore.sola.day/<hash>` — a different host than the ~10k pre-existing
+R2-only keys, deliberately: OSS is a separate namespace, not a mirror of R2.
+
+## 2026-08-25 — unlisted events visible via direct link; event-detail crash and share-card capture fixes
+
+Deployed to SG and CN as `c012809`, frontend `seastar-app@10b01a0`.
+
+**`unlisted` meant "owner/members only" since the day it was renamed from
+`private`, but the policy was never updated to match the new name.**
+`EventPolicy#show?` (and, transitively, the attendee list at
+`ParticipantsController#index`, which authorizes on the same `:show?`) still
+gated `unlisted` events to the owner or a group member — closer to the old
+`private` semantics than to what "unlisted" is supposed to mean anywhere
+else (an unlisted YouTube video is visible to anyone with the link; it just
+doesn't appear in a public listing). Reported as "this event isn't
+visible, is it because it's unlisted or did it disappear" for a specific
+event URL — it was the former. Fixed by dropping the group-membership branch
+entirely for non-draft/non-archived events: `show?` now only gates
+draft/archived (owner or group admin), and returns `true` for every other
+status/visibility combination. `Event::VISIBILITIES`'s comment was also
+corrected to describe the intended behavior instead of the accidental one.
+
+**A draft/archived/unlisted event 403'd the whole detail page instead of
+falling through to the 404 the page already handles.**
+`seastar-app`'s `event/detail/[eventid]/data.ts` called `getEventDetailById`
+without catching a non-404 error; the backend answers 403 (not 404) for an
+event the viewer isn't allowed to see, so `requestOrNull` (which only
+swallows 404) let the `SolaApiError` propagate and crash the page. Now
+caught specifically for `status === 403`, falling through to the existing
+`!eventDetail -> /404` redirect. Given the fix above, this now only fires
+for draft/archived events viewed by a non-owner/non-admin — unlisted no
+longer reaches this branch at all.
+
+**The share page's "Save Image" button failed with a generic "Failed to
+capture image: Unknown error."** `saveDomImage` uses `dom-to-image` to
+rasterize the share card, and `dom-to-image` fetches every embedded `<img>`
+itself to inline it — a fetch that `datastore.sola.day` (the R2-backed image
+host) fails silently because it sends no
+`Access-Control-Allow-Origin` header. Fixed with a same-origin relay,
+`seastar-app/src/app/api/image-proxy/route.ts`: cross-origin `<img>` sources
+are rewritten to `/api/image-proxy?url=...` before capture and restored
+after, so `dom-to-image`'s internal fetch never leaves the app's own origin.
+The proxy target is allow-listed by hostname (not a general-purpose relay)
+to avoid becoming an SSRF vector.
+
+Also in this deploy: `seastar-app`'s Dockerfile/`package.json`/
+`.node-version` pinned to Node 24.19, matching the newly-updated local `fnm`
+default — unrelated to the fixes above, bundled into the same deploy.
 
 Deployed to SG and CN as `9a637bc`, with frontend `seastar-app@e547e7c`. No
 migration, so a rollback restores the code cleanly — but the data steps below
