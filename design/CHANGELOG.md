@@ -89,6 +89,188 @@ Also in this deploy: `seastar-app`'s Dockerfile/`package.json`/
 `.node-version` pinned to Node 24.19, matching the newly-updated local `fnm`
 default — unrelated to the fixes above, bundled into the same deploy.
 
+## 2026-08-22 — WeChat withdrawal, group-level event approval, membership cards, and an authorization gap in ticket group_id
+
+Deployed to SG and CN as `e125243`, frontend `seastar-app@b3d68be` (WeChat
+withdrawal UI, meeting-link recognition, membership-card UI) and
+`76d3123` (membership-card feature merge).
+
+**A ticket's `group_id` was never checked against its own event's group.**
+Ticket create/update authorized against the *event* (owner, that event's
+group admin, or a co-host) but never against `group_id` itself — a field
+`ticket_params` lets the client set directly. Anyone who could edit some
+unrelated event could already point a `group`-type ticket's `group_id` at a
+group they had no role in; `membership_card` (added the same week, see
+below) made this easier to trigger, since unlike a plain group ticket it
+carried no requirement that the event even be its target group's designated
+ticket event. A successful purchase would silently grant real membership in
+that group via `TicketItem#confirm_payment!`. Fixed with a model-level
+validation, `Ticket#group_matches_event_group`, run `before_validation`
+rather than `before_save` — late enough would have missed
+`inherit_group_ticket_type`'s auto-fill still needing to apply first. Every
+pre-existing legitimate usage already satisfied the new constraint.
+
+**Expiring membership cards.** `memberships.expires_at` (nullable — NULL
+stays permanent, so every existing manager/owner/group-ticket row is
+unaffected) backs a new `membership_card` ticket type that grants or
+extends a validity window on purchase, stacking remaining time across
+repeat purchases rather than resetting it. `Membership#active?` collided
+with ActiveRecord's auto-generated predicate for the `active` column and was
+renamed to `#unexpired?` before anything came to depend on either meaning.
+Duration moved from a hardcoded 30-day constant to a per-ticket
+`membership_duration_days` column, so one group can sell several card tiers
+(7/30/365-day) at different prices. Two review-pass fixes landed same-day:
+`inherit_group_ticket_type` was forcing every ticket on a group's ticket
+event to `ticket_type: "group"`, which would have silently downgraded a
+`membership_card` ticket created on that event; and `confirm_payment!`'s
+membership-card branch had no guard against a retried webhook for an
+already-succeeded order, so at-least-once delivery was stacking a second
+full duration onto one purchase — now gated on `first_confirmation`.
+
+**Group-level event approval.** `groups.require_event_approval` forces a
+non-manager's event submission into `pending` server-side (a manager's own
+event is unaffected); a new `pending` collection filter on `GET /events`
+exposes the queue, scoped by the existing `visible_to` rules (owner or group
+manager only). Closed one bypass in the same change: a pending event's
+owner could self-publish with a plain `PATCH` status change, skipping
+review entirely — `gate_pending_status!` now blocks it.
+
+**WeChat withdrawal settlement.** Group-pooled WeChat balance, withdrawable
+by any manager/owner, with an admin settlement backend (list/settle/reject
+with a note, paginated) and a per-event `order_summary` revenue rollup for
+organizers. WeChat-paid ticket creation is now restricted to group
+managers/owners, and the event owner creating one must also hold a
+manager/owner role. WeChat sign-in also backfills nickname (display name
+only) and avatar (only if unset), and `merge_wechat_account!` carries both
+across an account merge.
+
+## 2026-08-21 — event visibility rename, registry topology change, recurring-series cover image
+
+Deployed to SG and CN, frontend `seastar-app@095cfbf` for the visibility
+rename and `58c6816` for the cover-image fix.
+
+**`visibility` renamed from a confusing public/private binary to
+`normal`/`open_registration`/`unlisted`** (`9f061c7`) — `normal` is the old
+`public` default, `unlisted` is the old `private`, and
+`open_registration` is new: publicly listed like `normal`, but bypasses the
+group's `can_join_event` restriction so a member-only group can still run
+one event open to everyone. In the same change, `can_join_event` — stored
+and exposed on `Group` since earlier, but never actually enforced anywhere —
+was wired into `EventPolicy#join?`, gating `ParticipantsController#create`.
+(`EventPolicy#show?` itself was not updated to match the rename at this
+point — `unlisted` kept the old private/members-only read semantics for
+another three days; see 2026-08-25 above for the fix and why that gap
+mattered enough to prompt a direct report.)
+
+**Deploys now build once and sync, instead of building twice.**
+`registry.sola.day` (home-registry.sola.day under its new domain) syncs a
+pushed `sola/soon` tag to `registry.juluo.xyz` itself on push, so CN no
+longer needs its own build — `ginger deploy -c ginger.cn.yml --skip-push`
+picks up whatever SG just pushed. This also fixed a latent path mismatch it
+depended on: CN's image reference had been `registry.juluo.xyz/soon` (no
+`sola/` prefix), which would not have matched where the sync actually lands
+the image.
+
+**A recurring series lost its cover image on every occurrence.**
+`event_attributes` permitted `title`/`content`/... but not
+`image_url`/`image_note`, so creating or editing a series silently produced
+occurrences with no cover regardless of what the form sent — a gap the
+single-event path never had, since it doesn't go through this permit list.
+
+## 2026-08-18 — permission model written down; promotion and demotion split apart
+
+Deployed to SG and CN as `e8396d8`.
+
+**`design/PERMISSIONS.md`** now records what the authorization code actually
+does — roles and who may grant or revoke them, the parent-group manager's
+one narrow capability (see 2026-08-17 below), team badge visibility, the
+discussion feature's three-layer visibility, and two hard rules about
+endpoint auth that this project keeps re-violating. §7 names the four
+repeat mistakes: a silently dropped `permit` entry, a missing
+`member_group_ids`, a policy returning `nil` where a client expects
+`false`, and `UserMerger` not knowing about a new table. Every claim in the
+doc was checked against the actual policy code rather than written from
+memory; changed claims carry the date and reason.
+
+**A manager could promote a peer but also demote or remove one** —
+`can_change_role?` granted any manager every role change, which made
+peer-clearing possible: one manager strips another's role, and the demoted
+manager cannot undo it themselves. Promotion is now open to any manager
+(additive, and an owner can reverse it), but demotion and removal are
+owner-only — `can_remove?` had granted removal to any manager too, which
+would have made the demotion rule decorative, since removal is strictly
+worse. The parent-group grant from 2026-07-29 (a two-way toggle over a
+child group's manager role) is narrowed to its promoting half only, so the
+rule reads the same regardless of which side of the parent/child boundary
+you're standing on.
+
+A same-day review pass fixed three renderers (group freeze/create/update)
+that never passed the viewer to the blueprint, so a manager editing their
+own group got a response with private team badges stripped until reload —
+fail-safe rather than leaky, but still wrong; and gave platform admins
+private badges everywhere else already does (`Category.visible_to`
+short-circuits on `platform_admin?`, so withholding them here would have
+been the actual exception).
+
+## 2026-08-17 (later) — teams, and a discussion feature with three visibility holes
+
+Deployed to SG and CN as `fe88065`, frontend `seastar-app@881269d` (roster
+UI) building on `55166f7`/`f5c4603`/`be74307`/`4ce0e73`.
+
+**Teams**, a named grouping of a group's members — what `Track` already is
+for events. Someone can belong to any number of teams (a join table, not a
+column on `Membership`), and a team carries no internal role: the team IS
+the role, since `GroupPolicy#manage?` already answers who may change it.
+Slugs are unique per group (deliberately unlike tracks, whose global unique
+index means the first community to use a word owns it everywhere), and a
+non-Latin name (e.g. `核心团队`) that `parameterize` would otherwise reduce to
+an empty base now falls back to a short random slug instead of the literal
+word `team` for every such team in a group.
+
+Teams replace discussion's `category_members` outright rather than
+migrating it — categories existed in `main` but had never been deployed, so
+that migration window simply never opened. A private board now names teams
+instead of user ids, which gives the restriction an actual meaning and one
+place to maintain it; leaving a group leaves its teams, so nobody keeps a
+team badge — or the board access it might gate — after they're gone.
+
+Three bugs found reviewing the feature before deploy: (1) the per-group
+`discussion_enabled` switch was only checked on the two `?group_id`-scoped
+endpoints — every id-addressed endpoint (show, replies, update, destroy,
+pin, flag, category and reply routes) ignored it, so switching a group's
+forum off left every existing topic still readable/editable/deletable by
+anyone with the URL; (2) the reply list ran one membership query per reply
+because `can_edit` built a fresh policy each time — the manager half of
+that answer is constant for a whole thread, so the controller now resolves
+it once (10 queries flat instead of 10 + one per reply); (3) search
+interpolated the term into an `ILIKE` pattern unescaped, so `%` matched the
+whole board and `_` matched everything — still parameterized, so not
+injectable, just wrong. All three now have regression tests, including a
+query-count assertion for the N+1.
+
+Two authorization holes closed in the same window: a team's membership and
+name had gone into the public roster payload by default, so a team's
+existence and roster were world-readable even though the dedicated `/teams`
+endpoint refused the same information to non-members — teams now carry
+`is_public` (off by default), rendered only to members of a private team's
+group. And a parent group's managers could open (200) a child group's
+manager-only topic but were refused (403) every moderation action on it —
+`Category.visible_to` had granted parent managers manager-tier board access
+on the assumption that "manages children" extends that far, which
+`GroupPolicy` deliberately never granted; visibility was narrowed to match
+the authorization that already existed.
+
+Separately, `UserMerger` knew nothing about teams, topics, or replies —
+merging an account that had either raised a foreign-key violation and
+failed outright, and `User`'s `dependent: :destroy` would have deleted a
+person's discussion posts rather than transferring them. Both now repoint
+onto the survivor (teams deduplicated, since two accounts can end up
+sharing one); the merge order is load-bearing and commented, since
+`Membership#after_destroy` drops a leaver's team rows and deduping
+memberships first would delete the very rows waiting to be handed over.
+
+## 2026-08-17 — one handle rule, and the uniqueness constraint that had quietly lapsed
+
 Deployed to SG and CN as `9a637bc`, with frontend `seastar-app@e547e7c`. No
 migration, so a rollback restores the code cleanly — but the data steps below
 are not undone by one, and were run deliberately after the deploy for that
