@@ -233,6 +233,38 @@ Rails.application.routes.draw do
         end
       end
 
+      # Hackathons. Same two-switch gate as polls (HACKATHON_ENABLED +
+      # groups.hackathon_enabled) — see design/HACKATHON_MODULE.md.
+      resources :hackathons, only: %i[index show create update destroy] do
+        member do
+          post  :publish
+          post  :unpublish
+          patch :tracks
+          post  :judges_team
+          post  :flag
+          post  :unflag
+          post  :restore
+          get   :export
+        end
+      end
+      resources :hackathon_projects, only: %i[index show create update destroy] do
+        member do
+          post   :submit
+          delete :submit, action: :unsubmit
+          post   :review
+          post   :award
+          post   :star
+          delete :star, action: :unstar
+          post   :join
+          delete :join, action: :leave
+          post   :members, action: :add_member
+          delete "members/:user_id", action: :remove_member
+          post   :transfer
+          post   :flag
+          post   :unflag
+        end
+      end
+
       # Remember (shared commemorative badge). Static paths before :voucher_id.
       get  "remember/meta",               to: "remember#meta"
       get  "remember/related_groups",     to: "remember#related_groups"
