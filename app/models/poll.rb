@@ -31,6 +31,7 @@ class Poll < ApplicationRecord
   validates :visibility, inclusion: { in: VISIBILITIES }
   validates :results,    inclusion: { in: RESULTS }
   validate  :number_range
+  validate  :eligibility_refs_exist
 
   scope :alive, -> { not_flagged }
   scope :pending_close, -> { where(closed_at: nil).where("close_at <= ?", Time.current) }
@@ -101,7 +102,23 @@ class Poll < ApplicationRecord
     }
   end
 
+  def eligible_groups = Group.where(id: eligible_group_ids)
+  def eligible_teams  = Team.where(id: eligible_team_ids)
+
   private
+
+  # A team named here must be one of this group's own; a group must exist. An
+  # id that matches nothing would silently lock everyone out.
+  def eligibility_refs_exist
+    self.eligible_group_ids = Array(eligible_group_ids).map(&:to_s).uniq
+    self.eligible_team_ids  = Array(eligible_team_ids).map(&:to_s).uniq
+    if eligible_group_ids.any? && Group.where(id: eligible_group_ids).count != eligible_group_ids.size
+      errors.add(:eligible_group_ids, "contains an unknown group")
+    end
+    if eligible_team_ids.any? && group && group.teams.where(id: eligible_team_ids).count != eligible_team_ids.size
+      errors.add(:eligible_team_ids, "must be teams of this group")
+    end
+  end
 
   def number_range
     if number?
