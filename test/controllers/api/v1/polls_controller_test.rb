@@ -326,6 +326,53 @@ class Api::V1::PollsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "eligibility: a team or another group replaces the members-only default; managers always may" do
+    with_polls do
+      team = @group.teams.create!(name: "Volunteers", slug: "volunteers")
+      TeamMembership.create!(team: team, user: @member)
+      other_group = create_group(owner: @stranger)
+      outsider = create_user
+      create_membership(user: outsider, group: other_group)
+
+      post "/api/v1/polls", params: { poll: { group_id: @group.id, title: "x", options: [ { title: "a" }, { title: "b" } ],
+                                              eligible_team_ids: [ team.id ] } },
+           headers: auth_headers(@owner)
+      assert_response :created
+      poll = Poll.find(json_response["id"])
+      assert_equal [ "Volunteers" ], json_response["eligible_teams"].map { |t| t["name"] }
+      a = poll.poll_options.first.id
+
+      post "/api/v1/polls/#{poll.id}/vote", params: { option_id: a }, headers: auth_headers(@member)
+      assert_response :success
+      post "/api/v1/polls/#{poll.id}/vote", params: { option_id: a }, headers: auth_headers(@member2)
+      assert_response :forbidden, "a member outside the team is no longer eligible"
+      post "/api/v1/polls/#{poll.id}/vote", params: { option_id: a }, headers: auth_headers(@owner)
+      assert_response :success, "managers always may"
+
+      poll.update!(eligible_team_ids: [], eligible_group_ids: [ other_group.id ])
+      post "/api/v1/polls/#{poll.id}/vote", params: { option_id: a }, headers: auth_headers(outsider)
+      assert_response :success
+      post "/api/v1/polls/#{poll.id}/vote", params: { option_id: a }, headers: auth_headers(@member2)
+      assert_response :forbidden
+
+      # Only this group's teams; unknown groups are refused too.
+      foreign_team = other_group.teams.create!(name: "T", slug: "t")
+      post "/api/v1/polls", params: { poll: { group_id: @group.id, title: "x", options: [ { title: "a" }, { title: "b" } ],
+                                              eligible_team_ids: [ foreign_team.id ] } },
+           headers: auth_headers(@owner)
+      assert_response :unprocessable_entity
+      post "/api/v1/polls", params: { poll: { group_id: @group.id, title: "x", options: [ { title: "a" }, { title: "b" } ],
+                                              eligible_group_ids: [ "nope" ] } },
+           headers: auth_headers(@owner)
+      assert_response :unprocessable_entity
+
+      # Eligibility is locked with the options once the grace window passes.
+      poll.update_columns(first_voted_at: 11.minutes.ago)
+      patch "/api/v1/polls/#{poll.id}", params: { poll: { eligible_group_ids: [] } }, headers: auth_headers(@owner)
+      assert_response :unprocessable_entity
+    end
+  end
+
   test "poll_enabled and can_create_poll persist from a group update" do
     patch "/api/v1/groups/#{@group.id}",
           params: { group: { poll_enabled: false, can_create_poll: "manager" } },

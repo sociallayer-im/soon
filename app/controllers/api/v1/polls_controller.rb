@@ -58,8 +58,8 @@ class Api::V1::PollsController < Api::BaseController
     authorize @poll, :update?
 
     attrs = poll_params.except(:group_id, :options).to_h
-    locked = %w[title poll_type min_value max_value]
-    changes_locked = locked.any? { |k| attrs.key?(k) && attrs[k].to_s != @poll[k].to_s } ||
+    locked = %w[title poll_type min_value max_value eligible_group_ids eligible_team_ids]
+    changes_locked = locked.any? { |k| attrs.key?(k) && Array(attrs[k]).map(&:to_s).sort != Array(@poll[k]).map(&:to_s).sort } ||
                      poll_params.key?(:options)
     if changes_locked && !@poll.editable?
       return render_error("poll can no longer be edited after the first vote")
@@ -239,6 +239,7 @@ class Api::V1::PollsController < Api::BaseController
   def poll_params
     params.require(:poll).permit(:group_id, :title, :content, :poll_type, :min_value, :max_value,
                                  :visibility, :results, :close_at,
-                                 options: [ :id, :title ])
+                                 options: [ :id, :title ],
+                                 eligible_group_ids: [], eligible_team_ids: [])
   end
 end

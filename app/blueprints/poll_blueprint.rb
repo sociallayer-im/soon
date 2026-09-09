@@ -5,7 +5,8 @@ class PollBlueprint < Blueprinter::Base
   identifier :id
 
   fields :group_id, :title, :poll_type, :min_value, :max_value, :visibility, :results,
-         :close_at, :closed_at, :votes_count, :created_at, :updated_at
+         :close_at, :closed_at, :votes_count, :created_at, :updated_at,
+         :eligible_group_ids, :eligible_team_ids
 
   field(:closed)  { |poll| poll.closed? }
   field(:flagged) { |poll| poll.flagged? }
@@ -23,6 +24,12 @@ class PollBlueprint < Blueprinter::Base
     field :can_vote do |poll, options|
       PollPolicy.new(options[:current_user], poll).vote?
     end
+
+    # Who may vote, as names: a group is a ref, a team is a ref — neither a
+    # roster. Lets the page say "members of X and the volunteers" instead of
+    # "you cannot vote" with no reason.
+    association :eligible_groups, blueprint: GroupBlueprint
+    association :eligible_teams, blueprint: TeamRefBlueprint
 
     field :can_edit do |poll, options|
       PollPolicy.new(options[:current_user], poll).update?

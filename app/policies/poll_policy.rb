@@ -24,12 +24,23 @@ class PollPolicy < ApplicationPolicy
   def flag?    = manages_group?
   def restore? = manages_group?
 
-  # Looser than create: any member may vote while the poll is open.
+  # Looser than create: while the poll is open, its group's managers and
+  # anyone the poll names as eligible may vote — by default, the group's
+  # members; otherwise members of the listed groups or teams.
   def vote?
     return false if user.nil?
     return false if record.closed?
+    return true  if manages_group?
 
-    group_member?(record.group) || manages_group?
+    eligible?
+  end
+
+  def eligible?
+    return false if user.nil?
+    return group_member?(record.group) if record.eligible_group_ids.empty? && record.eligible_team_ids.empty?
+
+    user.memberships.exists?(group_id: record.eligible_group_ids) ||
+      user.team_memberships.exists?(team_id: record.eligible_team_ids)
   end
 
   # The three visibility axes (design/POLL_MODULE.md §2.4). Managers are a
