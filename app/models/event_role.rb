@@ -3,7 +3,11 @@ class EventRole < ApplicationRecord
   # group_host  — the Group presented as host
   # custom_host — a hand-typed host (often no account)
   # co_host / speaker — people, either linked accounts or email invites
-  ROLES = %w(group_host custom_host co_host speaker).freeze
+  # judge       — a hackathon's jury, listed on its registration event
+  #               (design/HACKATHON_MODULE.md §2.1). A listing only: it is
+  #               NOT in EventPolicy::EDITOR_ROLES, so a judge cannot edit
+  #               the event the way every other role holder can.
+  ROLES = %w(group_host custom_host co_host speaker judge).freeze
 
   belongs_to :event
   # item is optional: email-invited co-hosts and hand-typed speakers have no

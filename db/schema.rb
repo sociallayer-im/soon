@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -640,6 +640,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
     t.string "banner_link_url"
     t.text "banner_text"
     t.text "bio"
+    t.string "can_create_hackathon", default: "manager", comment: "manager | member | everyone"
     t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
@@ -665,6 +666,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
     t.text "fed_public_key"
     t.string "group_tags", default: [], array: true
     t.string "group_ticket_event_id"
+    t.boolean "hackathon_enabled", default: false, null: false
     t.string "image_url"
     t.string "location"
     t.string "logo_url"
@@ -689,6 +691,87 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
     t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
+  end
+
+  create_table "hackathon_project_members", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "hackathon_id", null: false
+    t.string "project_id", null: false
+    t.string "role", default: "member", null: false, comment: "owner | member"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["hackathon_id", "user_id"], name: "index_hackathon_project_members_one_per_hackathon", unique: true
+    t.index ["project_id", "user_id"], name: "index_hackathon_project_members_on_project_id_and_user_id", unique: true
+  end
+
+  create_table "hackathon_project_stars", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "project_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["project_id", "user_id"], name: "index_hackathon_project_stars_on_project_id_and_user_id", unique: true
+    t.index ["user_id"], name: "index_hackathon_project_stars_on_user_id"
+  end
+
+  create_table "hackathon_projects", id: :string, force: :cascade do |t|
+    t.datetime "approved_at"
+    t.string "award"
+    t.text "content"
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.string "demo_url"
+    t.string "flag_reason"
+    t.datetime "flagged_at"
+    t.string "flagged_by_id"
+    t.string "hackathon_id", null: false
+    t.integer "members_count", default: 0, null: false
+    t.boolean "recruiting", default: false, null: false
+    t.datetime "rejected_at"
+    t.string "repo_url"
+    t.text "review_note"
+    t.string "seeking", default: [], null: false, array: true
+    t.integer "stars_count", default: 0, null: false
+    t.datetime "submitted_at"
+    t.string "tagline"
+    t.string "tech", default: [], null: false, array: true
+    t.string "title", null: false
+    t.string "track_id"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "video_url"
+    t.index ["hackathon_id", "recruiting"], name: "index_hackathon_projects_on_hackathon_id_and_recruiting"
+    t.index ["hackathon_id", "submitted_at"], name: "index_hackathon_projects_on_hackathon_id_and_submitted_at"
+    t.index ["hackathon_id", "track_id"], name: "index_hackathon_projects_on_hackathon_id_and_track_id"
+    t.index ["user_id"], name: "index_hackathon_projects_on_user_id"
+  end
+
+  create_table "hackathons", id: :string, force: :cascade do |t|
+    t.string "can_submit_project", default: "participant", null: false, comment: "participant | member | everyone"
+    t.text "content"
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.string "deleted_by_id"
+    t.datetime "end_at"
+    t.string "event_id"
+    t.string "flag_reason"
+    t.datetime "flagged_at"
+    t.string "flagged_by_id"
+    t.string "group_id", null: false
+    t.integer "projects_count", default: 0, null: false, comment: "submitted projects, recomputed by Hackathon#refresh_counts!"
+    t.string "projects_visibility", default: "after_submit", null: false, comment: "always | after_submit | after_review"
+    t.datetime "start_at"
+    t.string "status", default: "draft", null: false, comment: "draft | published"
+    t.datetime "submit_close_at"
+    t.datetime "submit_open_at"
+    t.string "tagline"
+    t.string "title", null: false
+    t.jsonb "tracks", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["event_id"], name: "index_hackathons_on_event_id", unique: true, where: "(event_id IS NOT NULL)"
+    t.index ["group_id", "status"], name: "index_hackathons_on_group_id_and_status"
+    t.index ["user_id"], name: "index_hackathons_on_user_id"
   end
 
   create_table "markers", id: :string, force: :cascade do |t|
@@ -1559,6 +1642,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_020000) do
   add_foreign_key "group_invites", "tickets"
   add_foreign_key "group_invites", "users", column: "receiver_id"
   add_foreign_key "group_invites", "users", column: "sender_id"
+  add_foreign_key "hackathon_project_members", "hackathon_projects", column: "project_id"
+  add_foreign_key "hackathon_project_members", "hackathons"
+  add_foreign_key "hackathon_project_members", "users"
+  add_foreign_key "hackathon_project_stars", "hackathon_projects", column: "project_id"
+  add_foreign_key "hackathon_project_stars", "users"
+  add_foreign_key "hackathon_projects", "hackathons"
+  add_foreign_key "hackathon_projects", "users"
+  add_foreign_key "hackathons", "events", on_delete: :nullify
+  add_foreign_key "hackathons", "groups"
+  add_foreign_key "hackathons", "users"
   add_foreign_key "markers", "groups"
   add_foreign_key "markers", "places"
   add_foreign_key "markers", "users", column: "owner_id"

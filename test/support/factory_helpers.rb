@@ -86,6 +86,23 @@ module FactoryHelpers
     poll
   end
 
+  # Published by default with an open window; the participant tier needs an
+  # event, so pass one or override can_submit_project.
+  def create_hackathon(group:, user:, event: nil, **attrs)
+    Hackathon.create!({
+      title: "Hackathon #{unique_suffix}", group: group, user: user, event: event,
+      status: "published", projects_visibility: "always",
+      can_submit_project: event ? "participant" : "member",
+      submit_close_at: 7.days.from_now
+    }.merge(attrs))
+  end
+
+  def create_hackathon_project(hackathon:, user:, **attrs)
+    project = HackathonProject.create!({ title: "Project #{unique_suffix}", hackathon: hackathon, user: user }.merge(attrs))
+    project.hackathon_project_members.create!(user: user, role: "owner")
+    project
+  end
+
   def create_event(group:, owner:, place: nil, **attrs)
     place ||= create_place
     Event.create!({

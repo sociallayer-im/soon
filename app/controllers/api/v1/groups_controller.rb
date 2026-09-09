@@ -126,6 +126,7 @@ class Api::V1::GroupsController < Api::BaseController
       :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,
       :discussion_enabled, :can_post_topic, :map_enabled,
       :poll_enabled, :can_create_poll,
+      :hackathon_enabled, :can_create_hackathon,
       social_links: {}, group_tags: [], event_tag_list: [],
       requirement_tag_list: [], venue_tag_list: [])
 

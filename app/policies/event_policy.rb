@@ -53,11 +53,17 @@ class EventPolicy < ApplicationPolicy
 
   private
 
+  # The roles that grant edit access. A whitelist rather than `where.not
+  # judge` so the next role added defaults to no power: a judge is listed on
+  # the event, not in charge of it (design/HACKATHON_MODULE.md §2.1).
+  EDITOR_ROLES = %w[group_host custom_host co_host speaker].freeze
+
   def event_co_host?(event)
     return false unless user
 
-    scope = event.event_roles.where(item_type: "User", item_id: user.id)
-    scope = scope.or(event.event_roles.where(email: user.email)) if user.email.present?
+    roles = event.event_roles.where(role: EDITOR_ROLES)
+    scope = roles.where(item_type: "User", item_id: user.id)
+    scope = scope.or(roles.where(email: user.email)) if user.email.present?
     scope.exists?
   end
 end
