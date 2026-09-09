@@ -1,0 +1,36 @@
+app/blueprints/poll_blueprint.rb
+  s_e9ed806a3d225c::t_dd0de852baa50d 28-33
+  s_e9ed806a3d225c::t_78276b7b05ce7b 8-9
+app/controllers/api/v1/polls_controller.rb
+  s_e9ed806a3d225c::t_9bf47d61cf0602 61
+  s_e9ed806a3d225c::t_15a833a85a66fe 62
+  s_e9ed806a3d225c::t_ed03d4be24c045 242-243
+db/migrate/20260909020000_add_eligibility_to_polls.rb
+  s_e9ed806a3d225c::t_ee3fc42c6e2f22 1-11
+app/models/poll.rb
+  s_e9ed806a3d225c::t_731e0739969e0c 34
+  s_e9ed806a3d225c::t_c6171022fe21c7 105-107,110-121
+  s_e9ed806a3d225c::t_90dd28c7f5b6a4 122
+app/policies/poll_policy.rb
+  s_e9ed806a3d225c::t_43e930e0c382b3 27-29,33-40,42-43
+test/controllers/api/v1/polls_controller_test.rb
+  s_e9ed806a3d225c::t_0e4b2aeca60f4b 329-375
+db/schema.rb
+  s_e9ed806a3d225c::t_4aa1a443c289b1 13,958-959
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "6795e74098ba3ceefed0ece56f3aac224dfb75d1",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
