@@ -1,0 +1,75 @@
+db/migrate/20260909010000_create_polls.rb
+  s_e9ed806a3d225c::t_e6738a87b46a02 1-78
+app/views/poll_mailer/closed.html.erb
+  s_e9ed806a3d225c::t_65ef602ee8bb16 1-6
+app/mailers/poll_mailer.rb
+  s_e9ed806a3d225c::t_e2840685d0a1d9 1-10
+app/models/poll_vote.rb
+  s_e9ed806a3d225c::t_678674e004aa19 1-29
+app/blueprints/poll_blueprint.rb
+  s_e9ed806a3d225c::t_bbd217859549c3 1-83
+app/controllers/api/v1/polls_controller.rb
+  s_e9ed806a3d225c::t_111d20d44b7581 1-244
+config/initializers/good_job.rb
+  s_e9ed806a3d225c::t_064f4d985513ef 42-46
+  s_e9ed806a3d225c::t_b7ca9ee3fa7e3e 31,33-34
+app/controllers/api/v1/groups_controller.rb
+  s_e9ed806a3d225c::t_f8f341c57fbddc 128
+app/blueprints/group_blueprint.rb
+  s_e9ed806a3d225c::t_f053f6143bef24 25-26
+config/routes.rb
+  s_e9ed806a3d225c::t_5298fda4bff5fd 222-235
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_09c00aa0ecdcc1 80-88
+test/controllers/api/v1/polls_controller_test.rb
+  s_e9ed806a3d225c::t_4531d45302d9a2 1-313,315-340
+  s_e9ed806a3d225c::t_fa581377b0d59d 314
+app/models/poll.rb
+  s_e9ed806a3d225c::t_7b22536c2fc94b 1-115
+design/POLL_MODULE.md
+  s_e9ed806a3d225c::t_5e8228113a06e1 28,31-32
+  s_e9ed806a3d225c::t_3308a12bc21bb2 215,221,229,231-249
+  s_e9ed806a3d225c::t_51074b92186b18 50-52,57,67,75-76,79-81,85-91,93-103
+  s_e9ed806a3d225c::t_2578609cd40957 1-20,25-27,29-30,33-49,53-56,58-66,68-74,77-78,82-84,104-214,216-220,222-228,230,250-293,300-314,316,325,328
+  s_e9ed806a3d225c::t_9a89e518249bf9 92
+  s_e9ed806a3d225c::t_972b6aa553db97 315,317-324,326-327,329
+  s_e9ed806a3d225c::t_26adb60368da88 294-299
+  s_e9ed806a3d225c::t_f1bacf41ef3466 21-24
+app/controllers/concerns/poll_gate.rb
+  s_e9ed806a3d225c::t_d4e8cd7157c0f9 1-20
+app/policies/poll_policy.rb
+  s_e9ed806a3d225c::t_06493a40d64298 1-66
+app/models/group.rb
+  s_e9ed806a3d225c::t_7e0cd43c67552f 16
+app/jobs/poll_auto_close_job.rb
+  s_e9ed806a3d225c::t_96870e0f29e74b 1-29
+app/models/poll_option.rb
+  s_e9ed806a3d225c::t_6567fe8bb39b28 1-6
+.env.example
+  s_e9ed806a3d225c::t_b65cf5bd03e68d 44-48
+test/jobs/poll_auto_close_job_test.rb
+  s_e9ed806a3d225c::t_fa581377b0d59d 4-5
+  s_e9ed806a3d225c::t_9820894085fa37 1-3,6-31
+app/views/poll_mailer/closed.text.erb
+  s_e9ed806a3d225c::t_7e0b24760ca41a 1-3
+ginger.yml
+  s_e9ed806a3d225c::t_b65cf5bd03e68d 94-96
+db/schema.rb
+  s_e9ed806a3d225c::t_44cd01b9dad632 13,643,678,929-976,1584-1589
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "ccff0b23719726945f4b63277151301f6122e2d0",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
