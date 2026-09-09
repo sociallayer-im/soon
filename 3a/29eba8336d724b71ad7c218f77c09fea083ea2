@@ -1,0 +1,76 @@
+.env.example
+  s_e9ed806a3d225c::t_0543902319cbe1 56-57
+ginger.yml
+  s_e9ed806a3d225c::t_0543902319cbe1 97-98
+app/blueprints/hackathon_project_blueprint.rb
+  s_e9ed806a3d225c::t_5e6e48e35da989 1-63
+app/controllers/api/v1/groups_controller.rb
+  s_e9ed806a3d225c::t_9cecf1ef3709d2 129
+app/models/group.rb
+  s_e9ed806a3d225c::t_73543f593696cd 17
+app/models/hackathon_project_star.rb
+  s_e9ed806a3d225c::t_bf73625a4189ab 1-14
+app/models/event_role.rb
+  s_e9ed806a3d225c::t_6fcf1f47d242be 6-10
+app/blueprints/group_blueprint.rb
+  s_e9ed806a3d225c::t_4ff8449ca84ace 27-28
+app/models/hackathon_project.rb
+  s_e9ed806a3d225c::t_c8f52551452172 1-110
+design/HACKATHON_MODULE.md
+  s_e9ed806a3d225c::t_485a5df99ac2d1 3
+  s_e9ed806a3d225c::t_f26f1773def08b 1-2,4,8,11-12,14,47-50,78-80,84-85,87,92,94,97-98,100,102-103,109-110,112-113,115-117,119,134-135,137,142,144,146,148,155,157,164,166,168,174,176,180,184,186,190,192,225-228,230-232,235-237,239,241,244-245,249,263,265,267-270,276,278-281,288-290,296,298,302,306-311,321,323-325,336-337,339-340,342,344-349,373,378,380,382,389-391,393,395-396,408-409,411,413,415-416,423,427-428,430,432-434,441,443,445-446,449
+  s_e9ed806a3d225c::t_2f802f92b4f0dd 456
+  s_e9ed806a3d225c::t_e281b37e91c626 457-461
+  s_e9ed806a3d225c::t_6348a9fe1838af 385,388
+  s_e9ed806a3d225c::t_1385181f59c29c 199-223
+  s_e9ed806a3d225c::t_255e2a8c73693f 5,7,17,19-24,27-32,34-35,39-46,53-75,77,81-83,86,89,91,93,95-96,99,101,104-108,111,118,120-133,138-140,143,145,147,149-154,156,158-163,165,167,169-173,175,177-179,181-183,185,187-189,191,193-198,224,229,233-234,238,240,246-248,250-262,264,266,271-275,277,282-287,294,297,299-301,305,312-320,322,326-332,334-335,338,341,343,350-363,365-370,375,379,381,394,398-407,410,412,417-420,425-426,429,431,435-440,444,447-448,450-455
+  s_e9ed806a3d225c::t_bab27e029ffe2c 383-384,386-387
+  s_e9ed806a3d225c::t_acfe61ca6c8f29 25-26
+  s_e9ed806a3d225c::t_ad29abf8c64912 6,9-10,13,15-16,18,33,36-38,51-52,76,88,90,114,136,141,242-243,291-293,295,303-304,333,364,371-372,374,376-377,392,397,414,421-422,424,442
+app/blueprints/hackathon_blueprint.rb
+  s_e9ed806a3d225c::t_896ab39c3169e3 1-40
+app/models/hackathon_project_member.rb
+  s_e9ed806a3d225c::t_cb6f3b425ab150 1-27
+app/controllers/api/v1/hackathons_controller.rb
+  s_e9ed806a3d225c::t_423c2eccc83ac6 63
+  s_e9ed806a3d225c::t_2eda6699002ea6 1-62,64-176
+app/policies/hackathon_project_policy.rb
+  s_e9ed806a3d225c::t_392d585e36067a 1-50
+app/controllers/api/v1/hackathon_projects_controller.rb
+  s_e9ed806a3d225c::t_a43542e7b19718 1-220
+app/policies/hackathon_policy.rb
+  s_e9ed806a3d225c::t_ffd16bc5fe23ec 1-56
+test/controllers/api/v1/hackathons_controller_test.rb
+  s_e9ed806a3d225c::t_947be718babbde 56
+  s_e9ed806a3d225c::t_6ee5ebf3c3723e 1-55,57-361
+app/models/hackathon.rb
+  s_e9ed806a3d225c::t_a398410c00636e 1-149
+app/policies/event_policy.rb
+  s_e9ed806a3d225c::t_05cc51e4974fde 56-60,64-66
+test/support/factory_helpers.rb
+  s_e9ed806a3d225c::t_e575738340589f 89-105
+app/controllers/concerns/hackathon_gate.rb
+  s_e9ed806a3d225c::t_d95d4535e08c78 1-19
+db/migrate/20260909030000_create_hackathons.rb
+  s_e9ed806a3d225c::t_a18beda1a5e0d3 1-122
+config/routes.rb
+  s_e9ed806a3d225c::t_2aaa0c38af99ee 236-267
+db/schema.rb
+  s_e9ed806a3d225c::t_3753baf991ac92 13,643,669,696-776,1645-1654
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "3a29eba8336d724b71ad7c218f77c09fea083ea2",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
