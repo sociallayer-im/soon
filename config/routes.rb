@@ -219,6 +219,20 @@ Rails.application.routes.draw do
         end
       end
 
+      # Polls. Off unless POLL_ENABLED is set, and off per group unless
+      # groups.poll_enabled — see design/POLL_MODULE.md.
+      resources :polls, only: %i[index show create update destroy] do
+        member do
+          post   :vote
+          delete :vote, action: :retract
+          post   :close
+          post   :flag
+          post   :unflag
+          post   :restore
+          get    :export
+        end
+      end
+
       # Remember (shared commemorative badge). Static paths before :voucher_id.
       get  "remember/meta",               to: "remember#meta"
       get  "remember/related_groups",     to: "remember#related_groups"

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_09_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -640,6 +640,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
     t.string "banner_link_url"
     t.text "banner_text"
     t.text "bio"
+    t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
@@ -674,6 +675,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
     t.string "op_label_list", default: [], array: true
     t.string "parent_id"
     t.string "permissions", default: [], array: true
+    t.boolean "poll_enabled", default: false, null: false
     t.string "ref_id"
     t.boolean "require_event_approval", default: false, null: false
     t.string "requirement_tag_list", default: [], array: true
@@ -922,6 +924,54 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.index ["name"], name: "index_places_on_name"
+  end
+
+  create_table "poll_options", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "poll_id", null: false
+    t.integer "position", default: 0, null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.integer "votes_count", default: 0, null: false
+    t.index ["poll_id", "position"], name: "index_poll_options_on_poll_id_and_position"
+  end
+
+  create_table "poll_votes", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "option_id"
+    t.string "poll_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.integer "value"
+    t.index ["option_id"], name: "index_poll_votes_on_option_id"
+    t.index ["poll_id", "user_id", "option_id"], name: "index_poll_votes_unique", unique: true
+    t.index ["poll_id", "user_id"], name: "index_poll_votes_on_poll_id_and_user_id"
+  end
+
+  create_table "polls", id: :string, force: :cascade do |t|
+    t.datetime "close_at"
+    t.datetime "closed_at"
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.string "deleted_by_id"
+    t.datetime "first_voted_at"
+    t.string "flag_reason"
+    t.datetime "flagged_at"
+    t.string "flagged_by_id"
+    t.string "group_id", null: false
+    t.integer "max_value"
+    t.integer "min_value"
+    t.string "poll_type", default: "single", null: false, comment: "single | multiple | number"
+    t.string "results", default: "always", null: false, comment: "always | on_vote | on_close | manager_only"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "visibility", default: "public", null: false, comment: "public | participants | secret"
+    t.integer "votes_count", default: 0, null: false, comment: "distinct voters, recomputed by Poll#refresh_counts!"
+    t.index ["close_at"], name: "index_polls_pending_close", where: "((closed_at IS NULL) AND (deleted_at IS NULL))"
+    t.index ["group_id", "created_at"], name: "index_polls_on_group_and_created", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["user_id"], name: "index_polls_on_user_id"
   end
 
   create_table "product_variants", id: :string, force: :cascade do |t|
@@ -1531,6 +1581,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_010000) do
   add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
   add_foreign_key "participants", "vouchers"
+  add_foreign_key "poll_options", "polls"
+  add_foreign_key "poll_votes", "poll_options", column: "option_id"
+  add_foreign_key "poll_votes", "polls"
+  add_foreign_key "poll_votes", "users"
+  add_foreign_key "polls", "groups"
+  add_foreign_key "polls", "users"
   add_foreign_key "product_variants", "products"
   add_foreign_key "products", "groups"
   add_foreign_key "products", "shops"

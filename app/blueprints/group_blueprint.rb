@@ -22,6 +22,8 @@ class GroupBlueprint < Blueprinter::Base
            # map, group-home map view) — the deployment-wide
            # NEXT_PUBLIC_ENABLE_GOOGLE_MAP flag is the other half of the gate.
            :map_enabled,
+           # Same two-switch shape for polls (design/POLL_MODULE.md).
+           :poll_enabled, :can_create_poll,
            # The one event whose tickets grant group membership. At most one
            # per group; nil until a manager designates one.
            :group_ticket_event_id,

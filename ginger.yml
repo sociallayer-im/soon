@@ -91,6 +91,9 @@ env:
   # not make a forum appear anywhere: groups.discussion_enabled defaults to
   # false, so each group still has to opt in from its settings.
   DISCUSSION_ENABLED: "true"
+  # Polls (design/POLL_MODULE.md): same two-switch gate, groups.poll_enabled
+  # defaults to false.
+  POLL_ENABLED: "true"
 
 secrets:
   load: [.env.production]

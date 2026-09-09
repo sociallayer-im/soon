@@ -13,6 +13,7 @@ class Group < ApplicationRecord
   has_many :teams, dependent: :destroy
   has_many :categories, dependent: :restrict_with_error
   has_many :topics, dependent: :restrict_with_error
+  has_many :polls, dependent: :restrict_with_error
   has_many :venues, dependent: :destroy
   # Removing a venue is a soft delete (VenuesController#destroy sets archived),
   # so `venues` still contains removed rows — it exists for dependent: :destroy
