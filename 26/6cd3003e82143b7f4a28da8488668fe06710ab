@@ -1,0 +1,24 @@
+app/controllers/api/v1/hackathon_projects_controller.rb
+  s_e9ed806a3d225c::t_39e2e4d381445d 123-125,128
+test/controllers/api/v1/hackathons_controller_test.rb
+  s_e9ed806a3d225c::t_39e2e4d381445d 135-136,143,146-149,291-292
+  s_e9ed806a3d225c::t_4d8cb8b2028f16 293
+design/HACKATHON_MODULE.md
+  s_e9ed806a3d225c::t_471c2f14714e12 172-174,332,426
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "266cd3003e82143b7f4a28da8488668fe06710ab",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
