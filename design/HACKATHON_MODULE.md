@@ -169,8 +169,9 @@ tracks: [
 `(hackathon_id, user_id)` 唯一索引直接把这条规则放到 DB 层。`hackathon_id` 从 project 冗余到 member 行上,由 model `before_validation` 同步,**没有它这条约束就只能是应用层的**(部分唯一索引不能引用别的表,和 poll 单选的处境一样,但这次多冗余一列就能让 DB 兜底,值得)。
 
 行为:
-- 已在一个作品里的人 `join` 另一个 → 422 `already in a project in this hackathon`。前端在按钮上直接显示"你已在 X 队"。
-- 换队 = 先 `leave` 再 `join`。队长不能 `leave`,只能转让或删除作品。
+- 队长把已在别的作品里的人加进来 → 422 `already on a project in this hackathon`。
+- 换队 = 先 `leave`(成员自己退)再由新队长加。队长不能 `leave`,只能转让或删除作品。
+- 提交后成员列表锁定:加人 422,截止前可撤回提交再调整。
 
 **这条约束决定了 `hackathon_projects` 不能用 `SoftDelete`。** 软删除的作品仍持有成员行,成员就永远无法加入别的作品;而部分索引查不到 `projects.deleted_at`。三个选项里选最简单的:
 
@@ -328,7 +329,7 @@ resources :hackathon_projects, only: %i[index show create update destroy] do
     post   :review               # { decision: "approve"|"reject", note }
     post   :award                # { award: "最佳创意" | null }
     post   :star / delete :star
-    post   :join / delete :leave
+    delete :leave           # 成员自己退出;没有 join —— 队长直接加减成员
     post   :members              # 队长加人 { user_id }
     delete "members/:user_id"
     post   :transfer             # 转让队长 { user_id }
@@ -422,7 +423,7 @@ createProject / updateProject / deleteProject
 submitProject / unsubmitProject
 reviewProject(id, decision, note) / awardProject(id, award)
 starProject / unstarProject
-joinProject / leaveProject / addMember / removeMember / transferOwner
+leaveProject / addMember / removeMember / transferOwner
 exportProjectsCsv({hackathonId, authToken})   // 照抄 exportPollCsv:token 在 header,不能裸 <a href>
 ```
 

@@ -114,24 +114,18 @@ class Api::V1::HackathonProjectsController < Api::BaseController
     render_detail(@project.reload)
   end
 
-  def join
-    authorize @project, :join?
-    @project.hackathon_project_members.create!(user: current_user)
-    render_detail(@project.reload)
-  rescue ActiveRecord::RecordInvalid => e
-    render_error(e.record.errors.full_messages.join(", "))
-  end
-
   def leave
     authorize @project, :leave?
     @project.hackathon_project_members.where(user: current_user).destroy_all
     render_detail(@project.reload)
   end
 
-  # POST /members { user_id } — owner adds someone. They must have the same
-  # standing as if they had joined themselves.
+  # POST /members { user_id } — the owner adds someone; there is no self-join
+  # (design/HACKATHON_MODULE.md §1.2). The person needs the same standing as
+  # the owner had to create the project, and a free slot in this hackathon.
   def add_member
     authorize @project, :manage_members?
+    return render_error("members are locked after submission") if @project.submitted?
     user = User.find(params[:user_id])
     unless HackathonPolicy.new(user, @project.hackathon).can_submit_project?
       return render_error("that person is not eligible to take part")

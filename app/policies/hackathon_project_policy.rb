@@ -25,15 +25,6 @@ class HackathonProjectPolicy < ApplicationPolicy
   def award?    = manage_hackathon?
   def flag?     = manage_hackathon?
 
-  # Joining needs the same standing as creating: the project's team is the
-  # submission's authorship.
-  def join?
-    return false if user.nil?
-    return false unless record.recruiting && !record.submitted?
-
-    hackathon_policy.can_submit_project?
-  end
-
   def leave?   = member? && !owner?
   def manage_members? = owner?
   def star?    = !user.nil? && show?

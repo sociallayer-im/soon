@@ -47,9 +47,6 @@ class HackathonProjectBlueprint < Blueprinter::Base
     field :can_unsubmit do |p, options|
       HackathonProjectPolicy.new(options[:current_user], p).unsubmit?
     end
-    field :can_join do |p, options|
-      HackathonProjectPolicy.new(options[:current_user], p).join?
-    end
     field :can_manage do |p, options|
       HackathonProjectPolicy.new(options[:current_user], p).manage_hackathon?
     end

@@ -132,17 +132,21 @@ class Api::V1::HackathonsControllerTest < ActionDispatch::IntegrationTest
       p1 = create_hackathon_project(hackathon: h, user: @member, recruiting: true)
       p2 = create_hackathon_project(hackathon: h, user: @member2, recruiting: true)
 
-      post "/api/v1/hackathon_projects/#{p2.id}/join", headers: auth_headers(@member)
+      # Only the owner adds people; there is no self-join.
+      post "/api/v1/hackathon_projects/#{p2.id}/members", params: { user_id: @member.id }, headers: auth_headers(@member2)
       assert_response :unprocessable_entity
       assert_match(/already on a project/, body["error"])
 
-      # Leave, then join.
       delete "/api/v1/hackathon_projects/#{p1.id}/join", headers: auth_headers(@member)
       assert_response :forbidden   # owners cannot leave
       p1.destroy!
-      post "/api/v1/hackathon_projects/#{p2.id}/join", headers: auth_headers(@member)
+      post "/api/v1/hackathon_projects/#{p2.id}/members", params: { user_id: @member.id }, headers: auth_headers(@member2)
       assert_response :ok
       assert_equal 2, body["members_count"]
+      # Members can leave on their own; the owner cannot.
+      delete "/api/v1/hackathon_projects/#{p2.id}/join", headers: auth_headers(@member)
+      assert_response :ok
+      assert_equal 1, body["members_count"]
 
       # A second hackathon is a separate slot.
       h2 = create_hackathon(group: @group, user: @owner)
@@ -283,6 +287,9 @@ class Api::V1::HackathonsControllerTest < ActionDispatch::IntegrationTest
       assert_response :unprocessable_entity   # not a group member → not eligible
       post "/api/v1/hackathon_projects/#{p.id}/members", params: { user_id: @member2.id }, headers: auth_headers(@member2)
       assert_response :forbidden
+      post "/api/v1/hackathon_projects/#{p.id}/members", params: { user_id: @member2.id }, headers: auth_headers(@member)
+      assert_response :unprocessable_entity   # locked after submission
+      p.unsubmit!
       post "/api/v1/hackathon_projects/#{p.id}/members", params: { user_id: @member2.id }, headers: auth_headers(@member)
       assert_response :ok
       assert_equal 2, body["members_count"]

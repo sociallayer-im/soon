@@ -255,7 +255,6 @@ Rails.application.routes.draw do
           post   :award
           post   :star
           delete :star, action: :unstar
-          post   :join
           delete :join, action: :leave
           post   :members, action: :add_member
           delete "members/:user_id", action: :remove_member
