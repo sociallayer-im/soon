@@ -77,6 +77,15 @@ module FactoryHelpers
     Reply.create!({ content: "reply #{unique_suffix}", topic: topic, user: user }.merge(attrs))
   end
 
+  # A choice poll with two options (A, B) unless poll_type: "number".
+  def create_poll(group:, user:, options: %w[A B], **attrs)
+    poll = Poll.create!({ title: "Poll #{unique_suffix}", group: group, user: user }.merge(attrs))
+    unless poll.number?
+      options.each_with_index { |t, i| poll.poll_options.create!(title: t, position: i) }
+    end
+    poll
+  end
+
   def create_event(group:, owner:, place: nil, **attrs)
     place ||= create_place
     Event.create!({
