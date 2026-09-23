@@ -7,7 +7,7 @@ require "test_helper"
 class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
   # Just past PHONE_CODE_INTERVAL, so a test that means to exercise something
   # other than the per-minute limit isn't tripped by it.
-  PHONE_INTERVAL_SKIP = 61.seconds
+  PHONE_INTERVAL_SKIP = 31.seconds
 
   setup do
     ENV["PHONE_LOGIN_ENABLED"] = "true"
@@ -162,6 +162,8 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
       post "/api/v1/auth/request_phone_code", params: { phone: "13300133000" }
     end
     assert_response :too_many_requests
+    # The client reads this to send the person on to the code screen.
+    assert_equal "SMS_COOLDOWN", JSON.parse(response.body)["code"]
   end
 
   test "the hourly cap holds even when each request waits out the interval" do

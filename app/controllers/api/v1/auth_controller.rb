@@ -63,8 +63,13 @@ class Api::V1::AuthController < Api::BaseController
   # texting strangers. Both limits are enforced against the auth_codes table
   # rather than a cache: production configures no cache store, and a limit that
   # silently evaporates is worse than none.
-  PHONE_CODE_INTERVAL = 60.seconds
-  PHONE_CODE_HOURLY_LIMIT = 5
+  #
+  # Relaxed 2026-09-23 from 60s / 5: a WeChat user whose page did not move on
+  # after a successful send tapped again and hit a minute-long wall. The 429s
+  # carry a `code` so the client can treat SMS_COOLDOWN as "a code is already
+  # on its way" rather than as a failure.
+  PHONE_CODE_INTERVAL = 30.seconds
+  PHONE_CODE_HOURLY_LIMIT = 10
 
   # POST /api/v1/auth/request_code
   # Sends a one-time code to any well-formed email — unknown addresses sign UP
@@ -449,13 +454,13 @@ class Api::V1::AuthController < Api::BaseController
     scope = AuthCode.for_recipient(phone).where(context: PHONE_CONTEXTS)
 
     if scope.where(created_at: PHONE_CODE_INTERVAL.ago..).exists?
-      render json: { error: "Please wait a moment before requesting another code" },
+      render json: { error: "Please wait a moment before requesting another code", code: "SMS_COOLDOWN" },
         status: :too_many_requests
       return true
     end
 
     if scope.where(created_at: 1.hour.ago..).count >= PHONE_CODE_HOURLY_LIMIT
-      render json: { error: "Too many code requests, please try again later" },
+      render json: { error: "Too many code requests, please try again later", code: "SMS_HOURLY_LIMIT" },
         status: :too_many_requests
       return true
     end
