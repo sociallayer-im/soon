@@ -1,0 +1,22 @@
+test/controllers/api/v1/phone_auth_test.rb
+  s_e9ed806a3d225c::t_95806585426c35 165-166
+  s_e9ed806a3d225c::t_2595d70b793017 10
+app/controllers/api/v1/auth_controller.rb
+  s_e9ed806a3d225c::t_2595d70b793017 66-72,457,463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "32eca04c16b2eda3e7e9c152f15b85b04eddcf11",
+  "prompts": {},
+  "sessions": {
+    "s_e9ed806a3d225c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "931f6a9c-6836-4bdb-a9b8-4af9de9ee16d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
