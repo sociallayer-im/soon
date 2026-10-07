@@ -243,4 +243,32 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/users/merge", params: { from_id: user.id, into_id: user.id }, headers: auth_headers(admin)
     assert_response :unprocessable_entity
   end
+
+  test "by_email requires platform admin" do
+    user = create_user
+    get "/api/v1/users/by_email", params: { email: user.email }, headers: auth_headers(user)
+    assert_response :forbidden
+  end
+
+  test "by_email requires authentication" do
+    get "/api/v1/users/by_email", params: { email: "x@test.com" }
+    assert_response :unauthorized
+  end
+
+  test "by_email finds a user case- and whitespace-insensitively without exposing email" do
+    admin = create_user(admin: true)
+    target = create_user(email: "Target.Person@Test.com")
+    get "/api/v1/users/by_email", params: { email: "  TARGET.person@test.com " }, headers: auth_headers(admin)
+    assert_response :success
+    assert_equal target.id, json_response["id"]
+    assert_nil json_response["email"]
+  end
+
+  test "by_email 404s for an unknown email and 422s for a blank one" do
+    admin = create_user(admin: true)
+    get "/api/v1/users/by_email", params: { email: "nobody@test.com" }, headers: auth_headers(admin)
+    assert_response :not_found
+    get "/api/v1/users/by_email", params: { email: "" }, headers: auth_headers(admin)
+    assert_response :unprocessable_entity
+  end
 end

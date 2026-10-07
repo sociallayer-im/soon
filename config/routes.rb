@@ -102,6 +102,10 @@ Rails.application.routes.draw do
       get "discover", to: "discover#index"
       get "search",   to: "discover#search"
 
+      # Before `resources :users`, or /users/by_email resolves to #show with
+      # id "by_email".
+      get "users/by_email", to: "users#by_email"
+
       # Resources
       resources :users, only: %i[show update] do
         member do

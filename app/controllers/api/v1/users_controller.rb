@@ -16,6 +16,23 @@ class Api::V1::UsersController < Api::BaseController
     render json: UserBlueprint.render(user, view: view)
   end
 
+  # GET /api/v1/users/by_email?email= — platform-admin-only. Email is the login
+  # identity and is never exposed on a public profile, so an open lookup would
+  # be an account-enumeration oracle; restricting it to admins (who already
+  # hold `merge`) keeps it an operator tool. Returns the public profile shape —
+  # the caller supplied the email, so echoing it back adds nothing.
+  def by_email
+    return render_error("forbidden", status: :forbidden) unless current_user.platform_admin?
+
+    email = User.normalize_value_for(:email, params[:email].to_s)
+    return render_error("email is required") if email.blank?
+
+    user = User.find_by(email: email)
+    return render_error("User not found", status: :not_found) unless user
+
+    render json: UserBlueprint.render(user, view: :profile)
+  end
+
   # GET /api/v1/users/:id/groups?role=owner,admin — a user's public group
   # memberships (their profile page's "communities"), optionally by role.
   def groups
