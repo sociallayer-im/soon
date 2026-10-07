@@ -1,0 +1,23 @@
+config/routes.rb
+  s_2f68ec41cd6d71::t_6a2a45c3aa7902 105-108
+app/controllers/api/v1/users_controller.rb
+  s_2f68ec41cd6d71::t_6a2a45c3aa7902 19-35
+test/controllers/api/v1/users_controller_test.rb
+  s_2f68ec41cd6d71::t_6a2a45c3aa7902 246-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82b8a2ad0c4382530a6d35e8c8494b205a860716",
+  "prompts": {},
+  "sessions": {
+    "s_2f68ec41cd6d71": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aaa349d1-6ae8-47f7-92fd-5a5c7d5c2822",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
