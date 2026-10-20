@@ -1,0 +1,16 @@
+Procfile.dev
+  h_b053bf74bef223 3
+config/database.yml
+  h_b053bf74bef223 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20b50f61e30df909429cedab4f3612568cfb4fbc",
+  "prompts": {},
+  "humans": {
+    "h_b053bf74bef223": {
+      "author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
