@@ -1,0 +1,78 @@
+app/models/campaign.rb
+  s_34662957cf7fb1::t_92b4fda41a2ba8 1-48
+app/controllers/api/v1/reviews_controller.rb
+  s_34662957cf7fb1::t_b54e0653e07a98 1-53
+app/blueprints/review_blueprint.rb
+  s_34662957cf7fb1::t_8dc975ea21439d 1-4
+app/controllers/api/v1/follows_controller.rb
+  s_34662957cf7fb1::t_bb1bc276b4fbf6 1-11,19-20,35-153
+  s_34662957cf7fb1::t_61d540042b9170 12-14,16-18
+  s_34662957cf7fb1::t_ecd02a17ce645a 21-23,32-34
+app/models/report.rb
+  s_34662957cf7fb1::t_7f0a0ab81d6c45 1-9
+app/blueprints/follow_blueprint.rb
+  s_34662957cf7fb1::t_aed3699573dc51 1-2,4
+  s_34662957cf7fb1::t_74868c4c972d97 3
+app/controllers/api/v1/reports_controller.rb
+  s_34662957cf7fb1::t_09eadddf5098c8 1-36
+app/controllers/api/v1/blocks_controller.rb
+  s_34662957cf7fb1::t_ee6949916b93d8 1-29
+app/controllers/api/v1/campaigns_controller.rb
+  s_34662957cf7fb1::t_9183d81ab5cb20 1-86
+  s_34662957cf7fb1::t_74a1219e69be1e 87-89
+app/blueprints/report_blueprint.rb
+  s_34662957cf7fb1::t_918a756aeea89f 1-4
+app/controllers/concerns/data_whitelist.rb
+  s_34662957cf7fb1::t_b0a975ce4efc54 1-16
+app/blueprints/block_blueprint.rb
+  s_34662957cf7fb1::t_d9311854d2f3bd 1-4
+app/models/review.rb
+  s_34662957cf7fb1::t_fc6d4111182d39 1-11
+app/models/follow.rb
+  s_34662957cf7fb1::t_7d67311882d7a0 1-31
+app/models/inbox_notice.rb
+  s_34662957cf7fb1::t_94a038d8306a31 1-11,14-20,23-33,36-72
+  s_34662957cf7fb1::t_76907c440f49b9 12-13
+  s_34662957cf7fb1::t_8818d1aa6cd33a 21-22
+  s_34662957cf7fb1::t_f9ff76d1780625 34-35
+db/migrate/20261020160000_add_706_mini_api.rb
+  s_34662957cf7fb1::t_856d37d87a539a 1-85
+app/services/wechat_mini_session.rb
+  s_34662957cf7fb1::t_070d8364b0ad85 1-25
+app/blueprints/campaign_blueprint.rb
+  s_34662957cf7fb1::t_02471607c5b91a 1-13
+app/models/block.rb
+  s_34662957cf7fb1::t_fcf0ece7ddddaf 1-12
+app/controllers/api/v1/oauth_applications_controller.rb
+  s_8f9a17ddfb0bb9::t_b72d4ee6ffab8c 4
+app/models/oauth_application.rb
+  s_8f9a17ddfb0bb9::t_7f144110f424fd 49-50,53-55,115
+test/controllers/api/v1/oauth_applications_controller_test.rb
+  s_8f9a17ddfb0bb9::t_6a938a3a2edd6f 85,89-98
+test/models/oauth_application_test.rb
+  s_8f9a17ddfb0bb9::t_3f7d97058e847c 15,17,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e866020443cbe2503c90b961ce945579df1293c8",
+  "prompts": {},
+  "sessions": {
+    "s_34662957cf7fb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a153f7-43fd-7312-95d3-dcf8124c6f20",
+        "model": "unknown"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    },
+    "s_8f9a17ddfb0bb9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a169d2-4be1-7d31-b4ac-1eda0f18dfa8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
