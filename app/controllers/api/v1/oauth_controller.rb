@@ -87,6 +87,13 @@ class Api::V1::OauthController < Api::BaseController
 
     validated_authorize_request!(app)
     scopes = requested_scopes
+    # The phone scope is a claim about a number the account actually has. Issuing
+    # the code anyway sends the client a userinfo with no phone_number, and the
+    # client can only fail after the redirect. The consent screen sends the user
+    # to bind a number first; this is what stops a request that skipped that page.
+    if scopes.include?("phone") && user.phone.blank?
+      raise OauthError.new("phone_required", "Verify a phone number before granting the phone scope")
+    end
 
     code = nil
     ActiveRecord::Base.transaction do

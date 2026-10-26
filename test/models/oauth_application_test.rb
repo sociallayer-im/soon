@@ -12,15 +12,16 @@ class OauthApplicationTest < ActiveSupport::TestCase
     assert_empty extra, "descriptions for scopes that cannot be granted: #{extra.join(', ')}"
   end
 
-  test "redirect_uri_valid? accepts https and localhost only" do
+  test "redirect_uri_valid? accepts http and https, and rejects fragments" do
     assert OauthApplication.redirect_uri_valid?("https://example.com/cb")
+    assert OauthApplication.redirect_uri_valid?("http://example.com/cb")
     assert OauthApplication.redirect_uri_valid?("http://localhost:4000/cb")
     assert OauthApplication.redirect_uri_valid?("http://127.0.0.1:4000/cb")
 
-    assert_not OauthApplication.redirect_uri_valid?("http://example.com/cb")
     # A fragment is unreachable to a server-side client and is where an
     # attacker hides an alternate target from a naive comparison.
     assert_not OauthApplication.redirect_uri_valid?("https://example.com/cb#x")
+    assert_not OauthApplication.redirect_uri_valid?("http://example.com/cb#x")
     assert_not OauthApplication.redirect_uri_valid?("javascript:alert(1)")
     assert_not OauthApplication.redirect_uri_valid?("")
   end

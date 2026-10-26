@@ -1,4 +1,5 @@
 class Api::V1::GroupsController < Api::BaseController
+  include DataWhitelist
   # Group pages and the public directory are public.
   skip_before_action :authenticate!, only: %i[show directory]
   before_action :set_group, only: %i[update destroy freeze send_email]
@@ -18,8 +19,17 @@ class Api::V1::GroupsController < Api::BaseController
   # :card, because the cards show member/event counts and the tag state the
   # admin controls read.
   def directory
-    render_collection Group.where(active: true).order(:created_at),
-      blueprint: GroupBlueprint, view: :card
+    authenticate_optional!
+    scope = Group.where(active: true)
+    if params[:group_tags].present?
+      scope = scope.where("group_tags && ARRAY[?]::varchar[]", Array(params[:group_tags]))
+    end
+    if params[:exclude_tags].present?
+      scope = scope.where("NOT (group_tags && ARRAY[?]::varchar[])", Array(params[:exclude_tags]))
+    end
+    scope = scope.where(city: params[:city]) if params[:city].present?
+    render_collection scope.order(:created_at),
+      blueprint: GroupBlueprint, view: :card, managed_group_ids: managed_group_ids
   end
 
   # :id accepts a TSID or the group's slug (Group.resolve!).
@@ -32,7 +42,8 @@ class Api::V1::GroupsController < Api::BaseController
     cache_when_anonymous!(max_age: 30)
     group = Group.with_detail_associations.resolve!(params[:id])
     render json: GroupBlueprint.render(group, view: :detail,
-                                       member_group_ids: member_group_ids)
+                                       member_group_ids: member_group_ids,
+                                       managed_group_ids: managed_group_ids)
   end
 
   # POST /api/v1/groups/:id/freeze
@@ -40,7 +51,8 @@ class Api::V1::GroupsController < Api::BaseController
   def freeze
     authorize @group
     @group.update!(active: false)
-    render json: GroupBlueprint.render(@group, view: :detail, member_group_ids: member_group_ids)
+    render json: GroupBlueprint.render(@group, view: :detail, member_group_ids: member_group_ids,
+                                       managed_group_ids: managed_group_ids)
   end
 
   # POST /api/v1/groups/:id/send_email — manager broadcast to members.
@@ -76,7 +88,8 @@ class Api::V1::GroupsController < Api::BaseController
     # before the commit lands would look up a group that isn't there yet.
     GroupRegisteredMailJob.perform_later(group_id: group.id)
     render json: GroupBlueprint.render(group, view: :detail,
-                                       member_group_ids: member_group_ids), status: :created
+                                       member_group_ids: member_group_ids,
+                                       managed_group_ids: managed_group_ids), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -87,7 +100,8 @@ class Api::V1::GroupsController < Api::BaseController
 
     if @group.update(group_params)
       render json: GroupBlueprint.render(@group, view: :detail,
-                                         member_group_ids: member_group_ids)
+                                         member_group_ids: member_group_ids,
+                                         managed_group_ids: managed_group_ids)
     else
       render_error(@group.errors.full_messages.join(", "))
     end
@@ -107,6 +121,13 @@ class Api::V1::GroupsController < Api::BaseController
 
   # You can only nest a group under a parent you actually manage — otherwise
   # anyone could attach their group as a child of someone else's.
+  def managed_group_ids
+    return Set.new unless current_user
+    return :all if current_user.platform_admin?
+
+    current_user.memberships.where(role: %w[manager owner]).pluck(:group_id).to_set
+  end
+
   def parent_ok?(parent_id)
     return true if parent_id.blank?
     parent = Group.find_by(id: parent_id)
@@ -118,9 +139,13 @@ class Api::V1::GroupsController < Api::BaseController
   # the other two: it decides what shows in the homepage community grid, so
   # leaving it open would let any group put itself on the front page.
   PRIVILEGED_TAGS = %w[featured top pin].freeze
+  GROUP_DATA_KEYS = [
+    :opening_hours, :address, :allow_event_requests, :public_contact,
+    { public_links: [ :kind, :label, :url ] }
+  ].freeze
 
   def group_params
-    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location,
+    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location, :city,
       :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
       :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
       :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,
@@ -128,7 +153,10 @@ class Api::V1::GroupsController < Api::BaseController
       :poll_enabled, :can_create_poll,
       :hackathon_enabled, :can_create_hackathon,
       social_links: {}, group_tags: [], event_tag_list: [],
-      requirement_tag_list: [], venue_tag_list: [])
+      requirement_tag_list: [], venue_tag_list: [], data: GROUP_DATA_KEYS)
+
+    raw = params[:group][:data] if params[:group].respond_to?(:[])
+    permitted[:data] = merge_whitelisted_data(@group || Group.new, raw, GROUP_DATA_KEYS) if raw.present?
 
     # Strip privileged tags a caller tries to add (platform admins are the
     # curators and may set them); keep ones the group already has.

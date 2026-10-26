@@ -96,6 +96,9 @@ class Api::V1::TicketsController < Api::BaseController
     if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: "pending")
       return render_error("you already have an unpaid order for this ticket")
     end
+    if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: %w[succeeded partially_refunded])
+      return render_error("you already have a paid order for this ticket")
+    end
     return render_error("run out of ticket") unless @ticket.reserve!
 
     # Buying a ticket does not skip the door: an event that requires approval,
@@ -157,7 +160,11 @@ class Api::V1::TicketsController < Api::BaseController
       end
     end
 
-    render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    participant.notify_registration!(initiator: current_user)
+    render json: {
+      participant: ParticipantBlueprint.render_as_hash(participant, view: :with_message),
+      ticket_item: TicketItemBlueprint.render_as_hash(ticket_item)
+    }
   rescue CouponUnavailable
     @ticket.release!
     render_error("coupon is not available")
@@ -315,7 +322,8 @@ class Api::V1::TicketsController < Api::BaseController
     # one issued by THIS merchant's appid. Buyers who signed in by email have
     # none, so answer with a code the frontend can act on — a silent
     # snsapi_base authorize — rather than a dead end.
-    if current_user.wechat_openid.blank?
+    openid = wechat_payer_openid(setting)
+    if openid.blank?
       return render json: { error: "wechat openid required", code: "OPENID_REQUIRED" }, status: :unprocessable_entity
     end
 
@@ -327,7 +335,7 @@ class Api::V1::TicketsController < Api::BaseController
         next
       end
 
-      prepay_id = WechatPayGateway.create_jsapi_order(setting, ticket_item, payer_openid: current_user.wechat_openid)
+      prepay_id = WechatPayGateway.create_jsapi_order(setting, ticket_item, payer_openid: openid)
       # Hold the seat until just past the point WeChat will still accept
       # payment, so the sweeper is never the thing that expires a payable order.
       # A second prepay on the same order is a retry — the buyer closed the
@@ -635,6 +643,16 @@ class Api::V1::TicketsController < Api::BaseController
 
   def set_ticket
     @ticket = @event ? Ticket.find_by(id: params[:ticket_id], event_id: @event.id) : nil
+  end
+
+  # The miniprogram merchant issues wechat_mini_openid. Every other app id
+  # still pays with the official-account openid.
+  def wechat_payer_openid(setting)
+    if setting.app_id.present? && setting.app_id == ENV["WECHAT_MINI_APPID"]
+      current_user.wechat_mini_openid
+    else
+      current_user.wechat_openid
+    end
   end
 
   def event_manager?(event_id)

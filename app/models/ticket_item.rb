@@ -136,7 +136,10 @@ class TicketItem < ApplicationRecord
       elsif ticket_type == "membership_card" && group && first_confirmation
         group.grant_or_extend_membership(user_id, ticket.membership_duration_days.days)
       end
-      participant.refresh_payment_status! if participant
+      if participant
+        participant.refresh_payment_status!
+        participant.notify_registration!(initiator: actor || user)
+      end
     end
     # Only on the first confirmation — a repeat webhook/callback for an
     # already-succeeded purchase shouldn't re-email the buyer.

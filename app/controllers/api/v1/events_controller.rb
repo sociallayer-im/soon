@@ -18,7 +18,7 @@ class Api::V1::EventsController < Api::BaseController
   # is_attending/is_starred/is_owner flags.
   def index
     cache_when_anonymous!(max_age: 30)
-    scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, tickets: :payment_methods).visible_to(current_user)
     scope = apply_filters(scope)
     render_collection scope, blueprint: EventBlueprint, **personalization_options
   end
@@ -90,7 +90,13 @@ class Api::V1::EventsController < Api::BaseController
   # participant/ticket/coupon) — it flips status to cancelled and keeps the record.
   def destroy
     authorize @event
-    @event.update(status: "cancelled")
+    paid_ids = @event.participants.where(payment_status: "succeeded").select(:id)
+    if TicketItem.where(participant_id: paid_ids, status: %w[succeeded partially_refunded disputed]).where("amount > 0").exists?
+      return render_error("refund required before cancel")
+    end
+
+    @event.update!(status: "cancelled")
+    InboxNotice.event_cancelled(@event, initiator: current_user)
     notify_attendees_of_cancellation
     head :no_content
   end
@@ -99,7 +105,7 @@ class Api::V1::EventsController < Api::BaseController
   # caller manages (the dashboard inbox).
   def pending_approval
     managed = current_user.memberships.where(role: %w[manager owner]).select(:group_id)
-    scope = Event.includes(:group, :place, :venue, :owner, :track)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, tickets: :payment_methods)
                  .where(status: "pending", group_id: managed).order(:start_time)
     render_collection scope, blueprint: EventBlueprint
   end
@@ -151,7 +157,8 @@ class Api::V1::EventsController < Api::BaseController
     end
     if params[:attendee_id].present?
       attendee = User.resolve!(params[:attendee_id])
-      scope = scope.where(id: Participant.where(user_id: attendee.id, status: "attending").select(:event_id))
+      participant_status = params[:participant_status].presence || "attending"
+      scope = scope.where(id: Participant.where(user_id: attendee.id, status: participant_status).select(:event_id))
     end
     if params[:co_host_id].present?
       co_host = User.resolve!(params[:co_host_id])
@@ -175,6 +182,7 @@ class Api::V1::EventsController < Api::BaseController
     if params[:tags].present?
       scope = scope.where("tags && ARRAY[?]::varchar[]", Array(params[:tags]))
     end
+    scope = scope.where(city: params[:city]) if params[:city].present?
 
     # Date-window filter, interpreted in the request's timezone (else UTC) so
     # "events on the 16th" means the 16th where the viewer/group is.
@@ -293,7 +301,7 @@ class Api::V1::EventsController < Api::BaseController
 
   def event_params
     params.require(:event).permit(:title, :content, :notes, :image_url, :image_note, :pinned,
-      :start_time, :end_time, :timezone,
+      :start_time, :end_time, :timezone, :city,
       :status, :visibility, :group_id, :place_id, :venue_id, :track_id, :meeting_url,
       :external_url, :max_participant, :require_approval, :category, :kind,
       tags: [], requirement_tags: [])
@@ -366,6 +374,16 @@ class Api::V1::EventsController < Api::BaseController
   # Money always lands in the event owner's account, so a card payment method
   # may only name one of the owner's keys — same rule TicketsController
   # enforces on the standalone ticket endpoints.
+  def nested_wechat_organizer_error(event, payment_methods)
+    return unless Array(payment_methods).any? { |pm| (pm["chain"] || pm[:chain]) == "wechat" }
+
+    group_role = ->(user_id) { event.group.memberships.exists?(user_id: user_id, role: %w[manager owner]) }
+    return "only a group manager or owner may set up a WeChat-paid ticket" unless group_role.call(current_user.id)
+    return "the event owner must be a group manager or owner for a WeChat-paid ticket" unless event.owner_id.present? && group_role.call(event.owner_id)
+
+    nil
+  end
+
   def reject_foreign_stripe_settings!(event, payment_methods)
     ids = Array(payment_methods).filter_map { |pm| pm[:stripe_setting_id].presence }
     return if ids.empty?
@@ -389,6 +407,12 @@ class Api::V1::EventsController < Api::BaseController
           :receiver_address, :price, :protocol, :stripe_setting_id, chains: []]).to_h
       permitted["group_id"] = group_id if permitted["group_id"].blank?
       reject_foreign_stripe_settings!(event, permitted["payment_methods_attributes"])
+      # Same two refusals as TicketsController#wechat_organizer_rejected?. That
+      # method reads params[:ticket] and renders, so it cannot run against this
+      # array inside the event transaction. Raising rolls the event back.
+      if (message = nested_wechat_organizer_error(event, permitted["payment_methods_attributes"]))
+        raise InvalidChild, message
+      end
       event.tickets.create!(permitted)
     end
   end

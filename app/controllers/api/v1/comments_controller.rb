@@ -1,6 +1,7 @@
 class Api::V1::CommentsController < Api::BaseController
   # Comment threads render on public event/group pages.
   skip_before_action :authenticate!, only: :index
+  before_action :authenticate_optional!, only: :index
   before_action :set_comment, only: %i[remove]
 
   # POST /api/v1/comments
@@ -8,6 +9,7 @@ class Api::V1::CommentsController < Api::BaseController
     comment = Comment.new(comment_params.merge(user: current_user))
     if comment.save
       CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"
+      InboxNotice.for_comment(comment)
       render json: CommentBlueprint.render(comment), status: :created
     else
       render_error(comment.errors.full_messages.join(", "))
@@ -45,6 +47,9 @@ class Api::V1::CommentsController < Api::BaseController
     comments = comments.where(item_type: params[:item_type]) if params[:item_type].present?
     comments = comments.where(item_id: params[:item_id]) if params[:item_id].present?
     comments = comments.where(user_id: params[:user_id]) if params[:user_id].present?
+    if params[:comment_type] == "recommendation" && current_user
+      comments = comments.where.not(user_id: current_user.blocks.select(:target_user_id))
+    end
     render_collection comments.order(created_at: :desc), blueprint: CommentBlueprint
   end
 

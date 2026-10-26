@@ -301,7 +301,62 @@ class Api::V1::AuthController < Api::BaseController
     render json: UserBlueprint.render(current_user, view: :self)
   end
 
+  # POST /api/v1/auth/wechat_miniprogram  {js_code}
+  #
+  # Redeems the miniprogram code with this deployment's mini app secret.
+  # The official-account openid column is never written.
+  def wechat_miniprogram
+    js_code = params[:js_code].to_s.strip
+    return render_error("js_code is required") if js_code.blank?
+
+    session = WechatMiniSession.exchange(js_code)
+    user = find_or_create_mini_user(session["openid"], session["unionid"])
+    render_token(user)
+  rescue WechatMiniSession::Error => e
+    if e.message == "not configured"
+      render_error("miniprogram login is not configured", status: :service_unavailable)
+    else
+      render_error("wechat login failed")
+    end
+  end
+
   private
+
+  def find_or_create_mini_user(openid, unionid)
+    user = User.find_by(wechat_unionid: unionid) if unionid.present?
+    user ||= User.find_by(wechat_mini_openid: openid)
+    if user
+      fill_mini_identity!(user, openid, unionid)
+      return user
+    end
+
+    begin
+      User.create!(wechat_mini_openid: openid, wechat_unionid: unionid.presence)
+    rescue ActiveRecord::RecordNotUnique
+      User.find_by!(wechat_mini_openid: openid)
+    end
+  end
+
+  # Fills a blank mini openid or unionid. Never copies the mini openid into
+  # users.wechat_openid, and never takes an identity another account holds.
+  def fill_mini_identity!(user, openid, unionid)
+    updates = {}
+    if user.wechat_mini_openid.blank? && openid.present? && mini_openid_free?(openid, user)
+      updates[:wechat_mini_openid] = openid
+    end
+    if unionid.present? && user.wechat_unionid.blank? && unionid_free?(unionid, user)
+      updates[:wechat_unionid] = unionid
+    end
+    user.update!(updates) if updates.any?
+  end
+
+  def mini_openid_free?(openid, user)
+    !User.where(wechat_mini_openid: openid).where.not(id: user.id).exists?
+  end
+
+  def unionid_free?(unionid, user)
+    !User.where(wechat_unionid: unionid).where.not(id: user.id).exists?
+  end
 
   def next_token_ok?
     secret = ENV["NEXT_TOKEN"]

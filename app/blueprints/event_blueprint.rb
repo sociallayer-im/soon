@@ -8,7 +8,20 @@ class EventBlueprint < Blueprinter::Base
   fields :title, :start_time, :end_time, :timezone, :status, :visibility,
          :meeting_url, :external_url, :category, :kind, :tags, :pinned,
          :max_participant, :participant_count, :require_approval, :requirement_tags,
-         :image_url, :recurring_id, :form_id, :notes, :created_at
+         :image_url, :recurring_id, :form_id, :notes, :created_at, :city
+
+  # ticket_price is the cheapest normal-ticket WeChat fiat price, in fen.
+  # Null means that price does not exist. has_non_wechat_price is true when
+  # any payment method is left out of that minimum.
+  field :ticket_price do |event|
+    event.listed_ticket_price
+  end
+  field :ticket_currency do |event|
+    event.listed_ticket_price.nil? ? nil : "cny"
+  end
+  field :has_non_wechat_price do |event|
+    event.listed_non_wechat_price?
+  end
 
   # Viewer flags — only emitted when the request was authenticated and the
   # controller passed the viewer's sets (see EventsController#personalization_options).
@@ -46,7 +59,7 @@ class EventBlueprint < Blueprinter::Base
     # index into this array, keep working.
     association :participants, blueprint: ParticipantBlueprint,
                 if: ->(_n, _o, options) { options[:include_participants] != false } do |event|
-      event.participants.reject(&:cancelled?)
+      event.participants.select(&:confirmed_public?)
     end
     # The viewer's own RSVP. Without it, dropping the array above would also
     # drop the answer to "have I joined, did my payment go through, was I

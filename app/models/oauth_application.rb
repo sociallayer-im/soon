@@ -46,17 +46,13 @@ class OauthApplication < ApplicationRecord
 
   scope :active, -> { where(status: "active") }
 
-  # Localhost is the one place an unencrypted redirect is legitimate: it never
-  # leaves the developer's machine. Everything else must be https, or an
-  # intercepted authorization code is readable in transit. (PKCE makes that code
-  # unusable, but the user's identity and the fact of the authorization still
-  # leak.)
+  # http and https are both accepted. A fragment is not: it never reaches the
+  # token endpoint, and it is where a second target hides from an exact match.
   def self.redirect_uri_valid?(uri)
     parsed = URI.parse(uri.to_s)
-    return false unless parsed.is_a?(URI::HTTP) || parsed.is_a?(URI::HTTPS)
-    return false if parsed.fragment.present?
-    return true if parsed.scheme == "https"
-    parsed.scheme == "http" && %w[localhost 127.0.0.1 ::1].include?(parsed.host)
+    return false unless parsed.is_a?(URI::HTTP)
+    return false if parsed.host.blank? || parsed.fragment.present?
+    %w[http https].include?(parsed.scheme)
   rescue URI::InvalidURIError
     false
   end
@@ -116,7 +112,7 @@ class OauthApplication < ApplicationRecord
   def redirect_uris_are_valid
     bad = Array(redirect_uris).reject { |u| self.class.redirect_uri_valid?(u) }
     return if bad.empty?
-    errors.add(:redirect_uris, "must be https (or http on localhost) with no fragment: #{bad.join(', ')}")
+    errors.add(:redirect_uris, "must be http or https, with a host and no fragment: #{bad.join(', ')}")
   end
 
   def scopes_are_known

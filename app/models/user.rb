@@ -33,6 +33,10 @@ class User < ApplicationRecord
   has_many :oauth_access_tokens, dependent: :destroy
   has_many :oauth_refresh_tokens, dependent: :destroy
   has_many :oauth_authorization_codes, dependent: :destroy
+  has_many :follows, dependent: :delete_all
+  has_many :blocks, dependent: :delete_all
+  has_many :reports, dependent: :delete_all
+  has_many :campaigns, foreign_key: "owner_id", dependent: :destroy
 
   normalizes :email, with: ->(e) { e.strip.downcase }
   normalizes :eth,   with: ->(a) { a.strip.downcase }
@@ -51,6 +55,7 @@ class User < ApplicationRecord
   validates :sol,   uniqueness: true, allow_nil: true
   validates :wechat_openid,  uniqueness: true, allow_nil: true
   validates :wechat_unionid, uniqueness: true, allow_nil: true
+  validates :wechat_mini_openid, uniqueness: true, allow_nil: true
   validate  :has_login_identity
 
   # `name` is the user's unique identifier/username (the handle concept). It must
@@ -67,9 +72,9 @@ class User < ApplicationRecord
   # (the current one) and "admin" in the legacy `permissions` array — because
   # the array predates the column and still carries the live admins.
   #
-  # `admin` is set in the database by hand and nowhere else. It is absent from
-  # UsersController's permit list on purpose — that list is a closed allowlist,
-  # so there is no request, from any client, that can grant or revoke it.
+  # `admin` is absent from UsersController's profile permit list on purpose.
+  # The only requests that change it are POST and DELETE /platform_admins,
+  # and only a current platform admin can call those.
   def platform_admin?
     admin? || permissions.include?("admin")
   end
@@ -84,7 +89,7 @@ class User < ApplicationRecord
   end
 
   private def has_login_identity
-    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?)
+    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid, wechat_mini_openid ].any?(&:present?)
 
     errors.add(:base, "must have an email, eth, sol, or wechat identity")
   end

@@ -1,7 +1,8 @@
 class Api::V1::UsersController < Api::BaseController
+  include DataWhitelist
   # Profile pages are public — auth is optional and only unlocks private fields.
-  skip_before_action :authenticate!, only: %i[show groups]
-  before_action :authenticate_optional!, only: :show
+  skip_before_action :authenticate!, only: %i[show groups suggestions]
+  before_action :authenticate_optional!, only: %i[show suggestions]
 
   # :id accepts "me", a TSID, or a username (User.resolve!).
   def show
@@ -31,6 +32,21 @@ class Api::V1::UsersController < Api::BaseController
     return render_error("User not found", status: :not_found) unless user
 
     render json: UserBlueprint.render(user, view: :profile)
+  end
+
+  # GET /api/v1/users/suggestions?city=&exclude[]=
+  #
+  # People rail on the follow tab. Public profiles in the requested city,
+  # skipping the viewer and anyone they have blocked.
+  def suggestions
+    scope = User.where(active: true)
+    scope = scope.where.not(id: current_user.id) if current_user
+    scope = scope.where.not(id: current_user.blocks.select(:target_user_id)) if current_user
+    scope = scope.where("COALESCE(data ->> 'visibility', '') NOT IN (?)", %w[MEMBERS PRIVATE])
+    scope = scope.where("data ->> 'city' = ?", params[:city]) if params[:city].present?
+    excluded = Array(params[:exclude]).compact_blank
+    scope = scope.where.not(id: excluded) if excluded.any?
+    render_collection scope.order(created_at: :desc), blueprint: UserBlueprint, view: :profile
   end
 
   # GET /api/v1/users/:id/groups?role=owner,admin — a user's public group
@@ -109,8 +125,19 @@ class Api::V1::UsersController < Api::BaseController
       (current_user.wechat_openid.present? || current_user.wechat_unionid.present?)
   end
 
+  USER_DATA_KEYS = [
+    :city, :introduction, :share_activity, :visibility, :locale, :onboarded,
+    { interests: [], frequent_space_ids: [], notification_preferences: {},
+      public_links: [ :kind, :label, :url ], contact: [ :wechat ] }
+  ].freeze
+
   # email is intentionally excluded — it's the login identity, not updatable here.
+  # data is a closed key list, merged onto the stored hash so one field does
+  # not wipe the rest.
   def user_params
-    params.require(:user).permit(:name, :nickname, :bio, :image_url)
+    permitted = params.require(:user).permit(:name, :nickname, :bio, :image_url, data: USER_DATA_KEYS)
+    raw = params[:user][:data] if params[:user].respond_to?(:[])
+    permitted[:data] = merge_whitelisted_data(current_user, raw, USER_DATA_KEYS) if raw.present?
+    permitted
   end
 end

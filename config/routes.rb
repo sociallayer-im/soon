@@ -43,6 +43,7 @@ Rails.application.routes.draw do
       post "auth/bind_email",     to: "auth#bind_email"
       # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.
       post "auth/bind_wechat",    to: "auth#bind_wechat"
+      post "auth/wechat_miniprogram", to: "auth#wechat_miniprogram"
 
       # OAuth 2.0 / OIDC provider. See design/OAUTH_PROVIDER_PLAN.md.
       # The core endpoints authenticate by client credentials or OAuth bearer
@@ -105,6 +106,9 @@ Rails.application.routes.draw do
       # Before `resources :users`, or /users/by_email resolves to #show with
       # id "by_email".
       get "users/by_email", to: "users#by_email"
+      get "users/suggestions", to: "users#suggestions"
+      get "registrations", to: "participants#mine"
+      get "registrations/:id", to: "participants#registration"
 
       # Resources
       resources :users, only: %i[show update] do
@@ -112,7 +116,30 @@ Rails.application.routes.draw do
           get :groups
         end
       end
+      resources :platform_admins, only: %i[index create destroy]
       post "users/merge", to: "users#merge"
+
+      resources :follows, only: %i[index create destroy] do
+        collection do
+          get :feed
+        end
+      end
+      resources :blocks, only: %i[index create destroy]
+      resources :reports, only: %i[index create] do
+        member do
+          post :resolve
+        end
+      end
+      resources :campaigns, only: %i[index show create update destroy] do
+        member do
+          post :submit
+        end
+      end
+      resources :reviews, only: %i[index] do
+        member do
+          post :decide
+        end
+      end
 
       get "group_invites/pending", to: "group_invites#pending"
       get "group_invites/:id", to: "group_invites#show"

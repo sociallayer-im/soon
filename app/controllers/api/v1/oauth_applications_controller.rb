@@ -1,7 +1,7 @@
 # The developer portal's backend. Any signed-in user may register an app and
 # activate it without review (design/OAUTH_PROVIDER_PLAN.md §8), so the guards
 # that would normally live in a review step live in the model instead:
-# reserved-name rejection, a per-owner cap, and https-only redirect URIs.
+# reserved-name rejection, a per-owner cap, and http/https redirect URIs.
 class Api::V1::OauthApplicationsController < Api::BaseController
   before_action :set_application, only: %i[show update destroy rotate_secret]
 

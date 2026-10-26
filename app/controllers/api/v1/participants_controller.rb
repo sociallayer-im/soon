@@ -6,7 +6,7 @@ class Api::V1::ParticipantsController < Api::BaseController
   # who could see it before.
   skip_before_action :authenticate!, only: %i[index]
   before_action :authenticate_optional!, only: %i[index]
-  before_action :set_event
+  before_action :set_event, except: %i[mine registration]
 
   # GET /api/v1/events/:event_id/participants
   #
@@ -19,12 +19,46 @@ class Api::V1::ParticipantsController < Api::BaseController
     # the attendees of a draft or private one. Matching EventPolicy#show? ties
     # the list to the same visibility rule as the event that owns it.
     authorize @event, :show?
-    render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
+    roster_manager = roster_manager?
+    status = params[:status].presence
+    scope = if status
+      return render_error("Forbidden", status: :forbidden) unless roster_manager
+      unless %w[pending declined maybe].include?(status)
+        return render_error("unknown participant status")
+      end
+      @event.participants.where(status: status)
+    else
+      @event.participants.confirmed_public
+    end
+    opts = {}
+    opts[:view] = :with_message if roster_manager
+    render_collection scope.includes(:user), blueprint: ParticipantBlueprint, **opts
+  end
+
+  # GET /api/v1/registrations — the signed-in user's registrations.
+  def mine
+    scope = current_user.participants.where.not(status: "cancelled")
+                         .includes(event: [ :group, :place, :venue, :owner, :track, { tickets: :payment_methods } ])
+                         .order(registered_at: :desc)
+    limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i
+    limit = PAGY_DEFAULT_LIMIT if limit <= 0
+    pagy = Pagy::Offset.new(count: scope.count, page: params.fetch(:page, 1).to_i, limit: [ limit, PAGY_MAX_LIMIT ].min)
+    data = pagy.records(scope).map { |participant| registration_payload(participant) }
+    render json: { data: data, meta: pagy_metadata(pagy) }
+  end
+
+  # GET /api/v1/registrations/:id
+  def registration
+    participant = current_user.participants.includes(event: [ :group, :place, :venue, :owner, :track, { tickets: :payment_methods } ]).find(params[:id])
+    render json: registration_payload(participant, detail: true)
   end
 
   # POST /api/v1/events/:event_id/participants
   def create
     authorize @event, :join?
+    if @event.tickets.joins(:payment_methods).exists?
+      return render_error("paid event requires a ticket")
+    end
 
     if @event.form_id
       required_field_ids = FormField.where(form_id: @event.form_id, required: true, for_admin: false).pluck(:id)
@@ -71,6 +105,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
 
     participant.assign_attributes(status: status, registered_at: Time.current)
+    if params[:participant].respond_to?(:key?) && params[:participant].key?(:message)
+      participant.message = params[:participant][:message]
+    end
 
     ActiveRecord::Base.transaction do
       participant.save!
@@ -102,7 +139,8 @@ class Api::V1::ParticipantsController < Api::BaseController
       end
     end
 
-    render json: ParticipantBlueprint.render(participant), status: :created
+    participant.notify_registration!(initiator: current_user)
+    render json: ParticipantBlueprint.render(participant, view: :with_message), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -144,6 +182,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
+    if refund_required?(participant)
+      return render_error("refund required before cancel")
+    end
     return head :no_content if participant.status == "cancelled" # idempotent
 
     ActiveRecord::Base.transaction do
@@ -174,6 +215,7 @@ class Api::V1::ParticipantsController < Api::BaseController
     return render_error("participant is not pending") unless participant.status == "pending"
 
     participant.transition!(:attending)
+    participant.notify_registration!(initiator: current_user)
     sync_form_submission!(participant, "approved")
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
@@ -245,6 +287,44 @@ class Api::V1::ParticipantsController < Api::BaseController
         item.release_resources!
       end
     end
+  end
+
+  def roster_manager?
+    return false unless current_user
+
+    EventPolicy.new(current_user, @event).update? || @event.owner_id == current_user.id
+  end
+
+  # A free order is status succeeded with amount 0 and does not need a refund.
+  # A positive succeeded, partial, or disputed charge does.
+  def refund_required?(participant)
+    return false unless participant.payment_status == "succeeded"
+
+    TicketItem.where(participant_id: participant.id, status: %w[succeeded partially_refunded disputed])
+              .where("amount > 0").exists?
+  end
+
+  def registration_payload(participant, detail: false)
+    event = participant.event
+    rendered = if detail
+      EventBlueprint.render(
+        event,
+        view: :extended,
+        include_participants: false,
+        current_participant: participant,
+        reveal_image_note: participant.confirmed_public? || EventPolicy.new(current_user, event).update?
+      )
+    else
+      EventBlueprint.render(event)
+    end
+    payload = {
+      "participant" => JSON.parse(ParticipantBlueprint.render(participant, view: :with_message)),
+      "event" => JSON.parse(rendered)
+    }
+    if detail
+      payload["pending_ticket_item_id"] = TicketItem.where(participant_id: participant.id, status: "pending").order(created_at: :desc).pick(:id)
+    end
+    payload
   end
 
   def set_event

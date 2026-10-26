@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_20_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -140,6 +140,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
   end
 
+  create_table "blocks", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "target_user_id", null: false
+    t.string "user_id", null: false
+    t.index ["target_user_id"], name: "index_blocks_on_target_user_id"
+    t.index ["user_id", "target_user_id"], name: "index_blocks_on_user_id_and_target_user_id", unique: true
+  end
+
+  create_table "campaigns", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_ids", default: [], null: false, array: true
+    t.string "featured_image_url"
+    t.string "group_id"
+    t.text "introduction"
+    t.string "kicker"
+    t.string "owner_id", null: false
+    t.string "resource_links", default: [], null: false, array: true
+    t.integer "round", default: 1, null: false
+    t.string "status", default: "draft", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_campaigns_on_group_id"
+    t.index ["owner_id"], name: "index_campaigns_on_owner_id"
+    t.index ["status"], name: "index_campaigns_on_status"
+  end
+
   create_table "cart_items", id: :string, force: :cascade do |t|
     t.string "cart_id", null: false
     t.datetime "created_at", null: false
@@ -186,7 +212,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
 
   create_table "comments", id: :string, force: :cascade do |t|
     t.string "badge_id"
-    t.string "comment_type", null: false, comment: "checkin | chat | comment | star | feedback"
+    t.string "comment_type", null: false, comment: "checkin | chat | comment | star | feedback | recommendation"
     t.text "content"
     t.string "content_type", default: "text"
     t.datetime "created_at", null: false
@@ -272,6 +298,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
 
   create_table "events", id: :string, force: :cascade do |t|
     t.string "category"
+    t.string "city"
     t.text "content"
     t.datetime "created_at", null: false
     t.datetime "end_time"
@@ -306,6 +333,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
     t.string "venue_id"
     t.string "visibility", default: "normal", comment: "normal | open_registration | unlisted"
+    t.index ["city"], name: "index_events_on_city"
     t.index ["form_id"], name: "index_events_on_form_id"
     t.index ["group_id"], name: "index_events_on_group_id"
     t.index ["owner_id"], name: "index_events_on_owner_id"
@@ -459,6 +487,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "user_id", null: false
     t.index ["uri"], name: "index_fed_participations_on_uri", unique: true
     t.index ["user_id", "fed_event_id"], name: "index_fed_participations_on_user_id_and_fed_event_id", unique: true
+  end
+
+  create_table "follows", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "status", default: "active", null: false
+    t.string "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id", "target_type", "target_id"], name: "index_follows_on_user_id_and_target_type_and_target_id", unique: true
+    t.index ["user_id"], name: "index_follows_on_user_id"
   end
 
   create_table "form_answers", id: :string, force: :cascade do |t|
@@ -646,6 +685,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
+    t.string "city"
     t.datetime "created_at", null: false
     t.string "custom_domain"
     t.string "custom_domain_pending"
@@ -687,6 +727,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
     t.string "venue_tag_list", default: [], array: true
     t.string "venue_union", array: true
+    t.index ["city"], name: "index_groups_on_city"
     t.index ["custom_domain"], name: "index_groups_on_custom_domain", unique: true, where: "(custom_domain IS NOT NULL)"
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
@@ -1140,7 +1181,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "ticket_item_id"
     t.datetime "updated_at", null: false
     t.index ["refundable_type", "refundable_id"], name: "index_refunds_on_refundable_type_and_refundable_id"
-    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
     t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
@@ -1165,6 +1206,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["topic_id", "created_at"], name: "index_replies_on_topic_and_created_alive", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["topic_id", "created_at"], name: "index_replies_on_topic_id_and_created_at"
     t.index ["user_id"], name: "index_replies_on_user_id"
+  end
+
+  create_table "reports", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "note"
+    t.string "reason", null: false
+    t.string "resolved_by_id"
+    t.string "status", default: "open", null: false
+    t.string "target_id"
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["status"], name: "index_reports_on_status"
+    t.index ["user_id"], name: "index_reports_on_user_id"
+  end
+
+  create_table "reviews", id: :string, force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.datetime "created_at", null: false
+    t.string "decided_by_id"
+    t.text "note"
+    t.integer "round", null: false
+    t.string "scope", default: "creator", null: false
+    t.jsonb "snapshot", default: {}, null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["campaign_id", "status"], name: "index_reviews_on_campaign_id_and_status"
+    t.index ["campaign_id"], name: "index_reviews_on_campaign_id"
   end
 
   create_table "shipment_items", id: :string, force: :cascade do |t|
@@ -1477,6 +1546,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "sol"
     t.string "telegram_id"
     t.datetime "updated_at", null: false
+    t.string "wechat_mini_openid"
     t.string "wechat_openid"
     t.string "wechat_unionid"
     t.index ["admin"], name: "index_users_on_admin", where: "admin"
@@ -1486,6 +1556,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["phone"], name: "index_users_on_phone", unique: true
     t.index ["ref_id"], name: "index_users_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["sol"], name: "index_users_on_sol", unique: true
+    t.index ["wechat_mini_openid"], name: "index_users_on_wechat_mini_openid", unique: true, where: "(wechat_mini_openid IS NOT NULL)"
     t.index ["wechat_openid"], name: "index_users_on_wechat_openid", unique: true, where: "(wechat_openid IS NOT NULL)"
     t.index ["wechat_unionid"], name: "index_users_on_wechat_unionid", unique: true, where: "(wechat_unionid IS NOT NULL)"
   end
@@ -1604,6 +1675,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "badges", "users", column: "creator_id"
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
+  add_foreign_key "blocks", "users"
+  add_foreign_key "blocks", "users", column: "target_user_id"
+  add_foreign_key "campaigns", "groups"
+  add_foreign_key "campaigns", "users", column: "owner_id"
   add_foreign_key "cart_items", "carts"
   add_foreign_key "cart_items", "product_variants"
   add_foreign_key "carts", "shops"
@@ -1631,6 +1706,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "fed_follows", "fed_actors"
   add_foreign_key "fed_participations", "fed_events"
   add_foreign_key "fed_participations", "users"
+  add_foreign_key "follows", "users"
   add_foreign_key "form_answers", "form_fields"
   add_foreign_key "form_answers", "form_submissions"
   add_foreign_key "form_fields", "forms"
@@ -1687,6 +1763,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "products", "shops"
   add_foreign_key "replies", "topics"
   add_foreign_key "replies", "users"
+  add_foreign_key "reports", "users"
+  add_foreign_key "reports", "users", column: "resolved_by_id"
+  add_foreign_key "reviews", "campaigns"
+  add_foreign_key "reviews", "users", column: "decided_by_id"
   add_foreign_key "shipment_items", "order_items"
   add_foreign_key "shipment_items", "shipments"
   add_foreign_key "shipments", "orders"

@@ -21,6 +21,9 @@ class Api::V1::MembershipsController < Api::BaseController
     return render_error("only an owner can grant the owner role", status: :forbidden) if role == "owner" && !group_owner?
 
     user = User.find(params[:user_id])
+    if @group.memberships.exists?(user_id: user.id)
+      return render_error("membership exists")
+    end
     membership = @group.add_member(user.id, role)
     render json: MembershipBlueprint.render(membership), status: :created
   rescue ActiveRecord::RecordInvalid => e

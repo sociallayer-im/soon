@@ -2,7 +2,9 @@ class GroupBlueprint < Blueprinter::Base
   identifier :id
 
   # Default view stays light — it's embedded in events, invites, tracks, etc.
-  fields :name, :nickname, :image_url, :logo_url, :created_at
+  # group_tags travels with every embedded group so a schedule card can tell a
+  # space from an organization without a second request.
+  fields :name, :nickname, :image_url, :logo_url, :created_at, :group_tags
 
   # Every scalar a group page or popup-city card needs, and no sub-resources.
   # Use this for LISTS. :detail on a list embeds each group's whole membership
@@ -29,7 +31,27 @@ class GroupBlueprint < Blueprinter::Base
            # The one event whose tickets grant group membership. At most one
            # per group; nil until a manager designates one.
            :group_ticket_event_id,
-           :memberships_count, :events_count, :parent_id
+           :memberships_count, :events_count, :parent_id, :city
+
+    field :opening_hours do |group|
+      group.data["opening_hours"]
+    end
+    field :address do |group|
+      group.data["address"]
+    end
+    field :public_links do |group|
+      group.data["public_links"]
+    end
+    field :allow_event_requests do |group|
+      ActiveModel::Type::Boolean.new.cast(group.data["allow_event_requests"])
+    end
+    # Managers of this group, and platform admins, see the private contact.
+    field :public_contact, if: ->(_name, group, options) {
+      managed = options[:managed_group_ids]
+      managed == :all || (managed.respond_to?(:include?) && managed.include?(group.id))
+    } do |group|
+      group.data["public_contact"]
+    end
   end
 
   # Full group-page payload: the card fields plus sub-resources. Only ever
@@ -37,6 +59,9 @@ class GroupBlueprint < Blueprinter::Base
   # the associations below are a per-record N+1 otherwise.
   view :detail do
     include_view :card
+    field :followers_count do |group|
+      Follow.active.where(target_type: "Group", target_id: group.id).count
+    end
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint

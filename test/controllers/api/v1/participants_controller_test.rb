@@ -357,13 +357,15 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     item.confirm_payment!(txhash: "pi_paid")
 
     delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
-    assert_response :no_content
+    assert_response :unprocessable_entity
+    assert_equal "refund required before cancel", json_response["error"]
 
     # The money is still with the organizer, so the order stays succeeded and
-    # refundable — withdrawing is not a refund.
+    # refundable — withdrawing is not a refund. The seat stays until one.
+    assert_equal "attending", participant.reload.status
     assert_equal "succeeded", item.reload.status
     assert_equal participant.id, item.participant_id, "the refund path still needs the participant"
-    assert_equal 5, ticket.reload.quantity, "the seat is freed even though the order stands"
+    assert_equal 4, ticket.reload.quantity
   end
 
   test "withdrawing from a free ticketed event retires the order" do

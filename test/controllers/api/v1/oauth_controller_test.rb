@@ -120,6 +120,25 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, OauthAuthorizationCode.count
   end
 
+  test "authorize_decision refuses the phone scope until the account has a phone" do
+    @client.update!(allowed_scopes: @client.allowed_scopes | %w[phone])
+    assert_nil @user.phone
+
+    post "/api/v1/oauth/authorize",
+         params: authorize_params(scope: "openid phone", decision: "allow"),
+         headers: auth_headers(@user)
+    assert_response :bad_request
+    assert_equal "phone_required", json_response["error"]
+    assert_equal 0, OauthAuthorizationCode.count
+
+    @user.update!(phone: "+8613800138000")
+    post "/api/v1/oauth/authorize",
+         params: authorize_params(scope: "openid phone", decision: "allow"),
+         headers: auth_headers(@user)
+    assert_response :success
+    assert json_response["code"].present?
+  end
+
   test "authorize_decision deny still validates redirect_uri" do
     # Otherwise the denial path is an open redirect: any client_id could aim a
     # user at an arbitrary host.

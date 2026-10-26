@@ -5,7 +5,7 @@ class Comment < ApplicationRecord
   belongs_to :reply_parent, class_name: "Comment", optional: true
   belongs_to :edit_parent, class_name: "Comment", optional: true
 
-  validates :comment_type, inclusion: { in: %w[checkin chat comment star feedback] }
+  validates :comment_type, inclusion: { in: %w[checkin chat comment star feedback recommendation] }
   # item_type reaches this model straight from a request parameter and is then
   # used for polymorphic lookups and as a subquery discriminator, so it needs a
   # whitelist rather than accepting any string at all.

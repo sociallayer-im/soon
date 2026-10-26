@@ -59,6 +59,16 @@ class Participant < ApplicationRecord
   validates :user_id, uniqueness: { scope: :event_id, message: "can only participate once per event" }
 
   scope :active, -> { where.not(status: "cancelled") }
+  # Public roster: seated, and either never ordered or already paid.
+  scope :confirmed_public, -> { where(status: "attending", payment_status: [ nil, "succeeded" ]) }
+
+  def confirmed_public?
+    status == "attending" && [ nil, "succeeded" ].include?(payment_status)
+  end
+
+  def notify_registration!(initiator:)
+    InboxNotice.registration!(self, initiator: initiator)
+  end
   scope :seated, -> { where(status: SEATED) }
 
   def cancelled? = status == "cancelled"

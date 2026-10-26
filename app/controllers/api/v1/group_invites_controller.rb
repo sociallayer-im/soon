@@ -40,6 +40,9 @@ class Api::V1::GroupInvitesController < Api::BaseController
     authorize @group, :update?, policy_class: GroupPolicy
 
     role = params[:role].presence || "member"
+    if role == "owner" && !group_owner?
+      return render_error("only an owner can grant the owner role", status: :forbidden)
+    end
     results = Array(params[:receivers]).map { |address| send_invite_to(address, role) }
     render json: { results: results }
   end
@@ -109,6 +112,9 @@ class Api::V1::GroupInvitesController < Api::BaseController
     authorize @group, :update?, policy_class: GroupPolicy
 
     role = params[:role].presence || "member"
+    if role == "owner" && !group_owner?
+      return render_error("only an owner can grant the owner role", status: :forbidden)
+    end
     code = SecureRandom.alphanumeric(8).upcase
     invite = GroupInvite.create(
       group: @group, sender: current_user, role: role,
@@ -124,15 +130,21 @@ class Api::V1::GroupInvitesController < Api::BaseController
     return render_error("invalid code") unless invite
     return render_error("code expired") if invite.expired?
 
-    existing = @group.memberships.exists?(user_id: current_user.id)
+    if @group.memberships.exists?(user_id: current_user.id)
+      return render_error("membership exists")
+    end
+
     @group.add_member(current_user.id, invite.role)
-    action = existing ? "group_invite/update_role" : "group_invite/add_member"
-    Activity.create(item: invite, initiator: current_user, action: action,
+    Activity.create(item: invite, initiator: current_user, action: "group_invite/add_member",
       payload: { group_name: @group.name, group_display_name: @group.display_name })
     render json: GroupInviteBlueprint.render(invite)
   end
 
   private
+
+  def group_owner?
+    current_user.memberships.exists?(group: @group, role: "owner")
+  end
 
   def set_group
     @group = Group.find(params[:group_id])
@@ -155,6 +167,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     # meant for whoever owns that number.
     user = User.find_by(phone: phone) if phone
     user ||= User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
+    user ||= User.find_by(id: address)
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)

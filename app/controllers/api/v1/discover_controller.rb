@@ -20,7 +20,7 @@ class Api::V1::DiscoverController < Api::BaseController
     popups = Group.where(active: true).where("group_tags && ARRAY['top']::varchar[]")
                   .where.not("group_tags && ARRAY['hidden']::varchar[]")
                   .order(start_date: :desc).limit(50)
-    events = Event.includes(:group, :place, :venue, :owner, :track)
+    events = Event.includes(:group, :place, :venue, :owner, :track, tickets: :payment_methods)
                   .where(visibility: %w[normal open_registration], status: "published")
                   .where("end_time >= ?", Time.current).order(:start_time).limit(20)
 
@@ -57,7 +57,7 @@ class Api::V1::DiscoverController < Api::BaseController
     return render json: { events: [], groups: [], users: [], badge_classes: [] } if q.length < 2
 
     like = "%#{Event.sanitize_sql_like(q)}%"
-    events = Event.includes(:group, :place, :venue, :owner, :track)
+    events = Event.includes(:group, :place, :venue, :owner, :track, tickets: :payment_methods)
                   .where(visibility: %w[normal open_registration], status: "published")
                   .where("title ILIKE ?", like).order(start_time: :desc).limit(10)
     groups = Group.where(active: true)

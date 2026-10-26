@@ -1,8 +1,7 @@
 class TicketItemPolicy < ApplicationPolicy
-  # Refunds (design/PAYMENTS_PLAN.md decision #6): the event owner and
-  # co-hosts (EventRole "co_host"); for group tickets additionally the group
-  # owner. Deliberately narrower than EventPolicy#update? — group managers
-  # and merely-listed speakers do NOT get refund rights on regular events.
+  # Refunds: the event owner, a co-host, and a manager or owner of the
+  # event's group. Group-ticket orders with no event still allow that
+  # group's owner.
   def refund?
     return false unless user
 
@@ -10,6 +9,9 @@ class TicketItemPolicy < ApplicationPolicy
     if event
       return true if owner?(event)
       return true if event.event_roles.exists?(item_type: "User", item_id: user.id, role: "co_host")
+      if event.group && event.group.memberships.exists?(user_id: user.id, role: %w[manager owner])
+        return true
+      end
     end
     record.ticket_type == "group" && record.group.present? &&
       record.group.memberships.exists?(user_id: user.id, role: "owner")

@@ -37,6 +37,27 @@ class Event < ApplicationRecord
   # groups.group_ticket_event_id — the single source of truth. `kind` means the
   # event's CATEGORY (talk, workshop, …) and never carried this.
   def group_ticket_event? = persisted? && group&.group_ticket_event_id == id
+
+  # Minimum WeChat fiat price on a ticket that is still on sale. Null means
+  # there is no such price, which is not the same thing as free.
+  def listed_ticket_price
+    prices = tickets.flat_map { |ticket|
+      next [] unless ticket.status == "normal"
+
+      ticket.payment_methods.select { |pm| pm.chain == "wechat" && pm.kind == "fiat" }.map(&:price)
+    }.compact
+    prices.min
+  end
+
+  # True when any payment method is left out of listed_ticket_price: another
+  # rail, or a WeChat price hanging on a ticket that is not on sale.
+  def listed_non_wechat_price?
+    tickets.any? do |ticket|
+      ticket.payment_methods.any? do |pm|
+        !(ticket.status == "normal" && pm.chain == "wechat" && pm.kind == "fiat")
+      end
+    end
+  end
   validates :visibility, inclusion: { in: VISIBILITIES }, allow_nil: true
   validate :end_time_after_start_time
 

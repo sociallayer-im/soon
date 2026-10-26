@@ -82,11 +82,20 @@ class Api::V1::OauthApplicationsControllerTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
-  test "an http redirect_uri outside localhost is rejected" do
+  test "an http redirect_uri is allowed" do
     post "/api/v1/oauth/applications",
          params: valid_params(redirect_uris: [ "http://client.example.com/cb" ]),
          headers: auth_headers(@user)
-    assert_response :unprocessable_entity
+    assert_response :created
+  end
+
+  test "the owner can replace redirect URIs with an http callback" do
+    app, = create_oauth_application(owner: @user)
+    patch "/api/v1/oauth/applications/#{app.id}",
+          params: { application: { redirect_uris: [ "http://localhost:8788/auth/callback" ] } },
+          headers: auth_headers(@user)
+    assert_response :success
+    assert_equal [ "http://localhost:8788/auth/callback" ], app.reload.redirect_uris
   end
 
   test "an http localhost redirect_uri is allowed for development" do
