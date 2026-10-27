@@ -136,8 +136,16 @@ class Api::V1::AuthController < Api::BaseController
   # POST /api/v1/auth/verify_phone_code — signs in, creating the account on
   # first use. A phone-first account has no email and no name, so the frontend
   # routes it to /register exactly as it does a WeChat one.
+  # context=bind_phone is the miniprogram bind step: the code was minted for
+  # the signed-in account, so it must not be redeemed as a phone login.
   def verify_phone_code
     return render_not_found unless phone_login_enabled?
+    if params[:context] == BIND_PHONE_CONTEXT
+      authenticate!
+      return if performed?
+
+      return bind_phone
+    end
 
     phone = normalized_phone
     return render_error("invalid phone number") if phone.blank?

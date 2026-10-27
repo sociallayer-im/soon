@@ -220,6 +220,39 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert json_response["wechat"], "the self view should report this as a WeChat account"
   end
 
+  test "verify_phone_code with bind context attaches the phone to the signed-in account" do
+    user = User.create!(wechat_openid: "openid_#{unique_suffix}")
+
+    post "/api/v1/auth/request_phone_code", params: { phone: "13800138011", context: "bind_phone" }
+    post "/api/v1/auth/verify_phone_code",
+      params: { phone: "13800138011", code: AuthCode.last.code, context: "bind_phone" },
+      headers: auth_headers(user)
+
+    assert_response :success
+    assert_equal "+8613800138011", user.reload.phone
+  end
+
+  test "verify_phone_code with bind context does not sign in without a session" do
+    post "/api/v1/auth/request_phone_code", params: { phone: "13800138012", context: "bind_phone" }
+    post "/api/v1/auth/verify_phone_code",
+      params: { phone: "13800138012", code: AuthCode.last.code, context: "bind_phone" }
+
+    assert_response :unauthorized
+    assert_nil User.find_by(phone: "+8613800138012")
+  end
+
+  test "a login code cannot be redeemed through verify_phone_code bind context" do
+    user = User.create!(wechat_openid: "openid_#{unique_suffix}")
+    post "/api/v1/auth/request_phone_code", params: { phone: "13800138013" }
+
+    post "/api/v1/auth/verify_phone_code",
+      params: { phone: "13800138013", code: AuthCode.last.code, context: "bind_phone" },
+      headers: auth_headers(user)
+
+    assert_response :unauthorized
+    assert_nil user.reload.phone
+  end
+
   test "bind_phone requires a session" do
     post "/api/v1/auth/request_phone_code", params: { phone: "13800138002", context: "bind_phone" }
     post "/api/v1/auth/bind_phone", params: { phone: "13800138002", code: AuthCode.last.code }
