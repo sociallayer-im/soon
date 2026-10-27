@@ -1,0 +1,16 @@
+app/controllers/api/v1/auth_controller.rb
+  h_b053bf74bef223 139-140,143-148
+test/controllers/api/v1/phone_auth_test.rb
+  h_b053bf74bef223 223-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c8a2f62666744cba0ba4c4632fc2fe97075a38cd",
+  "prompts": {},
+  "humans": {
+    "h_b053bf74bef223": {
+      "author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
