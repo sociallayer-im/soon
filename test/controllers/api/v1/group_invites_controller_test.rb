@@ -554,3 +554,24 @@ class Api::V1::GroupInvitesControllerTest
     assert_equal "owner", group.memberships.find_by!(user: owner).role
   end
 end
+
+class Api::V1::GroupInvitesControllerTest
+  test "invite lookup supports names and exact phones without exposing contact data" do
+    owner = create_user
+    target = create_user(phone: "+8613800138000", nickname: "中文昵称")
+    group = create_group(owner: owner)
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: "13800138000" }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal [target.id], json_response["users"].map { |u| u["id"] }
+    assert_not json_response["users"].first.key?("phone")
+    assert_not json_response["users"].first.key?("email")
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: "中文" }, headers: auth_headers(owner)
+    assert_equal target.id, json_response["users"].first["id"]
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: target.name }, headers: auth_headers(target)
+    assert_response :forbidden
+    post "/api/v1/groups/#{group.id}/group_invites", params: { receivers: ["13800138000"], require_confirmation: true }, headers: auth_headers(owner)
+    assert_equal "invited", json_response["results"].first["result"]
+    assert_not group.memberships.exists?(user: target)
+    assert group.group_invites.exists?(receiver_id: target.id, status: "sending")
+  end
+end
