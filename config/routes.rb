@@ -39,6 +39,7 @@ Rails.application.routes.draw do
       get  "auth/nonce",          to: "auth#nonce"
       post "auth/verify_wallet",  to: "auth#verify_wallet"
       post "auth/verify_google",  to: "auth#verify_google"
+      post "auth/wechat_miniprogram", to: "auth#wechat_miniprogram"
       post "auth/trusted_signin", to: "auth#trusted_signin"
       post "auth/bind_email",     to: "auth#bind_email"
       # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.

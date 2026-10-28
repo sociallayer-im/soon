@@ -200,6 +200,18 @@ class Api::V1::AuthController < Api::BaseController
     render_token user
   end
 
+  def wechat_miniprogram
+    code = params[:js_code].to_s.strip
+    return render_error("js_code is required") if code.blank?
+
+    identity = WechatMiniprogramAuth.identity(code)
+    render_token wechat_user(openid: identity.fetch(:openid), unionid: identity[:unionid])
+  rescue WechatMiniprogramAuth::Unavailable
+    render json: { error: "WeChat sign-in is not configured or temporarily unavailable", code: "WECHAT_UNAVAILABLE" }, status: :service_unavailable
+  rescue WechatMiniprogramAuth::InvalidCode
+    render json: { error: "WeChat login code expired or invalid. Please try again.", code: "WECHAT_INVALID_CODE" }, status: :unauthorized
+  end
+
   # POST /api/v1/auth/trusted_signin
   # For the frontend's WeChat 网页授权 callback ONLY: the openid is proven by the
   # frontend server redeeming the code with the app secret, so that server (and
@@ -317,9 +329,7 @@ class Api::V1::AuthController < Api::BaseController
   # openid alone — before the 开放平台 binding existed, or from a scope that
   # doesn't return unionid — is claimed and back-filled on the first sign-in
   # that does carry one, so the same person never ends up with two rows.
-  def wechat_user
-    openid = params[:wechat_openid].presence&.to_s
-    unionid = params[:wechat_unionid].presence&.to_s
+  def wechat_user(openid: params[:wechat_openid].presence&.to_s, unionid: params[:wechat_unionid].presence&.to_s)
 
     user = User.find_by(wechat_unionid: unionid) if unionid
     user ||= User.find_by(wechat_openid: openid) if openid
