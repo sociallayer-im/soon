@@ -54,7 +54,7 @@ class Api::V1::DiscoverController < Api::BaseController
   # GET /api/v1/search?keyword=
   def search
     q = params[:keyword].to_s.strip
-    return render json: { events: [], groups: [], users: [], badge_classes: [] } if q.length < 2
+    return render json: { events: [], groups: [], users: [], badge_classes: [] } if q.empty?
 
     like = "%#{Event.sanitize_sql_like(q)}%"
     events = Event.includes(:group, :place, :venue, :owner, :track)

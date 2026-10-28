@@ -137,8 +137,8 @@ class DiscoverTest < ActionDispatch::IntegrationTest
     assert_not json_response["users"].first.key?("email")
   end
 
-  test "search requires a keyword of at least 2 chars" do
-    get "/api/v1/search", params: { keyword: "z" }
+  test "empty search has no results" do
+    get "/api/v1/search", params: { keyword: " " }
     assert_response :success
     assert_empty json_response["events"]
   end
@@ -155,5 +155,22 @@ class DiscoverTest < ActionDispatch::IntegrationTest
 
     get "/api/v1/users/#{user.name}/groups", params: { role: "owner,admin" }
     assert_equal [owned.id], json_response.map { |m| m["group"]["id"] }
+  end
+end
+
+class DiscoverTest
+  test "event title search supports partial text case folding single Chinese characters and literal wildcards" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", title: "城市 Coffee Meetup 100%")
+    create_event(group: group, owner: owner, status: "draft", title: "城市 Coffee draft")
+    create_event(group: group, owner: owner, status: "published", visibility: "unlisted", title: "城市 Coffee private")
+    ["城", "coffee", "eetu", "100%"].each do |keyword|
+      get "/api/v1/search", params: { keyword: keyword }
+      assert_response :success
+      assert_equal [event.id], json_response["events"].map { |e| e["id"] }, keyword
+    end
+    get "/api/v1/search", params: { keyword: "不存在" }
+    assert_empty json_response["events"]
   end
 end
