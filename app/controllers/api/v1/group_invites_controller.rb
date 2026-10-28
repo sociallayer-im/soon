@@ -16,7 +16,10 @@ class Api::V1::GroupInvitesController < Api::BaseController
 
   # GET /api/v1/group_invites/pending
   def pending
-    invites = GroupInvite.pending_for_email(current_user.email).includes(:group, :sender)
+    invites = GroupInvite.where(status: "sending").where("expires_at IS NULL OR expires_at > ?", Time.current)
+    recipient = GroupInvite.where(receiver_id: current_user.id)
+    recipient = recipient.or(GroupInvite.where(receiver_address_type: "email", receiver_address: current_user.email)) if current_user.email.present?
+    invites = invites.merge(recipient).includes(:group, :sender)
     render json: GroupInviteBlueprint.render(invites)
   end
 
@@ -40,7 +43,10 @@ class Api::V1::GroupInvitesController < Api::BaseController
     authorize @group, :update?, policy_class: GroupPolicy
 
     role = params[:role].presence || "member"
-    results = Array(params[:receivers]).map { |address| send_invite_to(address, role) }
+    receivers = Array(params[:receivers]).map { |a| a.to_s.strip }.reject(&:blank?).uniq
+    return render_error("at least one receiver is required") if receivers.empty?
+    return render_error("maximum 50 receivers") if receivers.length > 50
+    results = receivers.map { |address| send_invite_to(address, role) }
     render json: { results: results }
   end
 
@@ -62,7 +68,9 @@ class Api::V1::GroupInvitesController < Api::BaseController
   #
   # Recipient accepts an email invite.
   def accept
-    unless @invite.status == "sending" && @invite.receiver_address == current_user.email
+    recipient = @invite.receiver_id == current_user.id ||
+      (@invite.receiver_address_type == "email" && current_user.email.present? && @invite.receiver_address == current_user.email)
+    unless @invite.status == "sending" && recipient
       return render_error("invite is not for this user")
     end
     return render_error("invite expired") if @invite.expired?
@@ -122,10 +130,14 @@ class Api::V1::GroupInvitesController < Api::BaseController
   def accept_with_code
     invite = @group.group_invites.find_by(receiver_address_type: "code", receiver_address: params[:code])
     return render_error("invalid code") unless invite
+    return render_error("invalid code") unless invite.status == "sending"
     return render_error("code expired") if invite.expired?
 
     existing = @group.memberships.exists?(user_id: current_user.id)
-    @group.add_member(current_user.id, invite.role)
+    membership = @group.memberships.find_by(user_id: current_user.id)
+    unless membership && GroupInvite::ROLE_RANK.fetch(membership.role) >= GroupInvite::ROLE_RANK.fetch(invite.role)
+      @group.add_member(current_user.id, invite.role)
+    end
     action = existing ? "group_invite/update_role" : "group_invite/add_member"
     Activity.create(item: invite, initiator: current_user, action: action,
       payload: { group_name: @group.name, group_display_name: @group.display_name })
@@ -154,7 +166,20 @@ class Api::V1::GroupInvitesController < Api::BaseController
     # all digits, and a user NAMED "13800138000" must not intercept an invite
     # meant for whoever owns that number.
     user = User.find_by(phone: phone) if phone
-    user ||= User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
+    user ||= User.find_by(name: address) || User.find_by(email: address.downcase) || User.find_by(eth: address)
+
+    if user && ActiveModel::Type::Boolean.new.cast(params[:require_confirmation])
+      return { address: address, result: "already_member" } if @group.memberships.exists?(user_id: user.id)
+      invite = @group.group_invites.where(receiver_id: user.id, status: "sending").where("expires_at IS NULL OR expires_at > ?", Time.current).first
+      unless invite
+        invite = GroupInvite.create!(group: @group, sender: current_user, receiver: user,
+          receiver_address_type: "user", receiver_address: user.id,
+          status: "sending", role: role, expires_at: INVITE_TTL.from_now, message: params[:message])
+        Activity.create!(item: invite, initiator: current_user, receiver: user, action: "group_invite/send",
+          payload: { group_name: @group.name, group_display_name: @group.display_name })
+      end
+      return { address: address, result: "invited" }
+    end
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)
@@ -172,6 +197,11 @@ class Api::V1::GroupInvitesController < Api::BaseController
         return { address: address, result: "added" }
       end
     elsif address.to_s.include?("@")
+      address = address.downcase
+      return { address: address, result: "error", message: "invalid email" } unless address.match?(URI::MailTo::EMAIL_REGEXP)
+      if @group.group_invites.pending_for_email(address).exists?
+        return { address: address, result: "invited" }
+      end
       invite = GroupInvite.create!(
         group: @group, sender: current_user, role: role,
         receiver_address_type: "email", receiver_address: address,
@@ -181,6 +211,9 @@ class Api::V1::GroupInvitesController < Api::BaseController
       GroupMailer.invite(invite_id: invite.id).deliver_later
       return { address: address, result: "invited" }
     elsif phone
+      if ActiveModel::Type::Boolean.new.cast(params[:require_confirmation])
+        return { address: address, result: "error", message: "use a registered username or email for confirmation invites" }
+      end
       # Re-importing a list that overlaps the last one is the normal case —
       # an existing pending invite for the number is success, not a duplicate.
       if @group.group_invites.pending_for_phone(phone).exists?
