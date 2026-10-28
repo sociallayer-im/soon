@@ -135,6 +135,7 @@ Rails.application.routes.draw do
             post :revoke
           end
           collection do
+            post :lookup
             post :request_invite
             post :send_with_code
             post :accept_with_code
