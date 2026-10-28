@@ -165,7 +165,8 @@ class DiscoverTest
     event = create_event(group: group, owner: owner, status: "published", title: "城市 Coffee Meetup 100%")
     create_event(group: group, owner: owner, status: "draft", title: "城市 Coffee draft")
     create_event(group: group, owner: owner, status: "published", visibility: "unlisted", title: "城市 Coffee private")
-    ["城", "coffee", "eetu", "100%"].each do |keyword|
+    create_event(group: group, owner: owner, status: "published", title: "Ordinary gathering")
+    ["城", "coffee", "eetu", "100%", "%"].each do |keyword|
       get "/api/v1/search", params: { keyword: keyword }
       assert_response :success
       assert_equal [event.id], json_response["events"].map { |e| e["id"] }, keyword
