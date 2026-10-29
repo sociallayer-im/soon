@@ -1,0 +1,7 @@
+# Source build inputs only; credentials stay in ignored .atlas/ and .env*
+config/master.key
+config/credentials/*.key
+log/**
+tmp/**
+storage/**
+public/assets/**

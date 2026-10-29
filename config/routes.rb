@@ -376,4 +376,14 @@ Rails.application.routes.draw do
       end
     end
   end
+  if ENV["SERVE_WEB_APP"] == "true"
+    root "web#index"
+    # Static middleware handles existing files first. Missing assets and unknown
+    # API / identity paths must stay 404, not receive an HTML SPA fallback.
+    get "*path", to: "web#index", constraints: ->(request) {
+      request.path !~ %r{\A/(?:api|\.well-known|up|rails|assets|web-assets)(?:/|\z)} &&
+        File.extname(request.path).empty? && request.format.html?
+    }
+  end
+
 end
