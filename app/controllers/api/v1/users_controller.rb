@@ -60,7 +60,14 @@ class Api::V1::UsersController < Api::BaseController
       return render_error("bind a phone number first")
     end
 
-    if current_user.update(user_params)
+    attributes = user_params.to_h
+    if attributes["social_links"]
+      attributes["social_links"] = current_user.social_links.to_h.merge(attributes["social_links"])
+    end
+    if attributes["data"]
+      attributes["data"] = current_user.data.to_h.merge(attributes["data"])
+    end
+    if current_user.update(attributes)
       render json: UserBlueprint.render(current_user, view: :self)
     else
       render_error(current_user.errors.full_messages.join(", "))
@@ -111,6 +118,6 @@ class Api::V1::UsersController < Api::BaseController
 
   # email is intentionally excluded — it's the login identity, not updatable here.
   def user_params
-    params.require(:user).permit(:name, :nickname, :bio, :image_url)
+    params.require(:user).permit(:name, :nickname, :bio, :image_url, data: [:city], social_links: [:website, :twitter, :github, :telegram, :discord, :ens, :lens, :nostr])
   end
 end

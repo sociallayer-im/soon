@@ -271,4 +271,22 @@ class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
     get "/api/v1/users/by_email", params: { email: "" }, headers: auth_headers(admin)
     assert_response :unprocessable_entity
   end
+  test "profile persists public city and social links without replacing private data" do
+    user = create_user(data: { "internal" => "keep" }, social_links: { "github" => "https://github.com/old" })
+    patch "/api/v1/users/me", params: { user: { nickname: "中文昵称", data: { city: "上海", admin: true }, social_links: { website: "https://example.com", admin: "yes" }, admin: true, phone: "12345" } }, headers: auth_headers(user), as: :json
+    assert_response :success
+    assert_equal "上海", user.reload.data["city"]
+    assert_equal "keep", user.data["internal"]
+    assert_not user.admin
+    assert_nil user.phone
+    assert_nil user.social_links["admin"]
+    assert_equal "https://github.com/old", user.social_links["github"]
+    other = create_user
+    get "/api/v1/users/#{user.id}", headers: auth_headers(other)
+    assert_equal "上海", json_response["city"]
+    assert_not json_response.key?("data")
+    assert_not json_response.key?("phone")
+    assert_not json_response.key?("email")
+  end
+
 end

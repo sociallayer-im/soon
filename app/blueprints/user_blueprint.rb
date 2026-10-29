@@ -8,6 +8,7 @@ class UserBlueprint < Blueprinter::Base
   # Public profile page: bio and public identifiers (wallet, social links).
   view :profile do
     fields :bio, :eth, :social_links
+    field(:city) { |user| user.data.to_h["city"] }
   end
 
   # Private fields, only rendered for the user viewing their own record.
