@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -138,6 +138,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["owner_id"], name: "index_badges_on_owner_id"
     t.index ["ref_id"], name: "index_badges_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
+  end
+
+  create_table "campaign_events", id: :string, force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["campaign_id", "event_id"], name: "index_campaign_events_on_campaign_id_and_event_id", unique: true
+    t.index ["campaign_id"], name: "index_campaign_events_on_campaign_id"
+    t.index ["event_id"], name: "index_campaign_events_on_event_id"
+  end
+
+  create_table "campaigns", id: :string, force: :cascade do |t|
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.string "group_id", null: false
+    t.text "introduction"
+    t.string "kicker"
+    t.jsonb "media", default: [], null: false
+    t.string "owner_id", null: false
+    t.string "resource_links", default: [], null: false, array: true
+    t.string "status", default: "draft", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id", "status"], name: "index_campaigns_on_group_id_and_status"
+    t.index ["group_id"], name: "index_campaigns_on_group_id"
+    t.index ["owner_id"], name: "index_campaigns_on_owner_id"
   end
 
   create_table "cart_items", id: :string, force: :cascade do |t|
@@ -646,6 +674,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
+    t.string "city"
     t.datetime "created_at", null: false
     t.string "custom_domain"
     t.string "custom_domain_pending"
@@ -687,6 +716,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
     t.string "venue_tag_list", default: [], array: true
     t.string "venue_union", array: true
+    t.index ["city"], name: "index_groups_on_city"
     t.index ["custom_domain"], name: "index_groups_on_custom_domain", unique: true, where: "(custom_domain IS NOT NULL)"
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
@@ -1604,6 +1634,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "badges", "users", column: "creator_id"
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
+  add_foreign_key "campaign_events", "campaigns"
+  add_foreign_key "campaign_events", "events"
+  add_foreign_key "campaigns", "groups"
+  add_foreign_key "campaigns", "users", column: "owner_id"
   add_foreign_key "cart_items", "carts"
   add_foreign_key "cart_items", "product_variants"
   add_foreign_key "carts", "shops"

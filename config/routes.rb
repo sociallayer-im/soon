@@ -143,6 +143,9 @@ Rails.application.routes.draw do
         end
       end
 
+      get "cities", to: "cities#index"
+      resources :campaigns, only: %i[index show create update destroy]
+
       resources :events do
         collection do
           get :pending_approval

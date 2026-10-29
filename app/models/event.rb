@@ -6,6 +6,8 @@ class Event < ApplicationRecord
   belongs_to :venue, optional: true
   belongs_to :recurring, optional: true
   belongs_to :form, optional: true
+  has_many :campaign_events, dependent: :destroy
+  has_many :campaigns, through: :campaign_events
   has_many :participants, dependent: :destroy
   has_many :participant_users, through: :participants, source: :user
   has_many :event_roles, dependent: :destroy

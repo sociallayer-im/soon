@@ -132,7 +132,7 @@ class Api::V1::EventsController < Api::BaseController
   def apply_filters(scope)
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).event_group_ids)
-    elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank?
+    elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank?
       # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
       # public events (feeds/search). Profile-tab filters (owner_id/attendee_id)
@@ -170,6 +170,8 @@ class Api::V1::EventsController < Api::BaseController
                                       .visible.select(:item_id))
     end
 
+    scope = scope.where(group_id: Group.where(city: params[:city].to_s.strip).select(:id)) if params[:city].present?
+    scope = scope.where(id: CampaignEvent.where(campaign_id: params[:campaign_id]).select(:event_id)) if params[:campaign_id].present?
     scope = scope.where(venue_id: params[:venue_id]) if params[:venue_id].present?
     scope = scope.where(track_id: params[:track_id]) if params[:track_id].present?
     scope = scope.where(kind: params[:kind])         if params[:kind].present?

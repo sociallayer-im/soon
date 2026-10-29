@@ -2,7 +2,7 @@ class GroupBlueprint < Blueprinter::Base
   identifier :id
 
   # Default view stays light — it's embedded in events, invites, tracks, etc.
-  fields :name, :nickname, :image_url, :logo_url, :created_at
+  fields :city, :name, :nickname, :image_url, :logo_url, :created_at
 
   # Every scalar a group page or popup-city card needs, and no sub-resources.
   # Use this for LISTS. :detail on a list embeds each group's whole membership

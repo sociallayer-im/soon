@@ -7,6 +7,9 @@ class Group < ApplicationRecord
   has_many :events, dependent: :destroy, inverse_of: :group
   has_many :withdrawals, dependent: :destroy
   has_many :markers, dependent: :destroy
+  has_many :campaigns, dependent: :destroy
+  normalizes :city, with: ->(value) { value.to_s.strip.presence }
+  validates :city, length: { maximum: 100 }
   has_many :tracks, dependent: :destroy
   # Discussion boards. restrict_with_error rather than destroy: deleting a
   # group with live discussion should be a deliberate act, not a side effect.

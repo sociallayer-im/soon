@@ -4,7 +4,9 @@ class Api::V1::GroupsController < Api::BaseController
   before_action :set_group, only: %i[update destroy freeze send_email]
 
   def index
-    render_collection current_user.groups, blueprint: GroupBlueprint
+    scope = current_user.groups
+    scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
+    render_collection scope, blueprint: GroupBlueprint
   end
 
   # GET /api/v1/groups/directory — every active group, paginated.
@@ -18,7 +20,9 @@ class Api::V1::GroupsController < Api::BaseController
   # :card, because the cards show member/event counts and the tag state the
   # admin controls read.
   def directory
-    render_collection Group.where(active: true).order(:created_at),
+    scope = Group.where(active: true).order(:created_at)
+    scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
+    render_collection scope,
       blueprint: GroupBlueprint, view: :card
   end
 
@@ -120,7 +124,7 @@ class Api::V1::GroupsController < Api::BaseController
   PRIVILEGED_TAGS = %w[featured top pin].freeze
 
   def group_params
-    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location,
+    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location, :city,
       :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
       :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
       :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,
