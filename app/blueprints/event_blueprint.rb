@@ -8,7 +8,7 @@ class EventBlueprint < Blueprinter::Base
   fields :title, :start_time, :end_time, :timezone, :status, :visibility,
          :meeting_url, :external_url, :category, :kind, :tags, :pinned,
          :max_participant, :participant_count, :require_approval, :requirement_tags,
-         :image_url, :recurring_id, :form_id, :notes, :created_at
+         :image_url, :recurring_id, :form_id, :created_at
 
   # Viewer flags — only emitted when the request was authenticated and the
   # controller passed the viewer's sets (see EventsController#personalization_options).
@@ -33,6 +33,7 @@ class EventBlueprint < Blueprinter::Base
     # Confirmed-attendees-only image (group QR code). The controller decides
     # who qualifies (EventsController#reveal_image_note?); absent from the
     # payload entirely for everyone else, so a signed-out fetch can't leak it.
+    field :notes, if: ->(_n, _o, options) { options[:reveal_image_note] }
     field :image_note, if: ->(_n, _o, options) { options[:reveal_image_note] }
     association :event_roles, blueprint: EventRoleBlueprint
     # Withdrawn (soft-deleted) participants are not attendees — reject in Ruby

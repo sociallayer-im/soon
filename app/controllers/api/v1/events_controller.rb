@@ -77,13 +77,20 @@ class Api::V1::EventsController < Api::BaseController
     if (err = reference_error(@event))
       return render_error(err)
     end
-    if @event.save
+    ActiveRecord::Base.transaction do
+      @event.save!
+      if params.key?(:event_roles)
+        @event.event_roles.destroy_all
+        create_nested_roles!(@event, params[:event_roles])
+      end
       apply_group_ticket_designation!(@event)
-      notify_attendees_of_update if calendar_relevant_change?
-      render json: EventBlueprint.render(@event)
-    else
-      render_error(@event.errors.full_messages.join(", "))
     end
+    notify_attendees_of_update if calendar_relevant_change?
+    render json: EventBlueprint.render(@event)
+  rescue InvalidChild => e
+    render_error(e.message)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # "Cancelling" an event must not destroy it (and cascade away every

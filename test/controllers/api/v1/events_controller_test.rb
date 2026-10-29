@@ -1166,4 +1166,32 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "https://img.example/qr.png", event.reload.image_note
   end
+  test "notes are private to confirmed attendees and editors, never in lists" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published", notes: "private address")
+    outsider = create_user
+    get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
+    assert_not json_response.key?("notes")
+    get "/api/v1/events/#{event.id}", headers: auth_headers(owner)
+    assert_equal "private address", json_response["notes"]
+    create_participant(event: event, user: outsider)
+    get "/api/v1/events/#{event.id}", headers: auth_headers(outsider)
+    assert_equal "private address", json_response["notes"]
+  end
+
+  test "event role replacement rolls back the event when a role is invalid" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner)
+    role = event.event_roles.create!(item_type: "User", role: "speaker", display_name: "Old speaker")
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Changed" }, event_roles: [{ item_type: "User", role: "invalid", display_name: "Bad" }] }, headers: auth_headers(owner), as: :json
+    assert_response :unprocessable_entity
+    assert_not_equal "Changed", event.reload.title
+    assert event.event_roles.exists?(role.id)
+    patch "/api/v1/events/#{event.id}", params: { event: { title: "Changed" }, event_roles: [{ item_type: "User", role: "speaker", display_name: "New speaker" }] }, headers: auth_headers(owner), as: :json
+    assert_response :success
+    assert_equal ["New speaker"], event.event_roles.pluck(:display_name)
+  end
+
 end
