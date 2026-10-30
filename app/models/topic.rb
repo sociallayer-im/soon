@@ -23,6 +23,7 @@ class Topic < ApplicationRecord
   # sort index confined to recent rows.
   BUMP_WINDOW = 1.month
 
+  belongs_to :event, optional: true
   belongs_to :group
   belongs_to :category, counter_cache: false
   belongs_to :user
@@ -36,6 +37,7 @@ class Topic < ApplicationRecord
   # group_id is denormalised off category so the group-level list needs no
   # join. That makes disagreement possible, so it is checked on every save:
   # without this, one move could relocate a topic into another community.
+  validate :event_belongs_to_group
   validate  :category_belongs_to_group
 
   before_validation :default_group_from_category, on: :create
@@ -92,6 +94,10 @@ class Topic < ApplicationRecord
   def after_flag_change! = refresh_category_counts!
 
   private
+
+  def event_belongs_to_group
+    errors.add(:event, "must belong to the same group") if event && event.group_id != group_id
+  end
 
   def default_group_from_category
     self.group_id ||= category&.group_id

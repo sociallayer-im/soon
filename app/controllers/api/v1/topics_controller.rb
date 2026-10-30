@@ -17,7 +17,7 @@ class Api::V1::TopicsController < Api::BaseController
     group = Group.resolve!(params[:group_id])
     return render_not_found unless group.discussion_enabled?
 
-    scope = visible_topics(group).where(group_id: group.id)
+    scope = visible_topics(group).where(group_id: group.id, sync_to_community: true)
     scope = apply_filters(scope, group)
     scope = apply_collection(scope)
 

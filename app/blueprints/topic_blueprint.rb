@@ -5,7 +5,7 @@ class TopicBlueprint < Blueprinter::Base
   # cards, and a page of full post bodies is the difference between a small
   # response and a large one. Same reason EventBlueprint keeps content in
   # :extended.
-  fields :group_id, :category_id, :title, :image_url, :tags,
+  fields :event_id, :sync_to_community, :group_id, :category_id, :title, :image_url, :tags,
          :replies_count, :stars_count, :replied_at, :created_at, :updated_at
 
   field :pinned do |topic|

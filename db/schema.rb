@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_29_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1445,6 +1445,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_020000) do
     t.datetime "created_at", null: false
     t.datetime "deleted_at"
     t.string "deleted_by_id"
+    t.string "event_id"
     t.string "flag_reason"
     t.datetime "flagged_at"
     t.string "flagged_by_id"
@@ -1457,12 +1458,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_020000) do
     t.datetime "replied_at"
     t.integer "replies_count", default: 0, null: false
     t.integer "stars_count", default: 0, null: false
+    t.boolean "sync_to_community", default: true, null: false
     t.string "tags", default: [], array: true
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.index ["category_id", "last_active_mark"], name: "index_topics_on_category_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["deleted_at"], name: "index_topics_on_deleted_at"
+    t.index ["event_id"], name: "index_topics_on_event_id"
     t.index ["flagged_at"], name: "index_topics_on_flagged_at"
     t.index ["group_id", "last_active_mark"], name: "index_topics_on_group_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["group_id", "pinned_at"], name: "index_topics_on_group_id_and_pinned_at"
@@ -1759,6 +1762,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_020000) do
   add_foreign_key "tickets", "events"
   add_foreign_key "tickets", "groups"
   add_foreign_key "topics", "categories"
+  add_foreign_key "topics", "events"
   add_foreign_key "topics", "groups"
   add_foreign_key "topics", "users"
   add_foreign_key "track_roles", "tracks"

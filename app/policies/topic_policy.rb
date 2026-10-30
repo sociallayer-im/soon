@@ -4,6 +4,7 @@ class TopicPolicy < ApplicationPolicy
   # A topic is readable when its board is readable and it is not hidden from
   # this particular reader. Both halves are needed; see DISCUSSION_PLAN 1.2/1.3.
   def show?
+    return false if record.event && !EventPolicy.new(user, record.event).show?
     return false unless record.category.visible_to?(user)
     return true  if !record.flagged?
     author? || manages_group?

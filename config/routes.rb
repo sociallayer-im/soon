@@ -147,6 +147,8 @@ Rails.application.routes.draw do
       get "cities", to: "cities#index"
       resources :campaigns, only: %i[index show create update destroy]
 
+      get "events/:event_id/discussion", to: "event_discussions#index"
+      post "events/:event_id/discussion", to: "event_discussions#create"
       resources :events do
         collection do
           get :pending_approval
