@@ -5,7 +5,7 @@ class AuthMailerTest < ActionMailer::TestCase
     mail = AuthMailer.login_code(email: "who@test.com", code: "ABC123")
 
     assert_equal ["who@test.com"], mail.to
-    assert_equal "Your Social Layer sign-in code", mail.subject
+    assert_equal "Your Surf sign-in code", mail.subject
     assert_equal "send@app.sola.day", mail.from.first
 
     assert_match "ABC123", mail.html_part.body.to_s
