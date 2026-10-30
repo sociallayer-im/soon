@@ -6,6 +6,20 @@ class Api::V1::UserSuggestionsTest < ActionDispatch::IntegrationTest
     @event = create_event(group: @group, owner: @host, start_time: 1.day.from_now, end_time: 2.days.from_now,
                           status: "published", visibility: "normal")
   end
+  test "role candidates require authentication and expose only public profiles" do
+    get "/api/v1/users/role_candidates"
+    assert_response :unauthorized
+    get "/api/v1/users/role_candidates", headers: auth_headers(@host)
+    assert_response :success
+    row = response.parsed_body["data"].find { |u| u["id"] == @host.id }
+    assert row
+    assert_not row.key?("phone")
+    assert_not row.key?("email")
+    @event.update!(visibility: "unlisted")
+    get "/api/v1/users/role_candidates", headers: auth_headers(@host)
+    assert_empty response.parsed_body["data"]
+  end
+
   test "anonymous discovery is paginated and exposes only discovery fields" do
     get "/api/v1/users/suggestions", params: {city: "上海", limit: 1}
     assert_response :success

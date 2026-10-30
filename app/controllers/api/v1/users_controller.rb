@@ -3,6 +3,18 @@ class Api::V1::UsersController < Api::BaseController
   skip_before_action :authenticate!, only: %i[show groups suggestions]
   before_action :authenticate_optional!, only: %i[show suggestions]
 
+  # Authenticated picker: rank only public contributions, never sign-in times.
+  def role_candidates
+    events = Event.joins(:group).where(status: "published", visibility: %w[normal open_registration], groups: { active: true })
+    activity = events.group(:owner_id).maximum(:created_at)
+    Topic.joins(:category).where(categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
+      activity[id] = [activity[id], time].compact.max
+    end
+    ids = activity.sort_by { |id, time| [-time.to_f, id] }.map(&:first)
+    users = User.where(id: ids, active: true).where("COALESCE(users.data->>'visibility', 'public') = 'public'").index_by(&:id)
+    render json: {data: ids.filter_map { |id| users[id] }.first(50).map { |user| UserBlueprint.render_as_hash(user, view: :profile) }}
+  end
+
   # Discover public organizers, never an unrestricted directory of accounts.
   def suggestions
     events = Event.joins(:group).where(status: "published", visibility: %w[normal open_registration], groups: { active: true })
