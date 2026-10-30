@@ -1,7 +1,7 @@
 class Api::V1::AuthController < Api::BaseController
   # Everything here IS the login flow — only the bind_* actions run with a
   # session already in hand.
-  skip_before_action :authenticate!, except: %i[bind_email bind_phone bind_wechat]
+  skip_before_action :authenticate!, except: %i[bind_email bind_phone bind_wechat wechat_miniprogram_phone]
 
   LOGIN_CONTEXT = "login".freeze
   # Binding an email to a wallet-first account uses its own context so a bind
@@ -210,6 +210,28 @@ class Api::V1::AuthController < Api::BaseController
     render json: { error: "WeChat sign-in is not configured or temporarily unavailable", code: "WECHAT_UNAVAILABLE" }, status: :service_unavailable
   rescue WechatMiniprogramAuth::InvalidCode
     render json: { error: "WeChat login code expired or invalid. Please try again.", code: "WECHAT_INVALID_CODE" }, status: :unauthorized
+  end
+
+  # A logged-in WeChat identity plus a fresh, server-redeemed phone code.
+  def wechat_miniprogram_phone
+    return render_error("请先使用微信登录", status: :forbidden) if current_user.wechat_openid.blank?
+    return render json: UserBlueprint.render(current_user, view: :self) if current_user.phone.present?
+    code = params[:phone_code].to_s.strip
+    return render_error("请先授权微信手机号") if code.blank?
+    phone = WechatMiniprogramPhone.phone_number(code)
+    if (existing = User.find_by(phone: phone))
+      linked = VerifiedPhoneAccountLinker.call(from: current_user, into: existing)
+      return render_token(linked, merged: true)
+    end
+    current_user.update!(phone: phone)
+    GroupInvite.auto_accept_phone_invites_for(current_user)
+    render json: UserBlueprint.render(current_user, view: :self)
+  rescue WechatMiniprogramPhone::InvalidCode
+    render_error("手机号授权已失效或暂不支持该号码，请重新授权或使用短信验证", status: :unauthorized)
+  rescue WechatMiniprogramPhone::Unavailable
+    render_error("微信手机号服务暂不可用，请稍后重试或使用短信验证", status: :service_unavailable)
+  rescue VerifiedPhoneAccountLinker::Conflict => e
+    render_error(e.message)
   end
 
   # POST /api/v1/auth/trusted_signin
