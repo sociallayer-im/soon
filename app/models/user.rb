@@ -1,4 +1,5 @@
 class User < ApplicationRecord
+  scope :publicly_discoverable, -> { where(active: true).where("COALESCE(users.data->>'visibility', 'public') = 'public'") }
   has_many :campaigns, foreign_key: :owner_id, dependent: :destroy
   has_many :memberships, dependent: :delete_all
   has_many :follows, dependent: :destroy

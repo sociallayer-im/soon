@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_232000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -272,6 +272,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
     t.index ["code"], name: "index_coupons_on_code"
     t.index ["event_id"], name: "index_coupons_on_event_id"
     t.index ["owner_type", "owner_id"], name: "index_coupons_on_owner_type_and_owner_id"
+  end
+
+  create_table "creation_receipts", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "fingerprint", null: false
+    t.string "request_key", null: false
+    t.text "response_body", null: false
+    t.integer "response_status", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id", "request_key"], name: "index_creation_receipts_on_user_id_and_request_key", unique: true
+    t.index ["user_id"], name: "index_creation_receipts_on_user_id"
   end
 
   create_table "domains", id: :string, force: :cascade do |t|
@@ -674,6 +686,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
     t.index ["group_id"], name: "index_group_invites_on_group_id"
     t.index ["receiver_id"], name: "index_group_invites_on_receiver_id"
     t.index ["sender_id"], name: "index_group_invites_on_sender_id"
+  end
+
+  create_table "group_review_logs", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "decision", null: false
+    t.string "group_id", null: false
+    t.text "reason"
+    t.string "reviewer_id"
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_group_review_logs_on_group_id"
+    t.index ["reviewer_id"], name: "index_group_review_logs_on_reviewer_id"
   end
 
   create_table "groups", id: :string, force: :cascade do |t|
@@ -1678,6 +1701,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
   add_foreign_key "coupon_redemptions", "orders"
   add_foreign_key "coupon_redemptions", "users"
   add_foreign_key "coupons", "events"
+  add_foreign_key "creation_receipts", "users", on_delete: :cascade
   add_foreign_key "event_roles", "events"
   add_foreign_key "events", "forms"
   add_foreign_key "events", "groups"
@@ -1701,6 +1725,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
   add_foreign_key "group_invites", "tickets"
   add_foreign_key "group_invites", "users", column: "receiver_id"
   add_foreign_key "group_invites", "users", column: "sender_id"
+  add_foreign_key "group_review_logs", "groups"
+  add_foreign_key "group_review_logs", "users", column: "reviewer_id", on_delete: :nullify
   add_foreign_key "groups", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "hackathon_project_members", "hackathon_projects", column: "project_id"
   add_foreign_key "hackathon_project_members", "hackathons"

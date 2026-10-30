@@ -1,4 +1,5 @@
 class Api::V1::PlacesController < Api::BaseController
+  include IdempotentCreation
   before_action :set_place, only: :show
 
   def index
@@ -14,7 +15,7 @@ class Api::V1::PlacesController < Api::BaseController
   # place_id through here first, so creating an existing name returns the
   # existing record (200) instead of erroring; a new name creates it (201).
   def create
-    existing = Place.find_by(name: place_params[:name])
+    existing = Place.order(:created_at).find_by(place_params.to_h.slice("name", "address", "latitude", "longitude").compact)
     if existing
       render json: PlaceBlueprint.render(existing)
     else

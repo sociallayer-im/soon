@@ -1,4 +1,8 @@
 class Event < ApplicationRecord
+  scope :publicly_discoverable, -> {
+    joins(:group).where(groups: {active: true, review_status: "approved"})
+      .where(status: "published", visibility: %w[normal open_registration])
+  }
   belongs_to :group, inverse_of: :events
   belongs_to :owner, class_name: "User"
   belongs_to :place, optional: true

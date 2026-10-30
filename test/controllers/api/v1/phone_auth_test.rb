@@ -316,19 +316,12 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert_equal "+8613800138008", target.reload.phone, "the verified number was dropped by the merge"
   end
 
-  # --- phone before username ----------------------------------------------
-
-  # Enforced server-side, not just by the frontend's redirect chain: /register
-  # is reachable by typing it, and a name set early closes the merge window for
-  # a bind step that cannot be skipped.
-  test "a WeChat account cannot take a username before binding a phone" do
+  # Phone completion is a frontend flow, not an API prerequisite.
+  test "a WeChat account may update its username without a backend phone gate" do
     wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
-
-    patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "too-early" } }, headers: auth_headers(wechat)
-
-    assert_response :unprocessable_entity
-    assert_nil wechat.reload.name
+    patch "/api/v1/users/#{wechat.id}", params: {user: {name: "phone-optional"}}, headers: auth_headers(wechat)
+    assert_response :success
+    assert_equal "phone-optional", wechat.reload.name
   end
 
   test "the same account can take a username once the phone is bound" do

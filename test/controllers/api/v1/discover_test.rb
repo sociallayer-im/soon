@@ -121,6 +121,19 @@ class DiscoverTest < ActionDispatch::IntegrationTest
     assert_equal "https://cdn.test/banner.png", entry["featured_image_url"]
   end
 
+  test "search excludes hidden profiles and inactive group events" do
+    hidden=create_user(name:"private-#{unique_suffix}",data:{visibility:"private"})
+    owner=create_user
+    group=create_group(owner:owner,active:false)
+    event=create_event(group:group,owner:owner,title:"hiddenneedle",status:"published")
+    get "/api/v1/search",params:{keyword:"hiddenneedle"}
+    assert_response :success
+    assert_empty json_response["events"]
+    get "/api/v1/search",params:{keyword:hidden.name}
+    assert_response :success
+    assert_empty json_response["users"]
+  end
+
   test "search finds public content only" do
     owner = create_user(name: "zurichfan", nickname: "Zurich Fan")
     group = create_group(owner: owner, name: "zurich-hub", nickname: "Zürich Hub")

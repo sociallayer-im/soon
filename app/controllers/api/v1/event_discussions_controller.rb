@@ -1,4 +1,5 @@
 class Api::V1::EventDiscussionsController < Api::BaseController
+  include IdempotentCreation
   include DiscussionGate
   include DiscussionRateLimit
   before_action :require_discussion_enabled!

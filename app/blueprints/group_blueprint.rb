@@ -37,6 +37,9 @@ class GroupBlueprint < Blueprinter::Base
   # the associations below are a per-record N+1 otherwise.
   view :detail do
     include_view :card
+    field :review_history, if: ->(_field, group, options) { options[:review_history] } do |group|
+      group.group_review_logs.includes(:reviewer).order(created_at: :desc).limit(50).map { |entry| {decision: entry.decision, reason: entry.reason, created_at: entry.created_at, reviewer: entry.reviewer&.slice(:id, :name, :nickname)} }
+    end
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint

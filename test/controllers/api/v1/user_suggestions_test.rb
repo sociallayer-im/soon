@@ -20,6 +20,20 @@ class Api::V1::UserSuggestionsTest < ActionDispatch::IntegrationTest
     assert_empty response.parsed_body["data"]
   end
 
+  test "role candidate keyword search paginates and keeps private fields hidden" do
+    users=3.times.map { |i| create_user(nickname:"候选分页#{i}") }
+    get "/api/v1/users/role_candidates",params:{keyword:"候选分页",limit:2},headers:auth_headers(@host)
+    assert_response :success
+    assert_equal 2,json_response["data"].length
+    assert_equal 2,json_response.dig("meta","next_page")
+    ids=json_response["data"].map { |u| u["id"] }
+    assert_not json_response["data"].first.key?("phone")
+    get "/api/v1/users/role_candidates",params:{keyword:"候选分页",limit:2,page:2},headers:auth_headers(@host)
+    assert_response :success
+    ids.concat(json_response["data"].map { |u| u["id"] })
+    assert_equal users.map(&:id).sort,ids.sort
+  end
+
   test "anonymous discovery is paginated and exposes only discovery fields" do
     get "/api/v1/users/suggestions", params: {city: "上海", limit: 1}
     assert_response :success

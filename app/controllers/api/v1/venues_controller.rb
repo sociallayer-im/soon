@@ -1,4 +1,5 @@
 class Api::V1::VenuesController < Api::BaseController
+  include IdempotentCreation
   # Venues are public information — they appear on public event pages, and
   # EventBlueprint deliberately embeds only VenueRefBlueprint (id + name), so
   # every caller that needs capacity/about/amenities/availability fetches the

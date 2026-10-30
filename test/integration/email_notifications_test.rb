@@ -20,7 +20,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     end
     mail = ActionMailer::Base.deliveries.last
     assert_equal [user.email], mail.to
-    assert_equal "Your Social Layer sign-in code", mail.subject
+    assert_equal "Your Surf sign-in code", mail.subject
   end
 
   test "request_code for an unknown email sends a code too — first login is signup" do

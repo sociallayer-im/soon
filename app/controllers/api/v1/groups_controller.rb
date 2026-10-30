@@ -1,7 +1,8 @@
 class Api::V1::GroupsController < Api::BaseController
+  include IdempotentCreation
   # Group pages and the public directory are public.
   skip_before_action :authenticate!, only: %i[show directory]
-  before_action :set_group, only: %i[update destroy freeze send_email]
+  before_action :set_group, only: %i[update destroy freeze send_email resubmit]
 
   def index
     scope = current_user.groups
@@ -20,8 +21,21 @@ class Api::V1::GroupsController < Api::BaseController
   # :card, because the cards show member/event counts and the tag state the
   # admin controls read.
   def directory
+    authenticate_optional!
     scope = Group.where(active: true).order(:created_at)
     scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
+    if params[:purpose].present?
+      return render_error("请先登录", status: :unauthorized) unless current_user
+      return render_error("invalid purpose") unless %w[event post].include?(params[:purpose])
+      allowed = scope.select do |group|
+        if params[:purpose] == "event"
+          EventPolicy.new(current_user, Event.new(group: group)).create?
+        else
+          group.discussion_enabled? && Category.visible_to(current_user, group: group).listed.any? { |category| TopicPolicy.new(current_user, Topic.new(group: group, category: category)).create? }
+        end
+      end.map(&:id)
+      scope = scope.where(id: allowed)
+    end
     render_collection scope,
       blueprint: GroupBlueprint, view: :card
   end
@@ -37,7 +51,7 @@ class Api::V1::GroupsController < Api::BaseController
     group = Group.with_detail_associations.resolve!(params[:id])
     return render_not_found unless group.review_status == "approved" || GroupPolicy.new(current_user, group).manage?
     render json: GroupBlueprint.render(group, view: :detail,
-                                       member_group_ids: member_group_ids)
+                                       member_group_ids: member_group_ids, review_history: GroupPolicy.new(current_user,group).manage?)
   end
 
   # POST /api/v1/groups/:id/freeze
@@ -84,6 +98,17 @@ class Api::V1::GroupsController < Api::BaseController
                                        member_group_ids: member_group_ids), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
+  end
+
+  def resubmit
+    authorize @group, :manage?
+    @group.with_lock do
+      return render_error("仅已拒绝的申请可重新提交", status: :conflict) unless @group.review_status == "rejected"
+      @group.group_review_logs.create!(reviewer: current_user, decision: "resubmitted", reason: @group.review_reason)
+      @group.update!(review_status: "pending", active: false, review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
+    end
+    GroupRegisteredMailJob.perform_later(group_id: @group.id)
+    render json: GroupBlueprint.render(@group, view: :detail)
   end
 
   def update

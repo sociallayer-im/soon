@@ -38,17 +38,21 @@ class Api::V1::PlacesControllerTest < ActionDispatch::IntegrationTest
     assert_not_equal first.id, second.id
   end
 
-  test "create finds-or-creates by exact name (write-path convenience dedup, not a DB constraint)" do
+  test "create reuses identical locations but preserves different addresses" do
     owner = create_user
     post "/api/v1/places", params: { place: { name: "Shared Spot", address: "1 First St" } },
       headers: auth_headers(owner)
     assert_response :created
     first_id = json_response["id"]
 
-    post "/api/v1/places", params: { place: { name: "Shared Spot", address: "ignored on reuse" } },
+    post "/api/v1/places", params: { place: { name: "Shared Spot", address: "1 First St" } },
       headers: auth_headers(owner)
     assert_response :success
     assert_equal first_id, json_response["id"]
+    post "/api/v1/places", params: {place: {name: "Shared Spot",address: "2 Second St"}},headers: auth_headers(owner)
+    assert_response :created
+    assert_not_equal first_id,json_response["id"]
+    assert_equal "2 Second St",json_response["address"]
   end
 
   test "latitude is bounded to +/-90 and longitude to +/-180" do

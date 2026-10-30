@@ -7,6 +7,41 @@ class Api::V1::GroupReviewsTest < ActionDispatch::IntegrationTest
     @group = create_group(owner: @owner, active: false, review_status: "pending")
   end
 
+  test "rejected groups can be resubmitted by managers and retain history" do
+    post "/api/v1/admin/group_reviews/#{@group.id}/review", params: {decision: "rejected",reason:"请补充介绍"},headers: auth_headers(@admin)
+    assert_response :success
+    assert_equal 1,@group.group_review_logs.count
+    post "/api/v1/groups/#{@group.id}/resubmit",headers: auth_headers(create_user)
+    assert_response :forbidden
+    patch "/api/v1/groups/#{@group.id}",params: {group:{bio:"Updated introduction"}},headers: auth_headers(@owner)
+    assert_response :success
+    post "/api/v1/groups/#{@group.id}/resubmit",headers: auth_headers(@owner)
+    assert_response :success
+    assert_equal "pending",@group.reload.review_status
+    assert_nil @group.review_reason
+    assert_not @group.active
+    assert_equal %w[rejected resubmitted],@group.group_review_logs.order(:created_at).pluck(:decision)
+    post "/api/v1/admin/group_reviews/#{@group.id}/review",params:{decision:"approved"},headers:auth_headers(@admin)
+    assert_response :success
+    assert_equal 3,@group.group_review_logs.count
+  end
+
+  test "publishing directory filters groups with matching permissions" do
+    restricted=create_group(owner:create_user,can_publish_event:"manager",discussion_enabled:true,can_post_topic:"manager")
+    open=create_group(owner:create_user,can_publish_event:"everyone",discussion_enabled:true,can_post_topic:"everyone")
+    get "/api/v1/groups/directory",params:{purpose:"event"},headers:auth_headers(@owner)
+    assert_response :success
+    ids=json_response["data"].map { |g| g["id"] }
+    assert_includes ids,open.id
+    assert_not_includes ids,restricted.id
+    assert_not_includes ids,@group.id
+    get "/api/v1/groups/directory",params:{purpose:"post"},headers:auth_headers(@owner)
+    assert_response :success
+    ids=json_response["data"].map { |g| g["id"] }
+    assert_includes ids,open.id
+    assert_not_includes ids,restricted.id
+  end
+
   test "creation is pending regardless of submitted approval fields" do
     post "/api/v1/groups", params: {group: {name: "review-#{unique_suffix}", active: true, review_status: "approved"}}, headers: auth_headers(@owner)
     assert_response :created

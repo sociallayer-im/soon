@@ -20,7 +20,7 @@ class Api::V1::DiscoverController < Api::BaseController
     popups = Group.where(active: true).where("group_tags && ARRAY['top']::varchar[]")
                   .where.not("group_tags && ARRAY['hidden']::varchar[]")
                   .order(start_date: :desc).limit(50)
-    events = Event.includes(:group, :place, :venue, :owner, :track)
+    events = Event.publicly_discoverable.includes(:group, :place, :venue, :owner, :track)
                   .where(visibility: %w[normal open_registration], status: "published")
                   .where("end_time >= ?", Time.current).order(:start_time).limit(20)
 
@@ -57,12 +57,12 @@ class Api::V1::DiscoverController < Api::BaseController
     return render json: { events: [], groups: [], users: [], badge_classes: [] } if q.empty?
 
     like = "%#{Event.sanitize_sql_like(q)}%"
-    events = Event.includes(:group, :place, :venue, :owner, :track)
+    events = Event.publicly_discoverable.includes(:group, :place, :venue, :owner, :track)
                   .where(visibility: %w[normal open_registration], status: "published")
-                  .where("title ILIKE ?", like).order(start_time: :desc).limit(10)
+                  .where("events.title ILIKE ?", like).order(start_time: :desc).limit(10)
     groups = Group.where(active: true)
                   .where("name ILIKE :q OR nickname ILIKE :q", q: like).limit(10)
-    users = User.where(active: true)
+    users = User.publicly_discoverable
                 .where("name ILIKE :q OR nickname ILIKE :q", q: like).limit(10)
     badge_classes = BadgeClass.where("name ILIKE :q OR title ILIKE :q", q: like).limit(10)
 

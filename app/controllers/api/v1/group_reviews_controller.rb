@@ -16,6 +16,7 @@ class Api::V1::GroupReviewsController < Api::BaseController
     group = Group.find(params[:id])
     group.with_lock do
       return render_error("该申请已处理，请刷新列表", status: :conflict) unless group.review_status == "pending"
+      group.group_review_logs.create!(reviewer: current_user, decision: status, reason: reason.presence)
       group.update!(review_status: status, review_reason: reason.presence, reviewed_at: Time.current,
                     reviewed_by_id: current_user.id, active: status == "approved")
     end

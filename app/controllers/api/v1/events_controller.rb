@@ -1,4 +1,5 @@
 class Api::V1::EventsController < Api::BaseController
+  include IdempotentCreation
   # Raised when a nested role/ticket in an atomic create is malformed; rolls the
   # whole event create back with a precise message.
   class InvalidChild < StandardError; end
@@ -130,9 +131,10 @@ class Api::V1::EventsController < Api::BaseController
   # Narrows the browse scope by the request's filter params. Invalid dates are
   # ignored rather than 422ing — a bad filter degrades to "unfiltered".
   def apply_filters(scope)
+    scope = scope.merge(Event.publicly_discoverable) if ActiveModel::Type::Boolean.new.cast(params[:browse_all])
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).event_group_ids)
-    elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank?
+    elsif current_user && !ActiveModel::Type::Boolean.new.cast(params[:browse_all]) && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank?
       # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
       # public events (feeds/search). Profile-tab filters (owner_id/attendee_id)

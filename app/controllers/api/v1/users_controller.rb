@@ -5,19 +5,30 @@ class Api::V1::UsersController < Api::BaseController
 
   # Authenticated picker: rank only public contributions, never sign-in times.
   def role_candidates
-    events = Event.joins(:group).where(status: "published", visibility: %w[normal open_registration], groups: { active: true })
+    events = Event.publicly_discoverable
     activity = events.group(:owner_id).maximum(:created_at)
-    Topic.joins(:category).where(categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
+    Topic.joins(:category, :group).where(groups: {active: true}, categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
       activity[id] = [activity[id], time].compact.max
     end
     ids = activity.sort_by { |id, time| [-time.to_f, id] }.map(&:first)
-    users = User.where(id: ids, active: true).where("COALESCE(users.data->>'visibility', 'public') = 'public'").index_by(&:id)
-    render json: {data: ids.filter_map { |id| users[id] }.first(50).map { |user| UserBlueprint.render_as_hash(user, view: :profile) }}
+    keyword = params[:keyword].to_s.strip
+    scope = User.publicly_discoverable
+    if keyword.present?
+      like = "%#{User.sanitize_sql_like(keyword)}%"
+      scope = scope.where("name ILIKE :q OR nickname ILIKE :q", q: like).order(:id)
+      return render_collection scope, blueprint: UserBlueprint, view: :profile
+    end
+    scope = scope.where(id: ids)
+    if ids.any?
+      clauses = ids.each_with_index.map { |id, index| "WHEN #{User.connection.quote(id)} THEN #{index}" }.join(" ")
+      scope = scope.order(Arel.sql("CASE users.id #{clauses} END"))
+    end
+    render_collection scope, blueprint: UserBlueprint, view: :profile
   end
 
   # Discover public organizers, never an unrestricted directory of accounts.
   def suggestions
-    events = Event.joins(:group).where(status: "published", visibility: %w[normal open_registration], groups: { active: true })
+    events = Event.publicly_discoverable
                   .where("events.end_time >= ?", Time.current)
     city = params[:city].to_s.strip
     return render_error("city is too long") if city.length > 100
@@ -92,10 +103,6 @@ class Api::V1::UsersController < Api::BaseController
       return render_error("name can't be blank")
     end
 
-    if params[:user]&.key?(:name) && naming_blocked_pending_phone?
-      return render_error("bind a phone number first")
-    end
-
     attributes = user_params.to_h
     if attributes["social_links"]
       attributes["social_links"] = current_user.social_links.to_h.merge(attributes["social_links"])
@@ -132,25 +139,6 @@ class Api::V1::UsersController < Api::BaseController
   end
 
   private
-
-  # A WeChat account has to finish binding its phone before it can take a
-  # username, and this is where that is actually enforced — the frontend's
-  # redirect chain only suggests the order, and typing /register bypasses it.
-  #
-  # It matters more than an ordering preference. A blank `name` is the whole
-  # merge window (AuthController#mergeable?): while it is blank, binding a phone
-  # that already has its own account folds the two together, and once it is set
-  # that same bind hard-fails. Since the phone step cannot be skipped, naming
-  # first would leave the user permanently stuck on a screen with no way past.
-  #
-  # Only the FIRST naming is blocked. Once a name exists the window is closed
-  # anyway, so refusing a later edit would cost something and protect nothing.
-  def naming_blocked_pending_phone?
-    phone_login_enabled? &&
-      current_user.name.blank? &&
-      current_user.phone.blank? &&
-      (current_user.wechat_openid.present? || current_user.wechat_unionid.present?)
-  end
 
   # email is intentionally excluded — it's the login identity, not updatable here.
   def user_params

@@ -1,4 +1,5 @@
 class Api::V1::TopicsController < Api::BaseController
+  include IdempotentCreation
   include DiscussionRateLimit
   include DiscussionGate
 
