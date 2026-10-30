@@ -35,6 +35,7 @@ class Api::V1::GroupsController < Api::BaseController
     authenticate_optional!
     cache_when_anonymous!(max_age: 30)
     group = Group.with_detail_associations.resolve!(params[:id])
+    return render_not_found unless group.review_status == "approved" || GroupPolicy.new(current_user, group).manage?
     render json: GroupBlueprint.render(group, view: :detail,
                                        member_group_ids: member_group_ids)
   end
@@ -68,7 +69,7 @@ class Api::V1::GroupsController < Api::BaseController
   end
 
   def create
-    group = Group.new(group_params)
+    group = Group.new(group_params.merge(review_status: "pending", active: false))
     authorize group
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group.parent_id)
 

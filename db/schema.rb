@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_123000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_230000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -724,6 +724,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_123000) do
     t.string "ref_id"
     t.boolean "require_event_approval", default: false, null: false
     t.string "requirement_tag_list", default: [], array: true
+    t.text "review_reason"
+    t.string "review_status", default: "approved", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
     t.jsonb "social_links", default: {}
     t.date "start_date"
     t.string "timezone"
@@ -735,6 +739,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_123000) do
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
     t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
+    t.index ["review_status", "created_at"], name: "index_groups_on_review_status_and_created_at"
+    t.index ["reviewed_by_id"], name: "index_groups_on_reviewed_by_id"
+    t.check_constraint "review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name: "groups_review_status"
   end
 
   create_table "hackathon_project_members", id: :string, force: :cascade do |t|
@@ -1694,6 +1701,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_123000) do
   add_foreign_key "group_invites", "tickets"
   add_foreign_key "group_invites", "users", column: "receiver_id"
   add_foreign_key "group_invites", "users", column: "sender_id"
+  add_foreign_key "groups", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "hackathon_project_members", "hackathon_projects", column: "project_id"
   add_foreign_key "hackathon_project_members", "hackathons"
   add_foreign_key "hackathon_project_members", "users"

@@ -66,6 +66,9 @@ Rails.application.routes.draw do
       end
       resources :oauth_grants, path: "oauth/grants", only: %i[index destroy]
 
+      get "admin/group_reviews", to: "group_reviews#index"
+      post "admin/group_reviews/:id/review", to: "group_reviews#review"
+
       # Platform admins only — gated on users.admin.
       resources :oauth_admin_applications, path: "oauth/admin/applications", only: %i[index show] do
         member do

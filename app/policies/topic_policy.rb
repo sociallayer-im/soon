@@ -15,6 +15,7 @@ class TopicPolicy < ApplicationPolicy
   # visibility narrows it further — a manager-only board takes posts from
   # managers even when the group says "everyone".
   def create?
+    return false unless record.group&.review_status == "approved"
     return false if user.nil?
     return false unless record.category&.visible_to?(user)
     return true  if manages_group?

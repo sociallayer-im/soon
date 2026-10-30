@@ -1,0 +1,30 @@
+class Api::V1::GroupReviewsController < Api::BaseController
+  before_action :require_platform_admin
+
+  def index
+    status = params[:status].presence || "pending"
+    return render_error("invalid review status") unless %w[pending approved rejected].include?(status)
+    render_collection Group.where(review_status: status).order(created_at: :desc, id: :desc), blueprint: GroupBlueprint, view: :card
+  end
+
+  def review
+    status = params[:decision].to_s
+    return render_error("请选择批准或拒绝") unless %w[approved rejected].include?(status)
+    reason = params[:reason].to_s.strip
+    return render_error("请填写拒绝原因") if status == "rejected" && reason.blank?
+    return render_error("审核说明最多 1000 字") if reason.length > 1000
+    group = Group.find(params[:id])
+    group.with_lock do
+      return render_error("该申请已处理，请刷新列表", status: :conflict) unless group.review_status == "pending"
+      group.update!(review_status: status, review_reason: reason.presence, reviewed_at: Time.current,
+                    reviewed_by_id: current_user.id, active: status == "approved")
+    end
+    render json: GroupBlueprint.render(group, view: :detail)
+  end
+
+  private
+
+  def require_platform_admin
+    render_error("仅超级管理员可审核群组", status: :forbidden) unless current_user&.platform_admin?
+  end
+end

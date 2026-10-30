@@ -67,7 +67,13 @@ class Api::V1::UsersController < Api::BaseController
   # memberships (their profile page's "communities"), optionally by role.
   def groups
     user = User.resolve!(params[:id])
-    scope = user.memberships.joins(:group).includes(:group).where(active: true, groups: { active: true })
+    authenticate_optional!
+    scope = user.memberships.joins(:group).includes(:group).where(active: true)
+    scope = if current_user&.id == user.id
+      scope.where("groups.active = TRUE OR groups.review_status IN ('pending', 'rejected')")
+    else
+      scope.where(groups: { active: true })
+    end
     scope = scope.where(role: params[:role].to_s.split(",")) if params[:role].present?
     # Ordered by when this user joined each group, not when the group itself
     # was created — sails' equivalent happened to sort by group creation

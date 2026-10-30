@@ -2,7 +2,7 @@ class GroupBlueprint < Blueprinter::Base
   identifier :id
 
   # Default view stays light — it's embedded in events, invites, tracks, etc.
-  fields :city, :name, :nickname, :image_url, :logo_url, :created_at
+  fields :review_status, :city, :name, :nickname, :image_url, :logo_url, :created_at
 
   # Every scalar a group page or popup-city card needs, and no sub-resources.
   # Use this for LISTS. :detail on a list embeds each group's whole membership
@@ -10,7 +10,7 @@ class GroupBlueprint < Blueprinter::Base
   # which is a 726KB response against sails' 16KB for the same page — and the
   # consumer (sola-sdk popup_city.ts toPopupCity) reads only scalars.
   view :card do
-    fields :bio, :location, :timezone, :start_date, :end_date, :active,
+    fields :review_reason, :reviewed_at, :bio, :location, :timezone, :start_date, :end_date, :active,
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
            :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,

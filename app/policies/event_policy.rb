@@ -33,6 +33,7 @@ class EventPolicy < ApplicationPolicy
   # create an event. Previously this only checked group_member?, so a group set
   # to "everyone" silently 403'd any non-member who the UI told could publish.
   def create?
+    return false unless record.group.review_status == "approved"
     case record.group.can_publish_event
     when "everyone" then true
     when "member" then group_member?(record.group)

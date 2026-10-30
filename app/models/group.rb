@@ -1,4 +1,5 @@
 class Group < ApplicationRecord
+  validates :review_status, inclusion: { in: %w[pending approved rejected] }
   belongs_to :parent, class_name: "Group", optional: true
   has_many :children, class_name: "Group", foreign_key: :parent_id, dependent: :nullify
 
