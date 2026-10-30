@@ -1,8 +1,8 @@
 {
-  "targetId": "tgt_31334854-772c-43c9-bdcc-638e91dafe9d",
+  "targetId": "tgt_62709439-124b-4e70-9f2a-728636013fdc",
   "deploy": {
     "port": 8080,
-    "hostname": "soon.generic.dev",
+    "hostname": "surf-api.sola.day",
     "resources": {
       "cpuMHz": 256,
       "memoryMB": 640
