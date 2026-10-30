@@ -160,6 +160,7 @@ Rails.application.routes.draw do
           end
           collection do
             post :check_in
+            get :ticket_pass
           end
         end
         resources :event_roles,  only: %i[index create update destroy]

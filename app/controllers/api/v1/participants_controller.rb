@@ -205,12 +205,40 @@ class Api::V1::ParticipantsController < Api::BaseController
   # column made every registrant look checked in.
   def check_in
     authorize @event, :update?
-    # .active — someone who withdrew is not at the door.
-    participant = @event.participants.active.find_by(user_id: params[:user_id])
-    return render_error("user is not a participant of this event") unless participant
+    participant = if params[:token].present?
+      data = Rails.application.message_verifier("event-ticket").verified(params[:token], purpose: "check_in")
+      return render_error("无效或已过期的票券") unless data && data["event_id"] == @event.id
+      @event.participants.find_by(id: data["participant_id"], registered_at: data["registered_at"])
+    else
+      @event.participants.find_by(user_id: params[:user_id])
+    end
+    return render_error("该用户尚未报名此活动") unless participant
 
-    participant.update!(checked_in_at: Time.current)
+    participant.with_lock do
+      participant.refresh_payment_status!
+      return render_error("报名未审核通过或已取消") unless participant.status == "attending"
+      return render_error("票券尚未支付或已失效") unless participant.payment_status.nil? || participant.payment_status == "succeeded"
+      participant.update!(checked_in_at: Time.current) unless participant.checked_in_at
+    end
     render json: ParticipantBlueprint.render(participant)
+  end
+
+  # Only the holder can obtain their event-bound, short-lived credential.
+  def ticket_pass
+    participant = @event.participants.find_by!(user: current_user)
+    participant.refresh_payment_status!
+    eligible = participant.status == "attending" && [nil, "succeeded"].include?(participant.payment_status)
+    token = if eligible
+      Rails.application.message_verifier("event-ticket").generate(
+        { "event_id" => @event.id, "participant_id" => participant.id,
+          "registered_at" => participant.registered_at&.iso8601(6) },
+        purpose: "check_in", expires_in: 15.minutes)
+    end
+    render json: { participant: JSON.parse(ParticipantBlueprint.render(participant)),
+                   token: token, expires_in: eligible ? 900 : 0,
+                   tickets: JSON.parse(TicketItemBlueprint.render(participant.ticket_items.includes(:ticket), view: :order_detail)) }
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
   end
 
   private
