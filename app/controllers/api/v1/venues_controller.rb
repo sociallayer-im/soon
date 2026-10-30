@@ -70,12 +70,14 @@ class Api::V1::VenuesController < Api::BaseController
   def set_availability
     authorize @venue.group, :manage?, policy_class: GroupPolicy
 
-    @venue.availabilities.destroy_all
-    Array(params[:availabilities]).each do |a|
-      @venue.availabilities.create!(
-        day: a[:day].presence, day_of_week: a[:day_of_week].presence,
-        intervals: a[:intervals] || [], role_required: a[:role_required]
-      )
+    @venue.with_lock do
+      @venue.availabilities.destroy_all
+      Array(params[:availabilities]).each do |a|
+        @venue.availabilities.create!(
+          day: a[:day].presence, day_of_week: a[:day_of_week].presence,
+          intervals: a[:intervals] || [], role_required: a[:role_required]
+        )
+      end
     end
     render json: VenueBlueprint.render(@venue.reload, view: :with_availability)
   rescue ActiveRecord::RecordInvalid => e

@@ -9,21 +9,23 @@ class Api::V1::UsersController < Api::BaseController
     scope = User.publicly_discoverable
     if keyword.present?
       like = "%#{User.sanitize_sql_like(keyword)}%"
-      scope = scope.where("name ILIKE :q OR nickname ILIKE :q", q: like).order(:id)
-      return render_collection scope, blueprint: UserBlueprint, view: :profile
+      scope = scope.where("users.name ILIKE :q OR users.nickname ILIKE :q", q: like)
     end
-    events = Event.publicly_discoverable
-    activity = events.group(:owner_id).maximum(:created_at)
-    Topic.joins(:category, :group).where(groups: {active: true}, categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
-      activity[id] = [activity[id], time].compact.max
+    events = Event.publicly_discoverable.reorder(nil).select("events.owner_id AS user_id, events.created_at AS contributed_at")
+    topics = DiscoverySignals.public_topics.reorder(nil).select("topics.user_id, topics.created_at AS contributed_at")
+    activity = "SELECT user_id, MAX(contributed_at) AS last_activity FROM (#{events.to_sql} UNION ALL #{topics.to_sql}) contributions GROUP BY user_id"
+    followed = Follow.where(user_id: current_user.id, target_type: "User", status: "active").select("target_id AS user_id")
+    group = Group.find_by(id: params[:group_id]) if params[:group_id].present?
+    members = if group && GroupPolicy.new(current_user, group).members?
+      group.memberships.where(active: true).where.not(role: %w[pending declined]).select(:user_id)
+    else
+      Membership.none.select(:user_id)
     end
-    ids = activity.sort_by { |id, time| [-time.to_f, id] }.map(&:first)
-    scope = scope.where(id: ids)
-    if ids.any?
-      clauses = ids.each_with_index.map { |id, index| "WHEN #{User.connection.quote(id)} THEN #{index}" }.join(" ")
-      scope = scope.order(Arel.sql("CASE users.id #{clauses} END"))
-    end
-    render_collection scope, blueprint: UserBlueprint, view: :profile
+    scope = scope.joins("LEFT JOIN (#{members.to_sql}) community ON community.user_id = users.id")
+                 .joins("LEFT JOIN (#{activity}) activity ON activity.user_id = users.id")
+                 .joins("LEFT JOIN (#{followed.to_sql}) followed ON followed.user_id = users.id")
+    scope = scope.where("followed.user_id IS NOT NULL OR community.user_id IS NOT NULL OR activity.user_id IS NOT NULL") if keyword.blank?
+    render_collection scope.order(Arel.sql("CASE WHEN followed.user_id IS NOT NULL THEN 0 WHEN community.user_id IS NOT NULL THEN 1 ELSE 2 END, activity.last_activity DESC NULLS LAST, users.id ASC")), blueprint: UserBlueprint, view: :profile
   end
 
   # Discover public organizers, never an unrestricted directory of accounts.
@@ -92,8 +94,12 @@ class Api::V1::UsersController < Api::BaseController
     # deliberate choice), but join time is the more sensible sort for "this
     # person's communities" and is what we intentionally keep here.
     authenticate_optional!
-    render json: MembershipBlueprint.render(scope.includes(user: :teams).order(created_at: :asc, id: :asc),
-                                            view: :with_group, member_group_ids: member_group_ids)
+    ordered = scope.includes(user: :teams).order(created_at: :asc, id: :asc)
+    if params[:page].present? || params[:limit].present?
+      render_collection ordered, blueprint: MembershipBlueprint, view: :with_group, member_group_ids: member_group_ids
+    else
+      render json: MembershipBlueprint.render(ordered, view: :with_group, member_group_ids: member_group_ids)
+    end
   end
 
   def update

@@ -113,6 +113,7 @@ Rails.application.routes.draw do
 
       # Before `resources :users`, or /users/by_email resolves to #show with
       # id "by_email".
+      get "users/:id/topics", to: "topics#user_index"
       get "registrations", to: "registrations#index"
       get "users/role_candidates", to: "users#role_candidates"
       get "users/suggestions", to: "users#suggestions"

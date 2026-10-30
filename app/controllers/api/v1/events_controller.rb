@@ -31,7 +31,9 @@ class Api::V1::EventsController < Api::BaseController
   # doesn't depend on it.
   def show
     authorize @event
-    render json: EventBlueprint.render(@event, view: :extended, **show_options)
+    options = show_options
+    view = ActiveModel::Type::Boolean.new.cast(params[:summary]) ? :default : :extended
+    render json: EventBlueprint.render(@event, view: view, **options)
   end
 
   # Optionally accepts `event_roles: [...]` and `tickets: [...]` alongside the
@@ -139,7 +141,7 @@ class Api::V1::EventsController < Api::BaseController
     scope = scope.merge(Event.publicly_discoverable) if ActiveModel::Type::Boolean.new.cast(params[:browse_all])
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).event_group_ids)
-    elsif current_user && !ActiveModel::Type::Boolean.new.cast(params[:browse_all]) && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank?
+    elsif current_user && !ActiveModel::Type::Boolean.new.cast(params[:browse_all]) && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank? && params[:user_id].blank?
       # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
       # public events (feeds/search). Profile-tab filters (owner_id/attendee_id)
@@ -158,8 +160,17 @@ class Api::V1::EventsController < Api::BaseController
     else scope.order(:start_time)
     end
 
+    if params[:sort] == "upcoming_first"
+      now_sql = Event.connection.quote(Time.current)
+      scope = scope.reorder(Arel.sql("CASE WHEN events.end_time >= #{now_sql} THEN 0 ELSE 1 END, CASE WHEN events.end_time >= #{now_sql} THEN events.start_time END ASC, events.start_time DESC, events.id ASC"))
+    end
+
     # Profile-page tabs: events a user hosts / attends (public visibility rules
     # still apply through visible_to). Both accept a TSID or username.
+    if params[:user_id].present?
+      profile = User.resolve!(params[:user_id])
+      scope = scope.merge(Event.agenda_for(profile).or(Event.where(owner_id: profile.id)))
+    end
     if params[:owner_id].present?
       scope = scope.where(owner_id: User.resolve!(params[:owner_id]).id)
     end
@@ -213,6 +224,13 @@ class Api::V1::EventsController < Api::BaseController
   def show_options
     options = personalization_options
     options[:manage_participants] = EventPolicy.new(current_user, @event).update?
+    options[:can_edit] = options[:manage_participants]
+    options[:can_register] = @event.registration_open? && (!current_user || EventPolicy.new(current_user, @event).join?)
+    options[:registration_unavailable_reason] = if !@event.registration_open?
+      {"draft" => "尚未发布", "pending" => "待审核", "closed" => "报名已截止", "archived" => "已归档", "cancelled" => "活动已取消"}[@event.status] || "报名已结束"
+    elsif !options[:can_register]
+      "当前账号不符合节点的报名条件"
+    end
     options[:viewer_id] = current_user&.id
     options[:include_participants] = false if params[:include_participants].to_s == "false"
     options[:current_participant] = @event.participants.where("status != ? OR cancellation_reason = ?", "cancelled", "timeout").find_by(user_id: current_user.id) if current_user

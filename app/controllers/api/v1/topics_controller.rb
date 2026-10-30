@@ -4,8 +4,8 @@ class Api::V1::TopicsController < Api::BaseController
   include DiscussionGate
 
   before_action :require_discussion_enabled!
-  skip_before_action :authenticate!, only: %i[index show]
-  before_action :authenticate_optional!, only: %i[index show]
+  skip_before_action :authenticate!, only: %i[index show user_index]
+  before_action :authenticate_optional!, only: %i[index show user_index]
   before_action :set_topic, only: %i[show update destroy pin unpin close open flag unflag restore]
 
   # GET /api/v1/topics?group_id=&category_id=&category_slug=&tags=&search=
@@ -14,6 +14,14 @@ class Api::V1::TopicsController < Api::BaseController
   # Public. Every read starts from the same two scopes — the boards this
   # caller may see, and the topics within them that are not hidden from them.
   # Skipping either one is how a private board leaks.
+  def user_index
+    user = User.resolve!(params[:id])
+    scope = Topic.in_visible_categories(current_user).visible_to(current_user, manager: false)
+                 .joins(:group).where(groups: {active: true, discussion_enabled: true}, user_id: user.id, sync_to_community: true)
+                 .order(created_at: :desc, id: :desc)
+    render_collection scope.includes(:user, :last_reply_user, :category), blueprint: TopicBlueprint, starred_ids: starred_ids(scope)
+  end
+
   def index
     group = Group.resolve!(params[:group_id])
     return render_not_found unless group.discussion_enabled?

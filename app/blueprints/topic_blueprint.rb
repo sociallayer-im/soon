@@ -8,6 +8,11 @@ class TopicBlueprint < Blueprinter::Base
   fields :event_id, :sync_to_community, :group_id, :category_id, :title, :image_url, :tags,
          :replies_count, :stars_count, :replied_at, :created_at, :updated_at
 
+  # A bounded list preview avoids one full-body fetch per feed card.
+  field :excerpt do |topic|
+    topic.content.to_s.first(600)
+  end
+
   field :pinned do |topic|
     topic.pinned?
   end

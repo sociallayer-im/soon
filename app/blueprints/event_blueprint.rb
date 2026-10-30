@@ -32,6 +32,21 @@ class EventBlueprint < Blueprinter::Base
   association :track, blueprint: TrackRefBlueprint
 
   view :extended do
+    field :can_edit do |_event, options|
+      !!options[:can_edit]
+    end
+    field :can_manage_participants do |_event, options|
+      !!options[:manage_participants]
+    end
+    field :can_check_in do |_event, options|
+      !!options[:manage_participants]
+    end
+    field :can_register do |event, options|
+      options.fetch(:can_register) { event.registration_open? }
+    end
+    field :registration_unavailable_reason do |_event, options|
+      options[:registration_unavailable_reason]
+    end
     field :content
     # Confirmed-attendees-only image (group QR code). The controller decides
     # who qualifies (EventsController#reveal_image_note?); absent from the
