@@ -71,7 +71,10 @@ class Api::V1::GroupInvitesController < Api::BaseController
   # DELETE /api/v1/groups/:group_id/group_invites/:id
   def destroy
     authorize @invite, :cancel?
-    @invite.update(status: "cancelled")
+    @invite.with_lock do
+      return render_error("该邀请或申请已处理，请刷新", status: :conflict) unless @invite.status.in?(%w[sending requesting])
+      @invite.update!(status: "cancelled")
+    end
     head :no_content
   end
 
@@ -88,12 +91,13 @@ class Api::V1::GroupInvitesController < Api::BaseController
   def accept
     recipient = @invite.receiver_id == current_user.id ||
       (@invite.receiver_address_type == "email" && current_user.email.present? && @invite.receiver_address == current_user.email)
-    unless @invite.status == "sending" && recipient
-      return render_error("invite is not for this user")
+    @invite.with_lock do
+      unless @invite.status == "sending" && recipient
+        return render_error("invite is not for this user")
+      end
+      return render_error("invite expired") if @invite.expired?
+      @invite.accept!(current_user)
     end
-    return render_error("invite expired") if @invite.expired?
-
-    @invite.accept!(current_user)
     render json: GroupInviteBlueprint.render(@invite)
   end
 
@@ -103,10 +107,11 @@ class Api::V1::GroupInvitesController < Api::BaseController
   # whoever requested (@invite.receiver_id), not the approving manager.
   def accept_request
     authorize @group, :update?, policy_class: GroupPolicy
-    return render_error("invite is not a pending request") unless @invite.status == "requesting"
-    return render_error("request expired") if @invite.expired?
-
-    @invite.accept!(User.find(@invite.receiver_id))
+    @invite.with_lock do
+      return render_error("invite is not a pending request", status: :conflict) unless @invite.status == "requesting"
+      return render_error("request expired") if @invite.expired?
+      @invite.accept!(User.find(@invite.receiver_id))
+    end
     render json: GroupInviteBlueprint.render(@invite)
   end
 
@@ -204,6 +209,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     if user
       membership = @group.memberships.find_by(user_id: user.id)
       if membership && membership.role == "member" && role != "member"
+        membership.skip_site_notification = true # legacy Activity below already notifies this user
         membership.update!(role: role)
         Activity.create(item: membership, initiator: current_user, action: "group_invite/update_role", receiver: user,
           payload: { message: params[:message], group_name: @group.name, group_display_name: @group.display_name })

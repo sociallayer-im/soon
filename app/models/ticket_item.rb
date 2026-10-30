@@ -1,4 +1,5 @@
 class TicketItem < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user, optional: true
   belongs_to :ticket
   belongs_to :event, optional: true

@@ -39,6 +39,11 @@ Rails.application.configure do
       class: "TicketingSweeperJob",
       description: "Expire stale ticket reservations, confirming against Stripe first"
     },
+    site_notification_reminder: {
+      cron: "*/5 * * * *",
+      class: "SiteNotificationReminderJob",
+      description: "Create deduplicated station-only event reminders"
+    },
     poll_auto_close: {
       cron: "*/5 * * * *",
       class: "PollAutoCloseJob",

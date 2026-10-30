@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_232000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -21,12 +21,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_232000) do
     t.string "initiator_id", null: false
     t.string "item_id"
     t.string "item_type"
+    t.string "notification_key"
     t.jsonb "payload", default: {}
     t.string "receiver_address"
     t.string "receiver_id"
     t.index ["created_at"], name: "index_activities_on_created_at"
     t.index ["initiator_id"], name: "index_activities_on_initiator_id"
     t.index ["item_type", "item_id"], name: "index_activities_on_item_type_and_item_id"
+    t.index ["receiver_id", "notification_key"], name: "index_activities_notification_dedup", unique: true, where: "(notification_key IS NOT NULL)"
     t.index ["receiver_id"], name: "index_activities_on_receiver_id"
   end
 

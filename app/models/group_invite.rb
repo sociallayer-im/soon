@@ -1,4 +1,5 @@
 class GroupInvite < ApplicationRecord
+  include SiteNotifiable
   belongs_to :sender, class_name: "User", optional: true
   belongs_to :receiver, class_name: "User", optional: true
   belongs_to :group

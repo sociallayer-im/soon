@@ -1,4 +1,5 @@
 class Membership < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user
   # counter_cache keeps groups.memberships_count correct on every create/destroy
   # (including the owner seeded at group creation), so nothing has to remember to

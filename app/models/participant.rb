@@ -31,6 +31,7 @@
 # it describes — e.g. cancelling one pending order marked the whole
 # participant unpaid even when another order was already paid.
 class Participant < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user
   belongs_to :event
   belongs_to :voucher, optional: true

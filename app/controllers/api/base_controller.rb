@@ -2,6 +2,11 @@ class Api::BaseController < ActionController::API
   include Pundit::Authorization
 
   before_action :authenticate!
+  around_action :with_notification_actor
+
+  def with_notification_actor(&block)
+    NotificationContext.set(actor: current_user, &block)
+  end
 
   rescue_from Pundit::NotAuthorizedError do
     render json: { error: "Forbidden" }, status: :forbidden

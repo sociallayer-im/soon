@@ -1,6 +1,7 @@
 # One floor in a topic. Flat and time-ordered; `reply_to_id` is a weak pointer
 # used to render "in reply to @someone", never a tree.
 class Reply < ApplicationRecord
+  include SiteNotifiable
   include SoftDelete
   include Flaggable
   include Starrable

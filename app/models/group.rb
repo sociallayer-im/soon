@@ -1,4 +1,5 @@
 class Group < ApplicationRecord
+  include SiteNotifiable
   has_many :group_review_logs, dependent: :destroy
   validates :review_status, inclusion: { in: %w[pending approved rejected] }
   belongs_to :parent, class_name: "Group", optional: true

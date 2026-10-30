@@ -171,10 +171,11 @@ class Api::V1::ParticipantsController < Api::BaseController
   def approve
     authorize @event, :update?
     participant = @event.participants.find(params[:id])
-    return render_error("participant is not pending") unless participant.status == "pending"
-
-    participant.transition!(:attending)
-    sync_form_submission!(participant, "approved")
+    participant.with_lock do
+      return render_error("participant is not pending") unless participant.status == "pending"
+      participant.transition!(:attending)
+      sync_form_submission!(participant, "approved")
+    end
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound
@@ -187,10 +188,11 @@ class Api::V1::ParticipantsController < Api::BaseController
   def reject
     authorize @event, :update?
     participant = @event.participants.find(params[:id])
-    return render_error("participant is not pending") unless participant.status == "pending"
-
-    participant.transition!(:declined)
-    sync_form_submission!(participant, "rejected")
+    participant.with_lock do
+      return render_error("participant is not pending") unless participant.status == "pending"
+      participant.transition!(:declined)
+      sync_form_submission!(participant, "rejected")
+    end
     EventMailer.participant_rejected(participant_id: participant.id).deliver_later
     render json: ParticipantBlueprint.render(participant)
   rescue ActiveRecord::RecordNotFound

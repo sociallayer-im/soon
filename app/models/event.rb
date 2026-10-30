@@ -1,4 +1,5 @@
 class Event < ApplicationRecord
+  include SiteNotifiable
   scope :team_for, ->(user) {
     user ? where(owner_id: user.id).or(where(id: EventRole.linked_to(user).select(:event_id))) : none
   }

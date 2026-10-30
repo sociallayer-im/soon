@@ -55,6 +55,7 @@ class Api::V1::EventsController < Api::BaseController
       event.save!
       apply_group_ticket_designation!(event)
       create_nested_roles!(event, params[:event_roles])
+      SiteNotifications.roles_changed(event, {}, actor: current_user)
       create_nested_tickets!(event, params[:tickets], event.group_id)
     end
     notify_group_admins_of_submission(event)
@@ -79,10 +80,12 @@ class Api::V1::EventsController < Api::BaseController
       return render_error(err)
     end
     ActiveRecord::Base.transaction do
+      prior_roles = SiteNotifications.role_links(@event) if params.key?(:event_roles)
       @event.save!
       if params.key?(:event_roles)
         @event.event_roles.destroy_all
         create_nested_roles!(@event, params[:event_roles])
+        SiteNotifications.roles_changed(@event, prior_roles, actor: current_user)
       end
       apply_group_ticket_designation!(@event)
     end
@@ -115,8 +118,10 @@ class Api::V1::EventsController < Api::BaseController
   # POST /api/v1/events/:id/approve — group manager publishes a pending event.
   def approve
     authorize @event
-    return render_error("event is not pending approval") unless @event.status == "pending"
-    @event.update!(status: "published")
+    @event.with_lock do
+      return render_error("event is not pending approval", status: :conflict) unless @event.status == "pending"
+      @event.update!(status: "published")
+    end
     render json: EventBlueprint.render(@event)
   end
 

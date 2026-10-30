@@ -376,6 +376,8 @@ Rails.application.routes.draw do
 
       resources :activities, only: %i[index] do
         collection do
+          get :tasks
+          get :summary
           post :mark_read
         end
       end
