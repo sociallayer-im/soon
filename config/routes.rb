@@ -364,6 +364,8 @@ Rails.application.routes.draw do
       get  "tickets/coupon",                  to: "tickets#coupon"
       get  "tickets/coupon_usage",            to: "tickets#coupon_usage"
 
+      resources :follows, only: %i[index create destroy]
+
       resources :activities, only: %i[index] do
         collection do
           post :mark_read

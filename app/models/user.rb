@@ -1,6 +1,8 @@
 class User < ApplicationRecord
   has_many :campaigns, foreign_key: :owner_id, dependent: :destroy
   has_many :memberships, dependent: :delete_all
+  has_many :follows, dependent: :destroy
+  has_many :incoming_follows, class_name: "Follow", as: :target, dependent: :destroy
   has_many :stripe_settings, dependent: :destroy
   has_many :withdrawals, dependent: :destroy
   has_many :groups, through: :memberships

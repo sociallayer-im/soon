@@ -213,6 +213,10 @@ module FactoryHelpers
     }.merge(attrs))
   end
 
+  def create_follow(user:, target:, **attrs)
+    Follow.create!({ user: user, target: target, status: "active" }.merge(attrs))
+  end
+
   def create_activity(initiator:, receiver: nil, action: "badge/transfer", **attrs)
     Activity.create!({ initiator: initiator, receiver: receiver, action: action }.merge(attrs))
   end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_29_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -487,6 +487,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_010000) do
     t.string "user_id", null: false
     t.index ["uri"], name: "index_fed_participations_on_uri", unique: true
     t.index ["user_id", "fed_event_id"], name: "index_fed_participations_on_user_id_and_fed_event_id", unique: true
+  end
+
+  create_table "follows", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "status", default: "active", null: false
+    t.string "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["target_type", "target_id", "created_at"], name: "index_follows_on_target_type_and_target_id_and_created_at"
+    t.index ["user_id", "target_type", "target_id"], name: "index_follows_on_user_id_and_target_type_and_target_id", unique: true
+    t.check_constraint "NOT (target_type::text = 'User'::text AND target_id::text = user_id::text)", name: "follows_no_self"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'pending'::character varying, 'declined'::character varying]::text[])", name: "follows_status_valid"
+    t.check_constraint "target_type::text = ANY (ARRAY['User'::character varying, 'Group'::character varying]::text[])", name: "follows_target_type_valid"
   end
 
   create_table "form_answers", id: :string, force: :cascade do |t|
@@ -1665,6 +1679,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_29_010000) do
   add_foreign_key "fed_follows", "fed_actors"
   add_foreign_key "fed_participations", "fed_events"
   add_foreign_key "fed_participations", "users"
+  add_foreign_key "follows", "users"
   add_foreign_key "form_answers", "form_fields"
   add_foreign_key "form_answers", "form_submissions"
   add_foreign_key "form_fields", "forms"
