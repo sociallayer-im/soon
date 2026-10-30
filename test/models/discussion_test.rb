@@ -126,6 +126,7 @@ class DiscussionTest < ActiveSupport::TestCase
   end
 
   test "category visibility resolves per viewer" do
+    @group.categories.where.not(id: @category.id).destroy_all
     member = create_user
     create_membership(user: member, group: @group)
     stranger = create_user

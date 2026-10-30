@@ -14,6 +14,8 @@ class Group < ApplicationRecord
   # Discussion boards. restrict_with_error rather than destroy: deleting a
   # group with live discussion should be a deliberate act, not a side effect.
   has_many :teams, dependent: :destroy
+  before_destroy :remove_empty_discussion_categories, prepend: true
+  after_create :ensure_default_discussion_category!, if: :discussion_enabled?
   has_many :categories, dependent: :restrict_with_error
   has_many :topics, dependent: :restrict_with_error
   has_many :polls, dependent: :restrict_with_error
@@ -62,6 +64,26 @@ class Group < ApplicationRecord
     includes(:parent, :children, { tracks: :group }, { active_venues: :place },
              :teams, { memberships: { user: :teams } })
   }
+
+  def remove_empty_discussion_categories
+    categories.each do |category|
+      category.destroy! unless category.topics.with_deleted.exists?
+    end
+    categories.reset
+  end
+
+  # A public posting entry point is needed even when existing boards are private.
+  # Never change the visibility or archive state of an existing board.
+  def ensure_default_discussion_category!
+    return if categories.listed.where(visibility: "public").exists?
+    slug = "general"
+    suffix = 1
+    while categories.exists?(slug: slug)
+      suffix += 1
+      slug = "general-#{suffix}"
+    end
+    categories.create!(name: "日常分享", slug: slug, visibility: "public")
+  end
 
   # Looks a group up by primary key OR unique slug — API paths accept either
   # (/groups/0GA2... or /groups/edge-city). Raises RecordNotFound like find.

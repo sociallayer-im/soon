@@ -99,7 +99,7 @@ class Api::V1::GroupsController < Api::BaseController
 
   def destroy
     authorize @group
-    @group.destroy
+    return render_error(@group.errors.full_messages.join(", ")) unless @group.destroy
     head :no_content
   end
 

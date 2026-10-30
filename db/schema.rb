@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_123000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -685,7 +685,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_120000) do
     t.string "can_create_hackathon", default: "manager", comment: "manager | member | everyone"
     t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
-    t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
+    t.string "can_post_topic", default: "everyone", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
     t.string "city"
@@ -695,7 +695,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_120000) do
     t.string "custom_domain_token"
     t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
-    t.boolean "discussion_enabled", default: false, null: false
+    t.boolean "discussion_enabled", default: true, null: false
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true

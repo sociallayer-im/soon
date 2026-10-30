@@ -71,4 +71,21 @@ class GroupTest < ActiveSupport::TestCase
     group.update!(venue_union: [partner.id])
     assert_equal [group.id, partner.id].sort, group.venue_group_ids.sort
   end
+  test "new groups allow posting and provide a public default board" do
+    group = create_group
+    assert group.discussion_enabled?
+    assert_equal "everyone", group.can_post_topic
+    assert_equal 1, group.categories.listed.where(visibility: "public").count
+    group.ensure_default_discussion_category!
+    assert_equal 1, group.categories.count
+  end
+
+  test "providing a public board never changes private or archived categories" do
+    group = create_group(discussion_enabled: false)
+    private_board = group.categories.create!(name: "管理讨论", slug: "general", visibility: "manager")
+    group.ensure_default_discussion_category!
+    assert_equal "manager", private_board.reload.visibility
+    assert group.categories.exists?(slug: "general-2", visibility: "public")
+  end
+
 end

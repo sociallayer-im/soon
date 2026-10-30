@@ -39,7 +39,7 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
 
   test "a group with discussion off 404s even when the deployment gate is open" do
     with_discussion do
-      off = create_group(owner: @owner)
+      off = create_group(owner: @owner, discussion_enabled: false)
       get "/api/v1/topics", params: { group_id: off.id }
       assert_response :not_found
       get "/api/v1/categories", params: { group_id: off.id }
