@@ -143,3 +143,13 @@ RegistrationReview在event→participant→ticket锁下检查活动与所选票�
 - Test fixtures now default to published events for signup flows; draft visibility tests explicitly create a draft. Updated legacy English error assertions to the unified errors.
 - Verification: full backend suite 1,418 tests / 5,285 assertions, zero failures/errors. Added 8 entry-point regression tests plus repeated purchase notification coverage. No actual payment or production email/SMS was triggered by tests.
 - New migrations: 20261031006000 (team check-ins), 20261031007000 (owner notification marker). No backend phone constraint; ticket quantities remain independent of event capacity.
+
+### Deployment verification — registration audit fixes
+
+- Frontend main pushed at 4847e8f; backend surf implementation pushed/deployed at 01bb505. No Web release was performed.
+- Atlas deployment dep_f55bcae2-f060-460f-a367-181115a95d35 / operation op_24992be7-8de9-4da9-b627-8d0ecfb07617 succeeded. Public version reports clean source 01bb505e4463286f7ce3bf24314b5de104904f92; /up returns 200 and unauthenticated /api/v1/registrations returns 401.
+- Production schema_migrations verified through 20261031007000, including all prior discovery/review migrations; team check-in table and owner-notification/inventory columns exist.
+- Private pre-migration pg_dump archives were created and pg_restore --list verified on HomePod (0600, under /home/ubuntu/atlas-production/private-backups/surf). No secrets or database contents were copied into Git.
+- Initial build dep_47fc064d-894a-42ac-b237-81f446a9e9dd was cancelled: Nomad could not place its 512MB runner due to physical memory reservations, despite the authorized 3072MB Atlas target budget.
+- Reused the user's existing Surf-only downtime authorization. Atlas suspend rejects subsequent source up with SERVICE_STATE_CONFLICT, so restored the retained version using Atlas resume, submitted a new source deployment, then scaled only the current old Surf job atlas-7ad55ba3-18cc-4a9d-ba37-dd12d072a745 group app to zero through Nomad. This freed actual scheduler capacity while preserving Atlas admission checks, state and rollback history. Atlas completed the new build, migrations, health gate and route cutover; unrelated services were preserved.
+- Real device payment, reviewer UX and QR scan acceptance remain user-side checks; automated regression tests did not charge or send production messages.
