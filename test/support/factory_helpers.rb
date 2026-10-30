@@ -107,6 +107,7 @@ module FactoryHelpers
     place ||= create_place
     Event.create!({
       title: "Event #{unique_suffix}",
+      status: "published",
       start_time: 1.day.from_now,
       end_time: 1.day.from_now + 2.hours,
       group: group,

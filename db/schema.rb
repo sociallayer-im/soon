@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_005000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_007000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -312,6 +312,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_005000) do
     t.index ["event_id", "item_id", "item_type"], name: "index_event_roles_on_event_id_and_item_id_and_item_type", unique: true
     t.index ["event_id"], name: "index_event_roles_on_event_id"
     t.index ["item_id", "event_id"], name: "idx_event_roles_user_agenda", where: "((item_type)::text = 'User'::text)"
+  end
+
+  create_table "event_team_check_ins", id: :string, force: :cascade do |t|
+    t.datetime "checked_in_at", null: false
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["event_id", "user_id"], name: "index_event_team_check_ins_on_event_id_and_user_id", unique: true
+    t.index ["event_id"], name: "index_event_team_check_ins_on_event_id"
+    t.index ["user_id"], name: "index_event_team_check_ins_on_user_id"
   end
 
   create_table "events", id: :string, force: :cascade do |t|
@@ -1411,6 +1422,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_005000) do
     t.integer "discount_value"
     t.string "event_id"
     t.string "group_id"
+    t.datetime "group_owner_notified_at"
     t.boolean "inventory_reserved", default: true, null: false
     t.decimal "original_price", precision: 40
     t.datetime "paid_at"
@@ -1727,6 +1739,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_005000) do
   add_foreign_key "coupons", "events"
   add_foreign_key "creation_receipts", "users", on_delete: :cascade
   add_foreign_key "event_roles", "events"
+  add_foreign_key "event_team_check_ins", "events", on_delete: :cascade
+  add_foreign_key "event_team_check_ins", "users", on_delete: :cascade
   add_foreign_key "events", "forms"
   add_foreign_key "events", "groups"
   add_foreign_key "events", "places"

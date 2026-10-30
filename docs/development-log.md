@@ -131,3 +131,15 @@ RegistrationReview在event→participant→ticket锁下检查活动与所选票�
 验证：后端全量1409项/5211断言通过（新增14项完整报名审核集成测试）；最终报名管理序列化增补后57项/256断言通过。覆盖先审后付、免费票、审拒重申、名额与票量各自约束、必填/管理字段保护、公共隐私、接口隔离、过期资格、远程取消失败不释放、支付确认幂等及站内任务结果。前端186项、类型检查、39项320/375/430px布局检查及dist/dist-preview双构建通过；Web仅兼容构建，未发布。未推送、未部署后端、未发布小程序；真实微信扣款仍需新版后端部署后真机验收。
 
 补充边界：同一用户/活动只有一份报名审核，待审核时不能换一个无需审核票种绕过原申请；已确认/已审核通过的活动关系不重复审核。兼容既有同活动不同票种订单，复用同一份预留与最早支付期限，不重复计入活动人数；未实际预留库存的订单，即使报名状态异常也不能发起支付或确认付款。
+
+## 2026-10-31 — Registration entry-point audit hardening
+
+- Closed self-service PATCH promotions to attending from declined, cancelled, maybe, pending and awaiting_payment. Reapplications use the full join/checkout flow; maybe registrations can reapply through those flows too.
+- Unified DELETE and legacy PATCH cancellation (and confirmed-to-maybe exits) behind event/participant locks and order teardown. Remotely attempted payments must be safely closed before releasing inventory. Form status follows withdrawal. Repeat cancellation repairs remaining orders without double release.
+- Added one Event registration lifecycle gate: published and not ended, for direct join, ticket RSVP and organizer approval. Join/checkout recheck after acquiring the event lock. Removed the pre-review venue-capacity rejection; approval/direct confirmation still independently enforce event/venue capacity and ticket inventory.
+- Reusing registrations clears checked_in_at/cancelled_at as well as review/payment audit fields; old participant QR credentials remain bound to the previous registered_at.
+- Added separate event_team_check_ins (unique event/user; cascading foreign keys). Hosts and linked role holders obtain a short-lived team pass without buying tickets, creating a Participant or consuming inventory/seats. Every team scan checks current role and event availability; repeat scans retain the first timestamp. Ordinary paid attendee eligibility remains unchanged.
+- Added ticket_items.group_owner_notified_at. Owner notification is persisted under the payment-confirmation order lock; repeated callbacks do not repeat group purchase mail, including free tickets. Existing succeeded group purchases are marked in the migration because they already ran the previous notifier.
+- Test fixtures now default to published events for signup flows; draft visibility tests explicitly create a draft. Updated legacy English error assertions to the unified errors.
+- Verification: full backend suite 1,418 tests / 5,285 assertions, zero failures/errors. Added 8 entry-point regression tests plus repeated purchase notification coverage. No actual payment or production email/SMS was triggered by tests.
+- New migrations: 20261031006000 (team check-ins), 20261031007000 (owner notification marker). No backend phone constraint; ticket quantities remain independent of event capacity.

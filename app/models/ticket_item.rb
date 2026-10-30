@@ -157,10 +157,12 @@ class TicketItem < ApplicationRecord
 
   def notify_group_owner
     return unless ticket_type == "group" && group.present? && status == "succeeded"
+    return if group_owner_notified_at
 
     group_owner = group.users.joins(:memberships).where(memberships: { role: "owner" }).first
     return unless group_owner&.email.present?
 
+    update!(group_owner_notified_at: Time.current)
     GroupMailer.ticket_purchased(ticket_item_id: id, recipient: group_owner.email).deliver_later
   end
 

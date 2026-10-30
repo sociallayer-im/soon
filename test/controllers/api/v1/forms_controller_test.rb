@@ -297,6 +297,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "get_event_form hides a draft event's form from non-managers" do
+    @event.update!(status: "draft")
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [{ label: "Q1" }] }, headers: auth_headers(@owner)
     assert_equal "draft", @event.reload.status

@@ -34,6 +34,11 @@ class Event < ApplicationRecord
 
   accepts_nested_attributes_for :coupons, allow_destroy: true
 
+  # All signup paths, including manager approval, use the same lifecycle gate.
+  def registration_open?
+    status == "published" && end_time.present? && end_time > Time.current
+  end
+
   STATUSES = %w(draft pending published archived closed cancelled).freeze
   # normal            — default; publicly listed, joining follows the group's
   #                      can_join_event setting like any other event.

@@ -115,6 +115,20 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
+  test "repeated group purchase confirmation enqueues owner mail only once" do
+    event = create_group_ticket_event(group: @group, owner: @owner)
+    ticket = create_ticket(event: event)
+    buyer = create_user
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    item = TicketItem.find(json_response.fetch("ticket_item").fetch("id"))
+    assert item.group_owner_notified_at.present?
+    assert_no_enqueued_emails do
+      item.confirm_payment!
+      item.reload.confirm_payment!
+    end
+  end
+
   # ---- group ticket purchase (deliver_later) ----
 
   test "buying a group ticket notifies the group owner and confirms the buyer" do

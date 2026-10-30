@@ -44,6 +44,7 @@ class Api::V1::ParticipantsController < Api::BaseController
   # POST /api/v1/events/:event_id/participants
   def create
     authorize @event, :join?
+    return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
     return render_error("请选择票种后报名") if @event.tickets.where(status: "normal").exists?
 
     if @event.form_id
@@ -59,6 +60,7 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
 
     @event.with_lock do
+      return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
       is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
       status = "attending"
       status = "pending" if @event.require_approval && !is_manager
@@ -71,7 +73,7 @@ class Api::V1::ParticipantsController < Api::BaseController
       # transition table has allowed declined → pending/attending all along, it
       # was only this guard that made it unreachable. Anything else that already
       # exists is still a duplicate join and rejected as before.
-      if existing && !existing.cancelled? && existing.status != "declined"
+      if existing && !existing.status.in?(%w[cancelled declined maybe])
         return render_error("User can only participate once per event")
       end
 
@@ -91,7 +93,7 @@ class Api::V1::ParticipantsController < Api::BaseController
         return render_error(err)
       end
 
-      participant.assign_attributes(status: status, registered_at: Time.current, reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
+      participant.assign_attributes(status: status, registered_at: Time.current, checked_in_at: nil, cancelled_at: nil, reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
 
       ActiveRecord::Base.transaction do
         participant.save!
@@ -137,18 +139,16 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
 
     new_status = params.dig(:participant, :status)
-    if participant.status.in?(%w[pending awaiting_payment]) && new_status == "attending"
-      return render_error("请通过报名审核或完成支付后确认报名")
+    # PATCH is retained for older clients, but must not provide a second
+    # registration/payment/review entrance. All exits use the same teardown.
+    unless %w[cancelled maybe].include?(new_status)
+      return render_error("请通过报名入口重新报名，审核及支付完成后将自动确认")
     end
-    was_seated = participant.seated?
-    will_be_seated = Participant::SEATED.include?(new_status)
-    if will_be_seated && !was_seated && (err = capacity_error)
-      return render_error(err)
-    end
-
-    # transition! moves participant_count itself — the seat follows the status.
-    participant.transition!(new_status)
+    return render_error("只有已确认报名可以标记为可能参加") if new_status == "maybe" && participant.status != "attending"
+    withdraw_participant!(participant, status: new_status)
     render json: ParticipantBlueprint.render(participant, own: true)
+  rescue TicketItem::InvalidTransition, Stripe::StripeError => e
+    render_error(e.message)
   rescue Participant::InvalidTransition => e
     render_error(e.message)
   rescue ActiveRecord::RecordInvalid => e
@@ -169,17 +169,7 @@ class Api::V1::ParticipantsController < Api::BaseController
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    return head :no_content if participant.status == "cancelled" # idempotent
-
-    ActiveRecord::Base.transaction do
-      release_orders!(participant)
-      # Cancelling the last live order already withdraws the participant
-      # (TicketItem#settle_participant!), so only transition if it didn't.
-      # Either way the seat is given back exactly once, by whichever
-      # transition! actually ran.
-      participant.reload
-      participant.transition!(:cancelled) unless participant.cancelled?
-    end
+    withdraw_participant!(participant)
     head :no_content
   rescue TicketItem::InvalidTransition, Stripe::StripeError => e
     render_error(e.message)
@@ -233,8 +223,10 @@ class Api::V1::ParticipantsController < Api::BaseController
     participant = if params[:token].present?
       data = Rails.application.message_verifier("event-ticket").verified(params[:token], purpose: "check_in")
       return render_error("无效或已过期的票券") unless data && data["event_id"] == @event.id
+      return check_in_team!(data["team_user_id"]) if data["team_user_id"]
       @event.participants.find_by(id: data["participant_id"], registered_at: data["registered_at"])
     else
+      return check_in_team!(params[:user_id]) if team_member?(params[:user_id])
       @event.participants.find_by(user_id: params[:user_id])
     end
     return render_error("该用户尚未报名此活动") unless participant
@@ -250,6 +242,13 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # Only the holder can obtain their event-bound, short-lived credential.
   def ticket_pass
+    if team_member?(current_user.id)
+      token = Rails.application.message_verifier("event-ticket").generate(
+        {"event_id" => @event.id, "team_user_id" => current_user.id}, purpose: "check_in", expires_in: 15.minutes)
+      stamp = EventTeamCheckIn.find_by(event: @event, user: current_user)&.checked_in_at
+      return render json: {participant: {status: "attending", checked_in_at: stamp, user: JSON.parse(UserBlueprint.render(current_user))},
+                           token: token, expires_in: 900, tickets: [], team: true}
+    end
     participant = @event.participants.find_by!(user: current_user)
     participant.refresh_payment_status!
     eligible = participant.status == "attending" && [nil, "succeeded"].include?(participant.payment_status)
@@ -267,6 +266,33 @@ class Api::V1::ParticipantsController < Api::BaseController
   end
 
   private
+
+  def team_member?(user_id)
+    user = User.find_by(id: user_id)
+    user && Event.team_for(user).exists?(id: @event.id) && @event.status.in?(%w[published closed])
+  end
+
+  def check_in_team!(user_id)
+    return render_error("活动角色已移除或活动不可入场") unless team_member?(user_id)
+    check_in = EventTeamCheckIn.create_or_find_by!(event: @event, user_id: user_id) do |record|
+      record.checked_in_at = Time.current
+    end
+    render json: {status: "attending", checked_in_at: check_in.checked_in_at, team: true,
+                  user: JSON.parse(UserBlueprint.render(User.find(user_id)))}
+  end
+
+  def withdraw_participant!(participant, status: "cancelled")
+    @event.with_lock do
+      participant.with_lock do
+        release_orders!(participant)
+        participant.reload
+        if participant.status != status
+          participant.transition!(status)
+        end
+        RegistrationReview.sync_form!(participant, "cancelled")
+      end
+    end
+  end
 
   # The approval decision lives on the participant; the application form's
   # submission carried its own status that nobody ever advanced, so a decided

@@ -413,7 +413,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
     assert_response :unprocessable_entity
-    assert_match "event closed", json_response["error"]
+    assert_match "活动尚未开放报名或报名已结束", json_response["error"]
   end
 
   test "rsvp rejects once venue capacity is exceeded" do
@@ -425,7 +425,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
 
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
     assert_response :unprocessable_entity
-    assert_match "exceed venue capacity", json_response["error"]
+    assert_match "event is full", json_response["error"]
   end
 
   test "rsvp revives a cancelled participant instead of creating a duplicate row" do

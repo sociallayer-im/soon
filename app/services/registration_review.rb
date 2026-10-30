@@ -8,7 +8,7 @@ class RegistrationReview
     event.with_lock do
       participant.with_lock do
         raise Error, "participant is not pending" unless participant.status == "pending"
-        raise Error, "活动已结束或停止报名" if %w[closed cancelled archived draft].include?(event.status) || (event.end_time && event.end_time < Time.current)
+        raise Error, "活动已结束或停止报名" if !event.registration_open?
         raise Error, "event is full" if capacity_full?(event)
         items = participant.ticket_items.where(status: %w[pending succeeded]).order(:id).lock.to_a
         items.each do |item|

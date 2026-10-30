@@ -73,11 +73,7 @@ class Api::V1::TicketsController < Api::BaseController
 
   # POST /api/v1/tickets/:event_id/:ticket_id/rsvp   (event_id = params[:event_id], ticket_id = params[:ticket_id])
   def rsvp
-    return render_error("event closed") if @event.status == "closed"
-    return render_error("event ended") if Rails.env.production? && @event.end_time && @event.end_time + 1.hour < Time.current
-    if @event.venue&.capacity.to_i > 0 && @event.participant_count.to_i >= @event.venue.capacity
-      return render_error("exceed venue capacity")
-    end
+    return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
     return render_not_found unless @ticket
     authorize @event, :join?
     if @event.form_id
@@ -100,6 +96,7 @@ class Api::V1::TicketsController < Api::BaseController
     # Deliberately per-ticket: buying a DIFFERENT ticket type of the same event
     # stays allowed.
     @event.with_lock do
+      return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
       if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: "pending")
         return render_error("you already have an unpaid order for this ticket")
       end
@@ -135,8 +132,8 @@ class Api::V1::TicketsController < Api::BaseController
       # they signed up again.
       if participant.nil?
         participant = @event.participants.new(user: current_user, status: new_status, registered_at: Time.current, message: params[:message])
-      elsif participant.cancelled? || participant.status == "declined"
-        participant.assign_attributes(status: new_status, registered_at: Time.current, message: params[:message], reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
+      elsif participant.status.in?(%w[cancelled declined maybe])
+        participant.assign_attributes(status: new_status, registered_at: Time.current, checked_in_at: nil, cancelled_at: nil, message: params[:message], reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
       end
 
       ticket_item =
