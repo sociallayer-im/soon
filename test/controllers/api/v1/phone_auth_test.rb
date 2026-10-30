@@ -425,6 +425,7 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert json_response["merged"]
     assert_equal target.id, json_response["user"]["id"]
+    assert_equal target.phone, json_response["user"]["phone"]
     assert_not User.exists?(source.id)
     assert_equal source.email, target.reload.email
     assert_equal target.id, event.reload.owner_id
