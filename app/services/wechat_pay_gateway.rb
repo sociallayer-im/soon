@@ -12,7 +12,7 @@ class WechatPayGateway
   API_HOST = "api.mch.weixin.qq.com".freeze
 
   # WeChat rejects requests without a User-Agent outright.
-  USER_AGENT = "soon/1.0 (+https://api.juluo.xyz)".freeze
+  USER_AGENT = "surf/1.0 (+https://surf-api.sola.day)".freeze
 
   # The prepay_id is good for 2 hours, but the order should not outlive the
   # seat it is holding. Kept just under the reservation so the sweeper is
@@ -161,13 +161,13 @@ class WechatPayGateway
 
   # ---- callbacks ----
 
-  # Verifies a callback's signature against the merchant's WeChat Pay public
-  # key. Unlike an API response — reachable only by someone who has already
-  # broken TLS — this endpoint is open to the internet, so a missing key is a
-  # refusal, never a skip.
+  # Authenticate raw response and callback bytes with the configured WeChat
+  # Pay key, including its ID and a five-minute replay window.
   def self.verify_notification(setting, timestamp:, nonce:, body:, signature:, serial:)
     key = setting.notify_public_key
     return false if key.nil?
+    return false if [timestamp, nonce, signature, serial].any?(&:blank?)
+    return false unless timestamp.to_s.match?(/\A[0-9]+\z/)
     # The serial names which key signed it. Accepting a mismatch would mean
     # verifying against a key WeChat did not use, i.e. verifying nothing.
     return false if setting.public_key_id.present? && serial.present? && serial != setting.public_key_id
@@ -176,7 +176,7 @@ class WechatPayGateway
     # re-run whatever it triggers.
     return false if (Time.current.to_i - timestamp.to_i).abs > 300
 
-    key.verify(OpenSSL::Digest::SHA256.new, Base64.decode64(signature.to_s),
+    key.verify(OpenSSL::Digest::SHA256.new, Base64.strict_decode64(signature.to_s),
       "#{timestamp}\n#{nonce}\n#{body}\n")
   rescue OpenSSL::PKey::PKeyError, ArgumentError
     false
@@ -266,15 +266,16 @@ class WechatPayGateway
       "User-Agent" => USER_AGENT
     }
     headers["Content-Type"] = "application/json" if body
+    headers["Wechatpay-Serial"] = setting.public_key_id if setting.public_key_id.present?
 
     response = HTTPX
       .with(headers: headers, timeout: { connect_timeout: OPEN_TIMEOUT, request_timeout: READ_TIMEOUT })
       .request(method.to_s.upcase, "https://#{API_HOST}#{path_with_query}", body: body ? payload : nil)
 
-    handle_response(response)
+    handle_response(response, setting: setting)
   end
 
-  def self.handle_response(response)
+  def self.handle_response(response, setting:)
     # httpx returns an error object instead of raising. Everything it covers —
     # connect failures, timeouts, TLS, a truncated body — means the request may
     # have been carried out and we simply cannot say. That is not a rejection,
@@ -285,7 +286,18 @@ class WechatPayGateway
 
     code = response.status
     raw = response.body.to_s
-    parsed = raw.presence ? (JSON.parse(raw) rescue {}) : {}
+    headers = response.headers
+    valid = verify_notification(setting,
+      timestamp: headers["wechatpay-timestamp"], nonce: headers["wechatpay-nonce"],
+      signature: headers["wechatpay-signature"], serial: headers["wechatpay-serial"], body: raw)
+    raise Unreachable, "WeChat Pay response signature could not be verified" unless valid
+
+    begin
+      parsed = raw.presence ? JSON.parse(raw) : {}
+      raise JSON::ParserError unless parsed.is_a?(Hash)
+    rescue JSON::ParserError
+      raise Unreachable, "could not read WeChat Pay's response JSON"
+    end
 
     return parsed if code.between?(200, 299)
 
