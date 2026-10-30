@@ -205,7 +205,8 @@ class Api::V1::AuthController < Api::BaseController
     return render_error("js_code is required") if code.blank?
 
     identity = WechatMiniprogramAuth.identity(code)
-    render_token wechat_user(openid: identity.fetch(:openid), unionid: identity[:unionid])
+    user = wechat_user(openid: identity.fetch(:openid), unionid: identity[:unionid])
+    render_token user, new_user: user.previously_new_record?
   rescue WechatMiniprogramAuth::Unavailable
     render json: { error: "WeChat sign-in is not configured or temporarily unavailable", code: "WECHAT_UNAVAILABLE" }, status: :service_unavailable
   rescue WechatMiniprogramAuth::InvalidCode
@@ -536,11 +537,12 @@ class Api::V1::AuthController < Api::BaseController
 
   # `merged` tells the caller its session just became a DIFFERENT account, so
   # the client must replace its stored token rather than keep the one it sent.
-  def render_token(user, merged: false)
+  def render_token(user, merged: false, new_user: nil)
     user.update(last_signin_at: Time.current)
     token = JwtService.encode({ "user_id" => user.id })
     payload = { token: token, user: JSON.parse(UserBlueprint.render(user, view: :self)) }
     payload[:merged] = true if merged
+    payload[:is_new_user] = new_user unless new_user.nil?
     render json: payload
   end
 end

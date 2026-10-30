@@ -13,6 +13,7 @@ class Api::V1::WechatMiniprogramAuthTest < ActionDispatch::IntegrationTest
       end
       assert_response :success
       assert json_response["token"].present?
+      assert_equal true, json_response["is_new_user"]
       user = User.find(json_response.dig("user", "id"))
       assert_not_equal "spoofed", user.wechat_openid
       assert_nil user.wechat_unionid
@@ -21,6 +22,7 @@ class Api::V1::WechatMiniprogramAuthTest < ActionDispatch::IntegrationTest
         post "/api/v1/auth/wechat_miniprogram", params: { js_code: "next-code" }
       end
       assert_equal user.id, json_response.dig("user", "id")
+      assert_equal false, json_response["is_new_user"]
     end
   end
 
@@ -32,6 +34,7 @@ class Api::V1::WechatMiniprogramAuthTest < ActionDispatch::IntegrationTest
       end
       assert_response :success
       assert_equal user.id, json_response.dig("user", "id")
+      assert_equal false, json_response["is_new_user"]
     end
   end
 
