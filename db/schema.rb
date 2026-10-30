@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -308,8 +308,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.string "item_type", null: false, comment: "user | group"
     t.string "role", null: false, comment: "member | manager"
     t.datetime "updated_at", null: false
+    t.index ["email", "event_id"], name: "idx_event_roles_email_agenda", where: "(((item_type)::text = 'User'::text) AND (email IS NOT NULL))"
     t.index ["event_id", "item_id", "item_type"], name: "index_event_roles_on_event_id_and_item_id_and_item_type", unique: true
     t.index ["event_id"], name: "index_event_roles_on_event_id"
+    t.index ["item_id", "event_id"], name: "idx_event_roles_user_agenda", where: "((item_type)::text = 'User'::text)"
   end
 
   create_table "events", id: :string, force: :cascade do |t|
@@ -348,11 +350,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.datetime "updated_at", null: false
     t.string "venue_id"
     t.string "visibility", default: "normal", comment: "normal | open_registration | unlisted"
+    t.index ["end_time", "start_time"], name: "idx_events_discovery_end", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["form_id"], name: "index_events_on_form_id"
+    t.index ["group_id", "created_at", "id"], name: "idx_events_discovery_contribution", order: { created_at: :desc, id: :desc }, where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY ((ARRAY['normal'::character varying, 'open_registration'::character varying])::text[])))"
+    t.index ["group_id", "start_time", "id"], name: "idx_events_discovery_group_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["group_id"], name: "index_events_on_group_id"
+    t.index ["owner_id", "start_time", "id"], name: "idx_events_owner_start"
     t.index ["owner_id"], name: "index_events_on_owner_id"
     t.index ["place_id"], name: "index_events_on_place_id"
     t.index ["ref_id"], name: "index_events_on_ref_id", where: "(ref_id IS NOT NULL)"
+    t.index ["start_time", "id"], name: "idx_events_discovery_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["track_id"], name: "index_events_on_track_id"
     t.index ["venue_id"], name: "index_events_on_venue_id"
   end
@@ -707,6 +714,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.string "banner_link_url"
     t.text "banner_text"
     t.text "bio"
+    t.string "browse_city"
     t.string "can_create_hackathon", default: "manager", comment: "manager | member | everyone"
     t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
@@ -720,6 +728,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.string "custom_domain_token"
     t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
+    t.datetime "discovery_active_at"
     t.boolean "discussion_enabled", default: true, null: false
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
@@ -759,6 +768,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.datetime "updated_at", null: false
     t.string "venue_tag_list", default: [], array: true
     t.string "venue_union", array: true
+    t.index ["browse_city", "discovery_active_at", "id"], name: "idx_groups_discovery_city_activity", order: { discovery_active_at: "DESC NULLS LAST", id: :desc }, where: "((active = true) AND ((review_status)::text = 'approved'::text))"
     t.index ["city"], name: "index_groups_on_city"
     t.index ["custom_domain"], name: "index_groups_on_custom_domain", unique: true, where: "(custom_domain IS NOT NULL)"
     t.index ["name"], name: "index_groups_on_name", unique: true
@@ -881,6 +891,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.string "user_id", null: false
     t.index ["expires_at"], name: "index_memberships_on_expires_at"
     t.index ["group_id", "role"], name: "index_memberships_on_group_id_and_role"
+    t.index ["group_id", "user_id"], name: "idx_memberships_group_user_discovery"
     t.index ["group_id"], name: "index_memberships_on_group_id"
     t.index ["user_id", "group_id"], name: "index_memberships_on_user_id_and_group_id", unique: true
     t.index ["user_id"], name: "index_memberships_on_user_id"
@@ -1048,6 +1059,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
     t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"
+    t.index ["user_id", "event_id"], name: "idx_participants_confirmed_agenda", where: "(((status)::text = 'attending'::text) AND ((payment_status IS NULL) OR ((payment_status)::text = 'succeeded'::text)))"
     t.index ["user_id", "event_id"], name: "index_participants_on_user_id_and_event_id", unique: true
     t.index ["user_id"], name: "index_participants_on_user_id"
   end
@@ -1496,9 +1508,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_235000) do
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.index ["category_id", "last_active_mark"], name: "index_topics_on_category_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["created_at", "id"], name: "idx_topics_discovery_created", order: :desc, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"
     t.index ["deleted_at"], name: "index_topics_on_deleted_at"
     t.index ["event_id"], name: "index_topics_on_event_id"
     t.index ["flagged_at"], name: "index_topics_on_flagged_at"
+    t.index ["group_id", "created_at", "id"], name: "idx_topics_discovery_group_created", order: { created_at: :desc, id: :desc }, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"
     t.index ["group_id", "last_active_mark"], name: "index_topics_on_group_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["group_id", "pinned_at"], name: "index_topics_on_group_id_and_pinned_at"
     t.index ["tags"], name: "index_topics_on_tags", using: :gin

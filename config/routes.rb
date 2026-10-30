@@ -105,6 +105,9 @@ Rails.application.routes.draw do
       get "groups/:id/calendar(.ics)", to: "calendars#group", as: :group_calendar
 
       # Public discovery (homepage + global search)
+      get "discovery/home", to: "discovery#home"
+      get "discovery/community", to: "discovery#community"
+      get "discovery/feed", to: "discovery#index"
       get "discover", to: "discover#index"
       get "search",   to: "discover#search"
 

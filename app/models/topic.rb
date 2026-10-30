@@ -10,6 +10,11 @@
 #
 # See design/DISCUSSION_PLAN.md 1.3.
 class Topic < ApplicationRecord
+  after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id deleted_at flagged_at category_id group_id event_id sync_to_community]).any? }
+  def refresh_discovery_signal
+    ([group_id] + Array(saved_changes["group_id"]).compact).uniq.each { |id| DiscoverySignals.refresh_group!(id) }
+  end
+
   include SoftDelete
   include Flaggable
   include Starrable
@@ -91,7 +96,22 @@ class Topic < ApplicationRecord
     update_columns(attrs)
   end
 
-  def after_flag_change! = refresh_category_counts!
+  def after_flag_change!
+    refresh_category_counts!
+    DiscoverySignals.refresh_group!(group_id)
+  end
+
+  def soft_delete!(by: nil)
+    result = super
+    DiscoverySignals.refresh_group!(group_id)
+    result
+  end
+
+  def restore!
+    result = super
+    DiscoverySignals.refresh_group!(group_id)
+    result
+  end
 
   private
 

@@ -1,4 +1,6 @@
 class Group < ApplicationRecord
+  before_validation -> { self.browse_city = DiscoveryCity.normalize(city) }
+
   include SiteNotifiable
   has_many :group_review_logs, dependent: :destroy
   validates :review_status, inclusion: { in: %w[pending approved rejected] }
