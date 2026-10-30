@@ -1,94 +1,75 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-# This Dockerfile is designed for production, not development. Use with Kamal or build'n'run by hand:
-# docker build -t sails .
-# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name sails sails
-
-# For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
-
-# Make sure RUBY_VERSION matches the Ruby version in .ruby-version
 ARG RUBY_VERSION=4.0.5
-FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
+ARG BUN_IMAGE=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4
 
-# Rails app lives here
+FROM docker.io/library/ruby:${RUBY_VERSION}-slim AS base
+ARG RUBY_VERSION
+ARG TARGETARCH
 WORKDIR /rails
 
-# Install base packages
-RUN apt-get update -qq && \
+# Keep apt downloads outside image layers, including when package lists change.
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+RUN --mount=type=cache,id=surf-apt-cache-${RUBY_VERSION}-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=surf-apt-lists-${RUBY_VERSION}-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    apt-get update -qq && \
     apt-get install --no-install-recommends -y curl libjemalloc2 libvips postgresql-client && \
-    ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
-    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+    ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so
 
-# Set production environment variables and enable jemalloc for reduced memory usage and latency.
-ENV RAILS_ENV="production" \
-    BUNDLE_DEPLOYMENT="1" \
-    BUNDLE_PATH="/usr/local/bundle" \
-    BUNDLE_WITHOUT="development" \
-    LD_PRELOAD="/usr/local/lib/libjemalloc.so"
+ENV RAILS_ENV=production \
+    BUNDLE_DEPLOYMENT=1 \
+    BUNDLE_PATH=/usr/local/bundle \
+    BUNDLE_WITHOUT=development:test \
+    LD_PRELOAD=/usr/local/lib/libjemalloc.so
 
-# Throw-away build stage to reduce size of final image
-FROM base AS build
+# Independent of Ruby dependencies; ordinary backend changes do not reinstall Bun packages.
+FROM ${BUN_IMAGE} AS javascript-deps
+WORKDIR /rails
+COPY package.json bun.lock ./
+RUN --mount=type=cache,id=surf-bun-1.3.14,target=/root/.bun/install/cache,sharing=locked \
+    bun install --frozen-lockfile
 
-# Install packages needed to build gems and node modules.
-#
-# autoconf/automake/libtool/libgmp-dev are for rbsecp256k1, which siwe-rb pulls
-# in via eth for SIWE signature verification. That gem compiles a vendored
-# libsecp256k1 from source with autotools; without them `bundle install` fails
-# at the native-extension step.
-RUN apt-get update -qq && \
+FROM javascript-deps AS javascript-build
+COPY bun.config.js ./
+COPY app/javascript ./app/javascript
+COPY app/assets ./app/assets
+COPY app/views ./app/views
+COPY app/helpers ./app/helpers
+RUN bun run build && bun run build:css
+
+FROM base AS gems
+ARG BUNDLE_JOBS=2
+# Native dependencies for pg, psych and siwe-rb's vendored libsecp256k1.
+RUN --mount=type=cache,id=surf-apt-cache-${RUBY_VERSION}-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=surf-apt-lists-${RUBY_VERSION}-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    apt-get update -qq && \
     apt-get install --no-install-recommends -y \
-      build-essential git libpq-dev libvips libyaml-dev pkg-config unzip \
-      autoconf automake libtool libgmp-dev && \
-    rm -rf /var/lib/apt/lists /var/cache/apt/archives
-
-ENV BUN_INSTALL=/usr/local/bun
-ENV PATH=/usr/local/bun/bin:$PATH
-ARG BUN_VERSION=1.3.14
-RUN curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}"
-
-# Install application gems
-COPY vendor/* ./vendor/
+      build-essential git libpq-dev libyaml-dev pkg-config autoconf automake libtool libgmp-dev
 COPY Gemfile Gemfile.lock ./
+# Preserve compiled extensions as well as downloads when Gemfile.lock changes.
+# Copy OUT of the mount: cache mounts are not part of the resulting image.
+RUN --mount=type=cache,id=surf-production-gems-${RUBY_VERSION}-${TARGETARCH},target=/var/cache/surf-bundle,sharing=locked \
+    BUNDLE_PATH=/var/cache/surf-bundle bundle install --jobs=${BUNDLE_JOBS} --retry=3 && \
+    BUNDLE_PATH=/var/cache/surf-bundle bundle clean --force && \
+    cp -a /var/cache/surf-bundle/. "${BUNDLE_PATH}/" && \
+    rm -rf "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
+    bundle exec bootsnap precompile -j 2 --gemfile
 
-RUN bundle install && \
-    rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
-    # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
-    bundle exec bootsnap precompile -j 1 --gemfile
-
-# Install node modules
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile
-
-# Copy application code
+FROM gems AS build
 COPY . .
+COPY --from=javascript-build /rails/app/assets/builds ./app/assets/builds
+# JavaScript/CSS were built once above; Rails only fingerprints the finished assets.
+RUN bundle exec bootsnap precompile -j 2 app/ lib/ && \
+    SECRET_KEY_BASE_DUMMY=1 SKIP_JS_BUILD=1 SKIP_CSS_BUILD=1 ./bin/rails assets:precompile
 
-# Precompile bootsnap code for faster boot times.
-# -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
-RUN bundle exec bootsnap precompile -j 1 app/ lib/
-
-# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
-
-
-RUN rm -rf node_modules
-
-
-# Final stage for app image
-FROM base
-
-# Run and own only the runtime files as a non-root user for security
+FROM base AS runtime
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
+# Gems are read-only runtime inputs: avoid rewriting ownership on every gem file.
+COPY --from=gems /usr/local/bundle /usr/local/bundle
+COPY --chown=1000:1000 --from=build /rails /rails
 USER 1000:1000
-
-# Copy built artifacts: gems, application
-COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
-COPY --chown=rails:rails --from=build /rails /rails
-
-# Entrypoint prepares the database.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
-
-# Start server via Thruster by default, this can be overwritten at runtime
 EXPOSE 80
 CMD ["./bin/thrust", "./bin/rails", "server"]

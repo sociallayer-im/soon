@@ -45,3 +45,19 @@
 # Ignore Docker-related files
 /.dockerignore
 /Dockerfile*
+
+# Private Atlas state, migration backups and legacy deployment credentials.
+/.atlas/
+/ginger.surf.yml
+# Operational/review files do not affect the runtime or asset fingerprints.
+/docs/
+/design/
+/test/
+/spec/
+/scripts/
+/deploy/
+/atlas*.json
+/ATLAS_DEPLOYMENT.md
+/README*
+/overview.md
+/AGENTS.md
