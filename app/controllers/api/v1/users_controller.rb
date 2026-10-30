@@ -1,7 +1,25 @@
 class Api::V1::UsersController < Api::BaseController
   # Profile pages are public — auth is optional and only unlocks private fields.
-  skip_before_action :authenticate!, only: %i[show groups]
-  before_action :authenticate_optional!, only: :show
+  skip_before_action :authenticate!, only: %i[show groups suggestions]
+  before_action :authenticate_optional!, only: %i[show suggestions]
+
+  # Discover public organizers, never an unrestricted directory of accounts.
+  def suggestions
+    events = Event.joins(:group).where(status: "published", visibility: %w[normal open_registration], groups: { active: true })
+                  .where("events.end_time >= ?", Time.current)
+    city = params[:city].to_s.strip
+    return render_error("city is too long") if city.length > 100
+    events = events.where(groups: { city: city }) if city.present?
+    scope = User.where(active: true, id: events.select(:owner_id)).where.not(name: [nil, ""])
+                .where("COALESCE(users.data->>'visibility', 'public') = 'public'")
+    if current_user
+      followed = Follow.where(user: current_user, target_type: "User", status: %w[active pending]).select(:target_id)
+      scope = scope.where.not(id: current_user.id).where.not(id: followed)
+    end
+    # Stable order makes page changes deterministic; no random ordering or PII.
+    render_collection scope.order(created_at: :desc, id: :desc), blueprint: UserSuggestionBlueprint,
+                      recommendation_reason: city.present? ? "同城活动发起人" : "公开活动发起人"
+  end
 
   # :id accepts "me", a TSID, or a username (User.resolve!).
   def show
