@@ -5,12 +5,6 @@ class Api::V1::UsersController < Api::BaseController
 
   # Authenticated picker: rank only public contributions, never sign-in times.
   def role_candidates
-    events = Event.publicly_discoverable
-    activity = events.group(:owner_id).maximum(:created_at)
-    Topic.joins(:category, :group).where(groups: {active: true}, categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
-      activity[id] = [activity[id], time].compact.max
-    end
-    ids = activity.sort_by { |id, time| [-time.to_f, id] }.map(&:first)
     keyword = params[:keyword].to_s.strip
     scope = User.publicly_discoverable
     if keyword.present?
@@ -18,6 +12,12 @@ class Api::V1::UsersController < Api::BaseController
       scope = scope.where("name ILIKE :q OR nickname ILIKE :q", q: like).order(:id)
       return render_collection scope, blueprint: UserBlueprint, view: :profile
     end
+    events = Event.publicly_discoverable
+    activity = events.group(:owner_id).maximum(:created_at)
+    Topic.joins(:category, :group).where(groups: {active: true}, categories: {visibility: "public", archived: false}, event_id: nil, flagged_at: nil, deleted_at: nil).group(:user_id).maximum(:created_at).each do |id, time|
+      activity[id] = [activity[id], time].compact.max
+    end
+    ids = activity.sort_by { |id, time| [-time.to_f, id] }.map(&:first)
     scope = scope.where(id: ids)
     if ids.any?
       clauses = ids.each_with_index.map { |id, index| "WHEN #{User.connection.quote(id)} THEN #{index}" }.join(" ")

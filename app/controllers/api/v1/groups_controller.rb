@@ -87,9 +87,19 @@ class Api::V1::GroupsController < Api::BaseController
     authorize group
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group.parent_id)
 
+    manager_ids = Array(params[:manager_ids]).map(&:to_s).reject(&:blank?).uniq - [current_user.id]
+    return render_error("最多指定10位管理员") if manager_ids.length > 10
+    managers = User.where(id: manager_ids, active: true).to_a
+    return render_error("请选择有效且可用的管理员账号") unless managers.length == manager_ids.length
     ActiveRecord::Base.transaction do
       group.save!
-      group.add_member(current_user.id, "owner") # counter_cache keeps memberships_count right
+      group.add_member(current_user.id, "owner") # creator remains owner, never demoted
+      managers.each do |manager|
+        group.add_member(manager.id, "manager")
+        SiteNotifications.emit(receiver: manager, item: group, action: "membership_role", title: "你已被设为节点管理员",
+          body: "你已成为「#{group.nickname.presence || group.name}」的管理员。节点目前等待平台审核。", actor: current_user,
+          key: "group-manager:#{group.id}:#{manager.id}")
+      end
     end
     # Enqueued after the transaction commits, not inside it — a job picked up
     # before the commit lands would look up a group that isn't there yet.
