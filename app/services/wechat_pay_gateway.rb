@@ -70,7 +70,7 @@ class WechatPayGateway
       notify_url: notify_url(setting),
       amount: { total: ticket_item.amount.to_i, currency: (ticket_item.currency || setting.currency).upcase },
       payer: { openid: payer_openid },
-      time_expire: rfc3339(ORDER_TTL.from_now)
+      time_expire: rfc3339(ticket_item.participant&.payment_due_at || ORDER_TTL.from_now)
     }
 
     request(:post, "/v3/pay/transactions/jsapi", setting: setting, body: body).fetch("prepay_id")

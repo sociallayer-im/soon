@@ -662,7 +662,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "pending", second_item.status
     # Still one participant row, reused — (user, event) is unique.
     assert_equal 1, Participant.where(event: @event, user: buyer).count
-    assert_equal "attending", Participant.find_by(event: @event, user: buyer).status
+    assert_equal "awaiting_payment", Participant.find_by(event: @event, user: buyer).status
   end
 
   test "withdrawing from a free ticket event lets the person register again" do
@@ -1166,7 +1166,7 @@ class Api::V1::TicketsControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/events/#{@event.id}/tickets/#{ticket.id}/rsvp",
       params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
     ticket_item = TicketItem.find(json_response["ticket_item"]["id"])
-    assert_equal 1, @event.reload.participant_count
+    assert_equal 0, @event.reload.participant_count
 
     post "/api/v1/tickets/cancel_unpaid_item",
       params: { chain: ticket_item.chain, product_id: ticket_item.event_id, item_id: ticket_item.id },

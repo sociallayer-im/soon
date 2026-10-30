@@ -23,13 +23,13 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, @event.form.form_fields.count
   end
 
-  test "save_event_form forces require_approval to true as a side effect" do
+  test "save_event_form keeps approval independent" do
     assert_not @event.require_approval
 
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [] }, headers: auth_headers(@owner), as: :json
     assert_response :success
-    assert @event.reload.require_approval
+    assert_not @event.reload.require_approval
   end
 
   test "save_event_form reuses the existing form on a second call (upsert)" do
@@ -103,6 +103,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   # ---- editing my own application ----
 
   test "an applicant under review can correct their answers" do
+    @event.update!(require_approval: true)
     applicant = create_user
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [{ label: "Why?", required: true }] },
@@ -127,6 +128,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "editing is refused once the organizer has decided" do
+    @event.update!(status: "published", require_approval: true)
     applicant = create_user
     post "/api/v1/events/#{@event.id}/form",
       params: { title: "RSVP", fields: [{ label: "Why?" }] },
@@ -153,6 +155,7 @@ class Api::V1::FormsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "editing is refused to someone who never applied, and enforces required fields" do
+    @event.update!(require_approval: true)
     stranger = create_user
     applicant = create_user
     post "/api/v1/events/#{@event.id}/form",

@@ -10,7 +10,7 @@ class Event < ApplicationRecord
     user ? where(owner_id: user.id).or(where(id: EventRole.linked_to(user).select(:event_id))) : none
   }
   scope :agenda_for, ->(user) {
-    team_for(user).or(where(id: Participant.where(user_id: user.id, status: "attending").select(:event_id)))
+    team_for(user).or(where(id: Participant.where(user_id: user.id, status: "attending", payment_status: [nil, "succeeded"]).select(:event_id)))
   }
   scope :publicly_discoverable, -> {
     joins(:group).where(groups: {active: true, review_status: "approved"})

@@ -80,6 +80,10 @@ class StripeGateway
   # session first, so duplicate creation is already rare, and an orphaned
   # session simply expires — while a key would conflict on legitimate
   # recreate-after-expiry (same key, different expires_at).
+  def self.expire_checkout_session(setting, session_id)
+    ::Stripe::Checkout::Session.expire(session_id, {}, {api_key: setting.secret_key})
+  end
+
   def self.create_checkout_session(setting, ticket_item)
     event = ticket_item.event
     web = ENV.fetch("WEB_URL", "http://localhost:4001")
@@ -105,7 +109,7 @@ class StripeGateway
         # our provider_ref write is lost (PAYMENTS_PLAN §2.4).
         metadata: { ticket_item_id: ticket_item.id },
         payment_intent_data: { metadata: { ticket_item_id: ticket_item.id } },
-        expires_at: SESSION_TTL.from_now.to_i,
+        expires_at: (ticket_item.participant&.payment_due_at || SESSION_TTL.from_now).to_i,
         success_url: "#{return_url}?payment=success&ticket_item=#{ticket_item.id}",
         cancel_url: "#{return_url}?payment=cancelled&ticket_item=#{ticket_item.id}"
       },

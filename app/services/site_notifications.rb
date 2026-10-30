@@ -30,10 +30,20 @@ class SiteNotifications
     status = changes["status"]
     case record
     when Participant
-      return unless status && status.first == "pending" && %w[attending declined].include?(status.last)
+      if status && status.last == "pending" && status.first != "pending"
+        event = record.event
+        managers = User.where(id: event.group.memberships.where(role: %w[owner manager]).select(:user_id)).or(User.where(id: event.owner_id))
+        role_ids = event.event_roles.where(role: EventPolicy::EDITOR_ROLES, item_type: "User").pluck(:item_id)
+        role_emails = event.event_roles.where(role: EventPolicy::EDITOR_ROLES).where.not(email: [nil, ""]).pluck(:email)
+        managers = managers.or(User.where(id: role_ids)).or(User.where(email: role_emails))
+        managers.distinct.find_each do |manager|
+          emit(receiver: manager, item: event, action: "registration_request", title: "收到新的报名申请", body: "「#{event.title}」有报名申请待审核。", actor: record.user, key: "registration:#{record.id}:#{record.updated_at.iso8601(6)}:#{manager.id}")
+        end
+      end
+      return unless status && status.first == "pending" && %w[attending awaiting_payment declined].include?(status.last)
       emit(receiver: record.user, item: record.event, action: "registration_result",
-           title: status.last == "attending" ? "报名审核已通过" : "报名申请未通过",
-           body: "「#{record.event.title}」#{status.last == 'attending' ? '审核通过，请查看报名及支付状态。' : '未通过报名审核。'}", actor: actor,
+           title: status.last == "declined" ? "报名申请未通过" : "报名审核已通过",
+           body: "「#{record.event.title}」#{status.last == 'declined' ? '未通过报名审核：'+record.review_reason.to_s : status.last == 'awaiting_payment' ? '审核通过，请在支付期限内完成付款。' : '审核通过，报名成功。'}", actor: actor,
            key: "participant:#{record.id}:#{record.updated_at.iso8601(6)}:#{status.last}")
     when Event
       return unless status || (changes.keys & %w[start_time end_time timezone venue_id place_id location meeting_url]).any?
@@ -80,6 +90,9 @@ class SiteNotifications
              key: "invite:#{record.id}:#{status.last}")
       end
     when TicketItem
+      if status && status.last == "timeout" && record.event
+        emit(receiver: record.user, item: record.event, action: "payment_expired", title: "报名支付已超时", body: "「#{record.event.title}」的支付资格已到期，预留名额已释放，可重新报名。", key: "order:#{record.id}:timeout")
+      end
       return unless status && status.last == "succeeded" && record.amount.to_i.positive?
       return unless record.event
       emit(receiver: record.user, item: record.event, action: "payment_result", title: "活动订单支付成功",

@@ -79,6 +79,12 @@ class Api::V1::TicketsController < Api::BaseController
       return render_error("exceed venue capacity")
     end
     return render_not_found unless @ticket
+    authorize @event, :join?
+    if @event.form_id
+      required = FormField.where(form_id: @event.form_id, required: true, for_admin: false).pluck(:id)
+      missing = required.any? { |fid| !Array(params[:answers]).any? { |answer| answer[:field_id].to_s == fid && answer[:value].present? } }
+      return render_error("请填写必填报名信息") if missing
+    end
     return render_error("ticket is not on sale") unless @ticket.status == "normal"
     return render_error("ticket sale has ended") if @ticket.end_time && @ticket.end_time < Time.current
     if @ticket.check_badge_class_id.present? && !holds_required_badge?(@ticket)
@@ -93,76 +99,99 @@ class Api::V1::TicketsController < Api::BaseController
     # finishing (checkout_session hands back its open Stripe session).
     # Deliberately per-ticket: buying a DIFFERENT ticket type of the same event
     # stays allowed.
-    if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: "pending")
-      return render_error("you already have an unpaid order for this ticket")
-    end
-    return render_error("run out of ticket") unless @ticket.reserve!
-
-    # Buying a ticket does not skip the door: an event that requires approval,
-    # carries an application form, or sells a need_approval ticket puts the
-    # buyer in "pending" until a manager approves them. rsvp used to hardcode
-    # "attending", so paying bypassed approval entirely — while the free join
-    # path (participants#create) honoured it.
-    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
-    needs_approval = !is_manager &&
-      (@event.require_approval || @event.form_id.present? || @ticket.need_approval)
-    new_status = needs_approval ? "pending" : "attending"
-
-    # A withdrawn (soft-deleted) participant is reused rather than re-inserted
-    # — (user_id, event_id) is unique — and registered_at is re-stamped since
-    # they signed up again.
-    participant = Participant.find_by(event: @event, user: current_user)
-    was_seated = participant&.seated?
-    if participant.nil?
-      participant = @event.participants.new(user: current_user, status: new_status, registered_at: Time.current, message: params[:message])
-    elsif participant.cancelled? || participant.status == "declined"
-      participant.assign_attributes(status: new_status, registered_at: Time.current, message: params[:message])
-    end
-
-    ticket_item =
-      if @ticket.payment_methods.any?
-        build_paid_ticket_item(participant)
-      else
-        TicketItem.new(ticket_type: @ticket.ticket_type, status: "succeeded", user: current_user, ticket: @ticket, event: @event, participant: participant, amount: 0, original_price: 0, payment_provider: "free", paid_at: Time.current)
+    @event.with_lock do
+      if TicketItem.exists?(event_id: @event.id, ticket_id: @ticket.id, user_id: current_user.id, status: "pending")
+        return render_error("you already have an unpaid order for this ticket")
       end
-    if performed? # an inline error was already rendered by build_paid_ticket_item
-      @ticket.release!
-      return
-    end
-    ticket_item.group_id = @ticket.group_id if ticket_item.ticket_type == "group"
 
-    # Everything that must succeed-or-fail together lives in one transaction:
-    # a rollback undoes the participant, the count bump, and the coupon usage.
-    # The ticket reservation is committed separately (reserve!), so it is the
-    # only thing we must hand back on failure.
-    ActiveRecord::Base.transaction do
-      participant.save!
-      # Only a seated participant counts, and only once — buying a second
-      # ticket for an event you already attend must not count twice, and a
-      # pending (unapproved) buyer holds no seat until approval.
-      @event.increment!(:participant_count) if participant.seated? && !was_seated
-      ticket_item.save!
-      ticket_item.record_activity!("order_placed", source: "api", actor: current_user,
-        amount: ticket_item.amount, currency: ticket_item.currency,
-        provider: ticket_item.payment_provider, ticket_id: ticket_item.ticket_id)
-      consume_coupon!(ticket_item)
-      save_form_submission! if params[:answers].present? && @event.form_id
-      # payment_status is a summary of the orders, never set by hand:
-      # confirm_payment! refreshes it for a settled order, so only an order
-      # still awaiting payment needs the explicit call.
-      if ticket_item.status == "succeeded"
-        ticket_item.confirm_payment!
-      else
-        participant.refresh_payment_status!
+      # Buying a ticket does not skip the door: an event that requires approval,
+      # sells a need_approval ticket puts the
+      # buyer in "pending" until a manager approves them. rsvp used to hardcode
+      # "attending", so paying bypassed approval entirely — while the free join
+      # path (participants#create) honoured it.
+      participant = Participant.find_by(event: @event, user: current_user)
+      if participant&.status == "pending"
+        return render_error("已有进行中的报名，请先完成支付或撤回申请后重新选择票种")
       end
-    end
+      was_seated = participant&.seated?
+      is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
+      # Approval belongs to the person/event: an already confirmed attendee
+      # buying an additional ticket keeps that confirmed registration.
+      needs_approval = !is_manager && !was_seated && !(participant&.status == "awaiting_payment" && participant.reviewed_at) &&
+        (@event.require_approval || @ticket.need_approval)
+      if needs_approval && participant&.status == "awaiting_payment"
+        return render_error("已有待支付报名，请先完成或取消后重新申请审核票种")
+      end
+      reserved = false
+      unless needs_approval
+        return render_error("event is full") if !was_seated && participant&.status != "awaiting_payment" && RegistrationReview.capacity_full?(@event)
+        return render_error("run out of ticket") unless @ticket.reserve!
+        reserved = true
+      end
+      new_status = needs_approval ? "pending" : "attending"
 
-    render json: { participant: ParticipantBlueprint.render_as_hash(participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+      # A withdrawn (soft-deleted) participant is reused rather than re-inserted
+      # — (user_id, event_id) is unique — and registered_at is re-stamped since
+      # they signed up again.
+      if participant.nil?
+        participant = @event.participants.new(user: current_user, status: new_status, registered_at: Time.current, message: params[:message])
+      elsif participant.cancelled? || participant.status == "declined"
+        participant.assign_attributes(status: new_status, registered_at: Time.current, message: params[:message], reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
+      end
+
+      ticket_item =
+        if @ticket.payment_methods.any?
+          build_paid_ticket_item(participant)
+        else
+          TicketItem.new(ticket_type: @ticket.ticket_type, status: "succeeded", user: current_user, ticket: @ticket, event: @event, participant: participant, amount: 0, original_price: 0, payment_provider: "free", paid_at: Time.current)
+        end
+      if performed? # an inline error was already rendered by build_paid_ticket_item
+        @ticket.release! if reserved
+        return
+      end
+      ticket_item.inventory_reserved = reserved
+      if needs_approval
+        ticket_item.status = "pending"
+        ticket_item.paid_at = nil
+        ticket_item.reserved_until = nil
+      elsif ticket_item.status == "pending"
+        participant.status = "awaiting_payment" unless was_seated
+        participant.payment_due_at ||= ticket_item.reserved_until
+        ticket_item.reserved_until = participant.payment_due_at
+      end
+      ticket_item.group_id = @ticket.group_id if ticket_item.ticket_type == "group"
+
+      # Everything that must succeed-or-fail together lives in one transaction:
+      # a rollback undoes the participant, the count bump, and the coupon usage.
+      # The ticket reservation is committed separately (reserve!), so it is the
+      # only thing we must hand back on failure.
+      ActiveRecord::Base.transaction do
+        participant.save!
+        # Only a seated participant counts, and only once — buying a second
+        # ticket for an event you already attend must not count twice, and a
+        # pending (unapproved) buyer holds no seat until approval.
+        @event.increment!(:participant_count) if participant.seated? && !was_seated
+        ticket_item.save!
+        ticket_item.record_activity!("order_placed", source: "api", actor: current_user,
+          amount: ticket_item.amount, currency: ticket_item.currency,
+          provider: ticket_item.payment_provider, ticket_id: ticket_item.ticket_id)
+        consume_coupon!(ticket_item)
+        save_form_submission! if params[:answers].present? && @event.form_id
+        # payment_status is a summary of the orders, never set by hand:
+        # confirm_payment! refreshes it for a settled order, so only an order
+        # still awaiting payment needs the explicit call.
+        if ticket_item.status == "succeeded"
+          ticket_item.confirm_payment!
+        else
+          participant.refresh_payment_status!
+        end
+      end
+
+      render json: { participant: ParticipantBlueprint.render_as_hash(participant.reload, own: true), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    end
   rescue CouponUnavailable
-    @ticket.release!
     render_error("coupon is not available")
   rescue ActiveRecord::RecordInvalid => e
-    @ticket.release!
     render_error(e.record.errors.full_messages.join(", "))
   end
 
@@ -173,7 +202,7 @@ class Api::V1::TicketsController < Api::BaseController
     return render_error("not authorized", status: :forbidden) unless ticket_item.user_id == current_user.id
 
     if ticket_item.status == "succeeded"
-      return render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+      return render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant, own: true), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
     end
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
     return unless approved_for_payment?(ticket_item)
@@ -183,7 +212,7 @@ class Api::V1::TicketsController < Api::BaseController
     end
 
     ticket_item.confirm_payment!(txhash: params[:txhash], sender_address: params[:sender_address])
-    render json: { result: "ok", participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    render json: { result: "ok", participant: ParticipantBlueprint.render_as_hash(ticket_item.participant, own: true), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
   # POST /api/v1/tickets/cancel_unpaid_item
@@ -202,6 +231,8 @@ class Api::V1::TicketsController < Api::BaseController
 
     ticket_item.cancel(actor: current_user)
     render json: { ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+  rescue TicketItem::InvalidTransition, Stripe::StripeError => e
+    render_error(e.message)
   end
 
   # POST /api/v1/tickets/set_payment_status  (webhook-style, shared-secret auth)
@@ -232,7 +263,7 @@ class Api::V1::TicketsController < Api::BaseController
     end
 
     ticket_item.confirm_payment!(txhash: params[:txhash], sender_address: params[:sender_address])
-    render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+    render json: { participant: ParticipantBlueprint.render_as_hash(ticket_item.participant, own: true), ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
   end
 
   # POST /api/v1/tickets/checkout_session  {ticket_item_id}
@@ -250,6 +281,9 @@ class Api::V1::TicketsController < Api::BaseController
     return render_error("ticket_item is not pending") unless ticket_item.status == "pending"
     return unless approved_for_payment?(ticket_item)
 
+    if ticket_item.participant&.payment_due_at && ticket_item.participant.payment_due_at < 30.minutes.from_now
+      return render_error("支付剩余时间不足以创建支付会话，请联系主办方")
+    end
     setting = StripeSetting.find_by(id: ticket_item.stripe_setting_id)
     unless setting&.status == "active"
       return render_error("stripe is not configured for this ticket")
@@ -280,7 +314,7 @@ class Api::V1::TicketsController < Api::BaseController
       session = StripeGateway.create_checkout_session(setting, ticket_item)
       # Keep the reservation alive at least as long as the session Stripe
       # will happily accept payment on, plus sweeper slack.
-      ticket_item.update!(provider_ref: session.id, reserved_until: Time.zone.at(session.expires_at) + 2.minutes)
+      ticket_item.update!(provider_ref: session.id, reserved_until: ticket_item.participant&.payment_due_at || Time.zone.at(session.expires_at) + 2.minutes)
       checkout = session
     end
     return render_error("ticket_item is not pending") if stale
@@ -319,6 +353,7 @@ class Api::V1::TicketsController < Api::BaseController
       return render json: { error: "wechat openid required", code: "OPENID_REQUIRED" }, status: :unprocessable_entity
     end
 
+    ticket_item.record_activity!("prepay_requested", source: "api", actor: current_user)
     prepay_id = nil
     stale = false
     ticket_item.with_lock do
@@ -338,7 +373,7 @@ class Api::V1::TicketsController < Api::BaseController
         source: "api", actor: current_user, prepay_id: prepay_id, previous_ref: ticket_item.provider_ref
       )
       ticket_item.update!(provider_ref: prepay_id,
-        reserved_until: WechatPayGateway::ORDER_TTL.from_now + 2.minutes)
+        reserved_until: ticket_item.participant&.payment_due_at || WechatPayGateway::ORDER_TTL.from_now + 2.minutes)
     end
     return render_error("ticket_item is not pending") if stale
 
@@ -685,15 +720,10 @@ class Api::V1::TicketsController < Api::BaseController
 
   def save_form_submission!
     submission = FormSubmission.find_or_initialize_by(form_id: @event.form_id, user_id: current_user.id)
-    submission.status = "pending"
+    submission.status = @event.participants.find_by(user: current_user)&.status == "pending" ? "pending" : "approved"
     submission.submitted_at = Time.current
     submission.save!
-    FormAnswer.where(form_submission_id: submission.id).delete_all
-    valid_field_ids = FormField.where(form_id: @event.form_id).pluck(:id)
-    Array(params[:answers]).each do |a|
-      next unless valid_field_ids.include?(a[:field_id].to_s)
-      FormAnswer.create!(form_submission_id: submission.id, form_field_id: a[:field_id], value: a[:value])
-    end
+    FormBuilder.record_answers!(submission, params[:answers], FormField.where(form_id: @event.form_id, for_admin: false).pluck(:id))
   end
 
   # Verifies that a payment actually settled, per the item's rail. Returns true
@@ -795,13 +825,18 @@ class Api::V1::TicketsController < Api::BaseController
   end
 
   # rsvp puts a participant into "pending" until a manager approves them
-  # (event.require_approval / form_id / ticket.need_approval), but that used
+  # (event.require_approval / ticket.need_approval), but that used
   # to only affect seat counting — the TicketItem it built was payable right
   # away, so a buyer could pay via any rail before ever being approved. This
   # is the shared gate the three payment endpoints (checkout_session,
   # wechat_prepay, verify_payment) all call before moving money.
   def approved_for_payment?(ticket_item)
-    return true unless ticket_item.participant&.status == "pending"
+    participant = ticket_item.participant
+    if participant&.payment_due_at && participant.payment_due_at <= Time.current
+      render_error("支付资格已到期，请重新申请报名")
+      return false
+    end
+    return true if ticket_item.inventory_reserved? && (participant.nil? || %w[attending awaiting_payment].include?(participant.status))
 
     render_error("registration is awaiting approval — payment is not available until then")
     false

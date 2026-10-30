@@ -1,5 +1,7 @@
-Application update
+报名申请未通过
 
-Thanks for your interest in <%= @event.title %>. Unfortunately your application wasn't accepted this time.
+你申请的「<%= @event.title %>」未通过审核。
+原因：<%= @participant.review_reason.presence || "请联系主办方了解详情" %>
 
-Explore other events: <%= MailerHelper::WEB_URL %>
+你可以修改资料后重新申请。
+查看活动：<%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>

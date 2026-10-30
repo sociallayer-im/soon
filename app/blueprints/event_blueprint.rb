@@ -49,8 +49,8 @@ class EventBlueprint < Blueprinter::Base
     # wanted. Opt-out rather than opt-in so already-deployed clients, which
     # index into this array, keep working.
     association :participants, blueprint: ParticipantBlueprint,
-                if: ->(_n, _o, options) { options[:include_participants] != false } do |event|
-      event.participants.reject(&:cancelled?)
+                if: ->(_n, _o, options) { options[:include_participants] != false } do |event, options|
+      event.participants.select { |p| options[:manage_participants] ? !p.cancelled? : p.status == "attending" && [nil, "succeeded"].include?(p.payment_status) }
     end
     # The viewer's own RSVP. Without it, dropping the array above would also
     # drop the answer to "have I joined, did my payment go through, was I

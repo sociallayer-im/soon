@@ -43,7 +43,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
   # ---- participant approve / reject (deliver_later) ----
 
   test "approving a pending participant emails them" do
-    event = create_event(group: @group, owner: @owner, require_approval: true)
+    event = create_event(group: @group, owner: @owner, require_approval: true, status: "published")
     attendee = create_user
     participant = create_participant(event: event, user: attendee, status: "pending")
 
@@ -57,12 +57,12 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
   end
 
   test "rejecting a pending participant emails them and sets status declined" do
-    event = create_event(group: @group, owner: @owner, require_approval: true)
+    event = create_event(group: @group, owner: @owner, require_approval: true, status: "published")
     attendee = create_user
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     perform_enqueued_jobs do
-      post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(@owner)
+      post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", params: {reason: "本场名额已满"}, headers: auth_headers(@owner)
     end
     assert_response :success
     assert_equal "declined", participant.reload.status

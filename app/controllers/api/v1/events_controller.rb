@@ -212,8 +212,10 @@ class Api::V1::EventsController < Api::BaseController
   # reads as "not joined" — the same rule the array itself applies.
   def show_options
     options = personalization_options
+    options[:manage_participants] = EventPolicy.new(current_user, @event).update?
+    options[:viewer_id] = current_user&.id
     options[:include_participants] = false if params[:include_participants].to_s == "false"
-    options[:current_participant] = @event.participants.active.find_by(user_id: current_user.id) if current_user
+    options[:current_participant] = @event.participants.where("status != ? OR cancellation_reason = ?", "cancelled", "timeout").find_by(user_id: current_user.id) if current_user
     options[:reveal_image_note] = reveal_image_note?(options[:current_participant])
     options
   end
@@ -237,7 +239,7 @@ class Api::V1::EventsController < Api::BaseController
     {
       viewer_id: current_user.id,
       event_team_ids: team_ids,
-      attending_ids: current_user.participants.where(status: "attending").pluck(:event_id).to_set | team_ids,
+      attending_ids: current_user.participants.where(status: "attending", payment_status: [nil, "succeeded"]).pluck(:event_id).to_set | team_ids,
       starred_ids: Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Event", removed: false)
                           .pluck(:item_id).to_set
     }

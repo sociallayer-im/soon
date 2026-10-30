@@ -1,20 +1,5 @@
-<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">You're in! 🎉</h1>
-<p style="margin: 0 0 16px; color: #4b5563;">
-  Your application to <strong><%= @event.title %></strong> was approved. We've attached a calendar
-  invite to this email.
-</p>
+<h1>报名审核已通过</h1><p>你申请的「<%= @event.title %>」已通过审核。</p>
+<% if @participant.status == "awaiting_payment" %><p>请于 <%= @participant.payment_due_at&.in_time_zone(@event.event_timezone)&.strftime("%Y-%m-%d %H:%M") %> 前完成付款；支付成功后报名才生效。</p><% else %><p>报名成功，活动日历邀请见附件。</p><% end %>
+<%= cta_button "查看活动", "#{MailerHelper::WEB_URL}/event/detail/#{@event.id}" %>
 
-<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 16px;">
-  <tr>
-    <td style="padding: 6px 0; color: #6b7280;">When</td>
-    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %></td>
-  </tr>
-  <% if @event.location_text.present? %>
-  <tr>
-    <td style="padding: 6px 0; color: #6b7280;">Where</td>
-    <td style="padding: 6px 0; color: #111827; text-align: right;"><%= @event.location_text %></td>
-  </tr>
-  <% end %>
-</table>
-
-<%= cta_button "View event", "#{MailerHelper::WEB_URL}/event/detail/#{@event.id}" %>
+<p>活动时间：<%= @event.local_start&.strftime("%Y-%m-%d %H:%M %Z") %></p>

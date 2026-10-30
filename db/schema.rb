@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_005000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1042,6 +1042,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
 
   create_table "participants", id: :string, force: :cascade do |t|
     t.string "badge_id"
+    t.string "cancellation_reason"
     t.datetime "cancelled_at"
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
@@ -1049,16 +1050,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
     t.string "fed_actor_id"
     t.string "fed_join_uri"
     t.string "message"
+    t.datetime "payment_due_at"
     t.string "payment_status", comment: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!"
     t.datetime "registered_at"
+    t.text "review_reason"
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
     t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.string "voucher_id"
+    t.index ["event_id", "payment_due_at"], name: "idx_participants_payment_holds", where: "((status)::text = 'awaiting_payment'::text)"
     t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
     t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"
+    t.index ["reviewed_by_id"], name: "index_participants_on_reviewed_by_id"
     t.index ["user_id", "event_id"], name: "idx_participants_confirmed_agenda", where: "(((status)::text = 'attending'::text) AND ((payment_status IS NULL) OR ((payment_status)::text = 'succeeded'::text)))"
     t.index ["user_id", "event_id"], name: "index_participants_on_user_id_and_event_id", unique: true
     t.index ["user_id"], name: "index_participants_on_user_id"
@@ -1404,6 +1411,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
     t.integer "discount_value"
     t.string "event_id"
     t.string "group_id"
+    t.boolean "inventory_reserved", default: true, null: false
     t.decimal "original_price", precision: 40
     t.datetime "paid_at"
     t.string "participant_id"
@@ -1777,6 +1785,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_003000) do
   add_foreign_key "participants", "events"
   add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
+  add_foreign_key "participants", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "participants", "vouchers"
   add_foreign_key "poll_options", "polls"
   add_foreign_key "poll_votes", "poll_options", column: "option_id"

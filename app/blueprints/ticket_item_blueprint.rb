@@ -7,7 +7,7 @@ class TicketItemBlueprint < Blueprinter::Base
          :original_price, :protocol, :created_at,
          # As charged, not as currently configured — an order keeps the
          # currency it was taken in. nil on crypto orders.
-         :currency
+         :currency, :reserved_until
 
   view :with_profile do
     association :user, blueprint: UserBlueprint

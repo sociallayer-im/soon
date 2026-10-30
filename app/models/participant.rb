@@ -6,10 +6,12 @@
 # `status` is the single lifecycle column. It carries three concerns that used
 # to be read inconsistently across the codebase, so they are spelled out here:
 #
-#   attending  — holds a seat. The ONLY status counted by participant_count,
+#   awaiting_payment — approved (or direct checkout), reserved until payment_due_at;
+#                      excluded from public attendees, agenda, tickets and check-in.
+#   attending  — confirmed. The ONLY status counted by participant_count,
 #                capacity checks, is_attending, and attendee mail.
-#   pending    — awaiting the organizer's approval (require_approval, an
-#                application form, or a need_approval ticket). Holds no seat.
+#   pending    — awaiting event/ticket approval. Forms are independent.
+#                Holds neither an event seat nor ticket inventory.
 #   declined   — the organizer rejected them. Terminal unless they re-apply.
 #   maybe      — soft RSVP intent. Holds no seat.
 #   cancelled  — SOFT DELETE: they withdrew. Holds no seat, hidden from every
@@ -32,12 +34,13 @@
 # participant unpaid even when another order was already paid.
 class Participant < ApplicationRecord
   include SiteNotifiable
+  belongs_to :reviewed_by, class_name: "User", optional: true
   belongs_to :user
   belongs_to :event
   belongs_to :voucher, optional: true
   belongs_to :badge, optional: true
 
-  STATUSES = %w[attending pending declined maybe cancelled].freeze
+  STATUSES = %w[attending pending awaiting_payment declined maybe cancelled].freeze
 
   # Statuses that occupy a seat: participant_count, max_participant, venue
   # capacity, is_attending and attendee mail all key off exactly this.
@@ -47,11 +50,12 @@ class Participant < ApplicationRecord
   # bypass it, so prefer transition! for anything a user action triggers.
   TRANSITIONS = {
     "attending" => %w[maybe declined cancelled],
-    "pending"   => %w[attending declined cancelled],
+    "pending"   => %w[attending awaiting_payment declined cancelled],
+    "awaiting_payment" => %w[attending cancelled declined],
     "maybe"     => %w[attending declined cancelled],
-    "declined"  => %w[attending pending cancelled],
+    "declined"  => %w[attending pending awaiting_payment cancelled],
     # Re-joining a cancelled row is how withdraw/re-join works.
-    "cancelled" => %w[attending pending maybe]
+    "cancelled" => %w[attending pending awaiting_payment maybe]
   }.freeze
 
   class InvalidTransition < StandardError; end

@@ -7,7 +7,7 @@ class EventMailer < ApplicationMailer
     recipient = @participant.user&.email
     return if recipient.blank?
 
-    attach_invite(recipient, method: "REQUEST")
+    attach_invite(recipient, method: "REQUEST") unless @participant&.status == "awaiting_payment"
     mail(to: recipient, subject: "You're in! — #{@event.title}")
   end
 
@@ -20,7 +20,7 @@ class EventMailer < ApplicationMailer
     recipient = @participant.user&.email
     return if recipient.blank?
 
-    attach_invite(recipient, method: "REQUEST")
+    attach_invite(recipient, method: "REQUEST") unless @participant&.status == "awaiting_payment"
     mail(to: recipient, subject: "You're confirmed — #{@event.title}")
   end
 
@@ -63,7 +63,7 @@ class EventMailer < ApplicationMailer
     @event = Event.find(event_id)
     return if recipient.blank?
 
-    attach_invite(recipient, method: "REQUEST")
+    attach_invite(recipient, method: "REQUEST") unless @participant&.status == "awaiting_payment"
     mail(to: recipient, subject: "Updated — #{@event.title}")
   end
 
