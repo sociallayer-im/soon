@@ -414,4 +414,42 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     post "/api/v1/auth/verify_phone_code", params: { phone: "13000130001", code: AuthCode.last.code }
     assert_response :success
   end
+  test "verified email account links to existing phone user and retains content" do
+    source = create_user(email: "link-#{unique_suffix}@example.com", nickname: "邮箱用户")
+    target = create_user(phone: "+8613800138011", email: nil)
+    group = create_group(owner: source)
+    event = create_event(group: group, owner: source)
+    campaign = Campaign.create!(group: group, owner: source, title: "保留的专题", status: "draft")
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "123456"}, headers: auth_headers(source)
+    assert_response :success
+    assert json_response["merged"]
+    assert_equal target.id, json_response["user"]["id"]
+    assert_not User.exists?(source.id)
+    assert_equal source.email, target.reload.email
+    assert_equal target.id, event.reload.owner_id
+    assert_equal target.id, campaign.reload.owner_id
+    assert Membership.exists?(user: target, group: group, role: "owner")
+  end
+
+  test "email phone linking requires a valid bind code" do
+    source = create_user(email: "link-#{unique_suffix}@example.com")
+    target = create_user(phone: "+8613800138012", email: nil)
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "654321"}, headers: auth_headers(source)
+    assert_response :unauthorized
+    assert User.exists?(source.id)
+    assert_nil target.reload.email
+  end
+
+  test "conflicting existing email identities are preserved instead of overwritten" do
+    source = create_user(email: "source-#{unique_suffix}@example.com")
+    target = create_user(phone: "+8613800138013", email: "target-#{unique_suffix}@example.com")
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "123456"}, headers: auth_headers(source)
+    assert_response :unprocessable_entity
+    assert User.exists?(source.id)
+    assert_not_equal source.email, target.reload.email
+  end
+
 end

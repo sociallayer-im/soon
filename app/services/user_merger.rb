@@ -29,7 +29,7 @@ class UserMerger
   }.freeze
 
   # Straight FK repoints — no uniqueness risk on these tables.
-  REPOINT_OWNER_ID = %w[events markers venues].freeze
+  REPOINT_OWNER_ID = %w[events markers venues campaigns].freeze
 
   def self.call(from:, into:)
     new(from, into).call
@@ -58,6 +58,8 @@ class UserMerger
 
       REPOINT_OWNER_ID.each { |table| repoint(table, "owner_id") }
       repoint("stripe_settings", "user_id")
+      repoint("withdrawals", "user_id")
+      repoint("withdrawals", "processed_by_id")
       repoint("badge_classes", "creator_id")
       repoint("badges", "owner_id")
       repoint("badges", "creator_id")

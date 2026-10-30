@@ -265,6 +265,10 @@ class Api::V1::AuthController < Api::BaseController
     return unless consume_code!(recipient: phone, context: BIND_PHONE_CONTEXT, attempt: params[:code])
 
     if (existing = User.find_by(phone: phone))
+      if current_user.email.present?
+        linked = VerifiedPhoneAccountLinker.call(from: current_user, into: existing)
+        return render_token(linked, merged: true)
+      end
       return render_error("this phone number is already in use") unless mergeable?(current_user, existing)
       return render_token(merge_wechat_account!(current_user, existing), merged: true)
     end
@@ -272,6 +276,8 @@ class Api::V1::AuthController < Api::BaseController
     current_user.update!(phone: phone)
     GroupInvite.auto_accept_phone_invites_for(current_user)
     render json: UserBlueprint.render(current_user, view: :self)
+  rescue VerifiedPhoneAccountLinker::Conflict => e
+    render_error(e.message)
   end
 
   # POST /api/v1/auth/bind_wechat  {next_token, wechat_openid, wechat_unionid?}
@@ -511,7 +517,7 @@ class Api::V1::AuthController < Api::BaseController
   def render_token(user, merged: false)
     user.update(last_signin_at: Time.current)
     token = JwtService.encode({ "user_id" => user.id })
-    payload = { token: token, user: { id: user.id, email: user.email, name: user.name } }
+    payload = { token: token, user: JSON.parse(UserBlueprint.render(user, view: :self)) }
     payload[:merged] = true if merged
     render json: payload
   end
