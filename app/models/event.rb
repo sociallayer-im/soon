@@ -1,4 +1,10 @@
 class Event < ApplicationRecord
+  scope :team_for, ->(user) {
+    user ? where(owner_id: user.id).or(where(id: EventRole.linked_to(user).select(:event_id))) : none
+  }
+  scope :agenda_for, ->(user) {
+    team_for(user).or(where(id: Participant.where(user_id: user.id, status: "attending").select(:event_id)))
+  }
   scope :publicly_discoverable, -> {
     joins(:group).where(groups: {active: true, review_status: "approved"})
       .where(status: "published", visibility: %w[normal open_registration])
@@ -73,8 +79,8 @@ class Event < ApplicationRecord
     # which would silently drop every legacy row that has none.
     where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
       "(events.visibility IN ('normal', 'open_registration') AND events.status NOT IN ('draft', 'pending', 'archived')) " \
-      "OR events.owner_id = :uid OR events.group_id IN (:managed)",
-      uid: user&.id, managed: managed
+      "OR events.owner_id = :uid OR events.group_id IN (:managed) OR (events.status = 'published' AND events.id IN (:team))",
+      uid: user&.id, managed: managed, team: EventRole.linked_to(user).select(:event_id)
     )
   }
 

@@ -9,6 +9,14 @@ class EventRole < ApplicationRecord
   #               the event the way every other role holder can.
   ROLES = %w(group_host custom_host co_host speaker judge).freeze
 
+  def self.linked_to(user)
+    return none unless user
+    scope = where(item_type: "User")
+    identities = scope.where(item_id: user.id)
+    identities = identities.or(scope.where(email: user.email)) if user.email.present?
+    identities
+  end
+
   belongs_to :event
   # item is optional: email-invited co-hosts and hand-typed speakers have no
   # account — they carry only email/display_name/image_url (1.6k prod rows).

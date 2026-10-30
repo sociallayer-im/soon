@@ -15,6 +15,9 @@ class EventBlueprint < Blueprinter::Base
   field :is_attending, if: ->(_n, _o, options) { options.key?(:attending_ids) } do |event, options|
     options[:attending_ids].include?(event.id)
   end
+  field :is_event_team, if: ->(_n, _o, options) { options.key?(:event_team_ids) } do |event, options|
+    options[:event_team_ids].include?(event.id)
+  end
   field :is_starred, if: ->(_n, _o, options) { options.key?(:starred_ids) } do |event, options|
     options[:starred_ids].include?(event.id)
   end

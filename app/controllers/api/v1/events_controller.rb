@@ -160,7 +160,7 @@ class Api::V1::EventsController < Api::BaseController
     end
     if params[:attendee_id].present?
       attendee = User.resolve!(params[:attendee_id])
-      scope = scope.where(id: Participant.where(user_id: attendee.id, status: "attending").select(:event_id))
+      scope = scope.merge(Event.agenda_for(attendee))
     end
     if params[:co_host_id].present?
       co_host = User.resolve!(params[:co_host_id])
@@ -219,6 +219,7 @@ class Api::V1::EventsController < Api::BaseController
   # Organizers see their own note regardless — they have to edit it.
   def reveal_image_note?(participant)
     return false unless current_user
+    return true if Event.team_for(current_user).exists?(id: @event.id)
     return true if EventPolicy.new(current_user, @event).update?
     participant.present? &&
       participant.status == "attending" &&
@@ -227,9 +228,11 @@ class Api::V1::EventsController < Api::BaseController
 
   def personalization_options
     return {} unless current_user
+    team_ids = Event.team_for(current_user).pluck(:id).to_set
     {
       viewer_id: current_user.id,
-      attending_ids: current_user.participants.where(status: "attending").pluck(:event_id).to_set,
+      event_team_ids: team_ids,
+      attending_ids: current_user.participants.where(status: "attending").pluck(:event_id).to_set | team_ids,
       starred_ids: Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Event", removed: false)
                           .pluck(:item_id).to_set
     }
