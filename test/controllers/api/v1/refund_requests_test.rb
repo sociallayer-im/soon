@@ -120,6 +120,15 @@ class Api::V1::RefundRequestsTest < ActionDispatch::IntegrationTest
     assert_not_equal request.id, json_response["id"]
   end
 
+  test "definitive provider refusal resolves processing application as failed" do
+    submit
+    request = RefundRequest.last
+    WechatPayGateway.stub(:create_refund, ->(*) {raise WechatPayGateway::Error, "merchant refused"}) {approve(request)}
+    assert_response :unprocessable_entity
+    assert_equal "failed", request.reload.status
+    assert_equal "attending", @participant.reload.status
+  end
+
   test "order views show requests and buyer can apply but only organizer can decide" do
     submit
     get "/api/v1/tickets/list", params: {event_id: @event.id, mine: true, include_refunds: true, page: 1}, headers: auth_headers(@buyer)
