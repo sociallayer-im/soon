@@ -193,3 +193,12 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - 订单锁内检查可退状态、整数分金额、已成功退款余额及 pending 退款；每单同时仅一个待处理退款。数据库事务仅预留记录，外部网关调用在锁外。
 - 订单/支付专项 123 tests / 429 assertions 通过，包括权限、买家隔离、分页、待处理部分退款及非整数金额；未发起真实退款。
 - 全量 1435 tests 有 4 个独立日历导出时区错误（未改动 EventCalendar.add_vtimezone，TZInfo::AmbiguousTime: 2026-11-01 01:xx）；0 assertion failures。本次订单修改尚未部署。
+
+## 2026-10-31 — 订单与提现后端部署完成
+
+- 线上业务提交：3dacecf243418d17646c9f4ff603355ad71e9e3b。
+- Atlas deployment：dep_d0ca4d3d-05af-4ab3-9895-73ec609f4d0c；operation：op_4f9bd8d8-b3c0-459c-ad8a-5c7592b01ebc（succeeded / complete）。
+- 新镜像 digest：sha256:a8bb64b964b84cf054121b5c3ee489f5074bd232900717500d88e78e2b9c4f0c。
+- 节点内存预留不足导致 build runner pending；依据此前用户授权，仅将旧 Surf Nomad 作业 atlas-9a74ab29-6560-4e03-b988-91d2a2e61418 缩为 0，随后由 Atlas 完成新版本部署；其他服务未变更。
+- 现实例 ready / 1 ready replica，路由指向新版本；variableRevision/runtimeRevision 均保持 5，无新迁移、无凭证或数据库配置变更。
+- HTTPS /up 200、版本匹配；公开活动权限/分页读取通过；订单、收入汇总、提现及管理员提现接口匿名访问均 401。未使用真实订单发起退款或提现；真机验收待用户上传新版小程序。
