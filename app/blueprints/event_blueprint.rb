@@ -32,6 +32,9 @@ class EventBlueprint < Blueprinter::Base
   association :track, blueprint: TrackRefBlueprint
 
   view :extended do
+    field :can_manage_orders do |_event, options|
+      !!options[:can_manage_orders]
+    end
     field :can_edit do |_event, options|
       !!options[:can_edit]
     end

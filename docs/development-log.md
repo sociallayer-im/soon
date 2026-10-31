@@ -184,3 +184,12 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - 小程序接入 Seastar 同源的社区余额、银行账户提现申请和超级管理员人工结算接口；无需 schema 或凭证变更。
 - 管理员更新提现记录时增加行锁，并在锁内重查 pending 状态，防止两个管理员基于旧状态分别批准/拒绝。
 - 验证：withdrawal model、withdrawals controller、admin withdrawals controller 共 32 tests / 64 assertions 通过。未操作线上资金或发起真实提现；本次后端修复尚未部署。
+
+## 2026-10-31 — Surf 订单管理与退款界面契约
+
+- tickets/list 可选 page/limit 分页，保留旧数组返回；联合主办账号可读取活动订单/收入汇总，与既有退款授权匹配。
+- Event extended 增加 can_manage_orders；订单管理视图增加 can_refund，按 TicketItemPolicy 逐单判断，社区管理员查看权不等于退款权。
+- mine + include_refunds 提供买家退款状态安全视图，移除内部原因、错误、操作者与活动日志；默认买家响应兼容不包含 refunds。
+- 订单锁内检查可退状态、整数分金额、已成功退款余额及 pending 退款；每单同时仅一个待处理退款。数据库事务仅预留记录，外部网关调用在锁外。
+- 订单/支付专项 123 tests / 429 assertions 通过，包括权限、买家隔离、分页、待处理部分退款及非整数金额；未发起真实退款。
+- 全量 1435 tests 有 4 个独立日历导出时区错误（未改动 EventCalendar.add_vtimezone，TZInfo::AmbiguousTime: 2026-11-01 01:xx）；0 assertion failures。本次订单修改尚未部署。

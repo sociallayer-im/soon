@@ -224,6 +224,9 @@ class Api::V1::EventsController < Api::BaseController
   def show_options
     options = personalization_options
     options[:manage_participants] = EventPolicy.new(current_user, @event).update?
+    options[:can_manage_orders] = current_user && (@event.owner_id == current_user.id ||
+      current_user.memberships.exists?(group_id: @event.group_id, role: %w[owner manager]) ||
+      @event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
     options[:can_edit] = options[:manage_participants]
     options[:can_register] = @event.registration_open? && (!current_user || EventPolicy.new(current_user, @event).join?)
     options[:registration_unavailable_reason] = if !@event.registration_open?

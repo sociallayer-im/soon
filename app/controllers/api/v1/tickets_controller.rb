@@ -399,30 +399,38 @@ class Api::V1::TicketsController < Api::BaseController
     end
 
     authorize ticket_item, :refund?
-    unless %w[succeeded partially_refunded].include?(ticket_item.status)
-      return render_error("ticket_item is not refundable (status: #{ticket_item.status})")
-    end
-    return render_error("order has no captured payment reference") if ticket_item.txhash.blank?
-
     setting = refund_setting(ticket_item)
     return render_error("the collecting account is no longer available") unless setting
 
-    # Pending refunds count against the balance too — the provider would
-    # ultimately reject an over-refund, but two in-flight partials must not
-    # both claim the same remainder (and full/partial labeling depends on it).
-    refunded_so_far = ticket_item.refunds.where(status: %w[pending succeeded]).sum(:amount)
-    remaining = ticket_item.amount.to_i - refunded_so_far
-    amount = params[:amount].present? ? params[:amount].to_i : remaining
-    return render_error("invalid refund amount") unless amount.positive? && amount <= remaining
-
-    refund = ticket_item.refunds.create!(
-      requested_by: current_user, amount: amount,
-      currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
-      full_refund: amount == remaining, reason: params[:reason].presence
-    )
-    ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
-      reason: refund.reason, refund_id: refund.id, amount: refund.amount,
-      currency: refund.currency, full_refund: refund.full_refund)
+    # Reserve the refund balance under the order lock; never hold a database
+    # lock across the provider HTTP call. One pending refund at a time also
+    # prevents a later partial from releasing the seat before an earlier one settles.
+    outcome = ticket_item.with_lock do
+      if !%w[succeeded partially_refunded].include?(ticket_item.status)
+        { error: "ticket_item is not refundable (status: #{ticket_item.status})" }
+      elsif ticket_item.txhash.blank?
+        { error: "order has no captured payment reference" }
+      elsif ticket_item.refunds.where(status: "pending").exists?
+        { error: "a refund for this order is already in progress" }
+      else
+        remaining = ticket_item.amount.to_i - ticket_item.refunds.where(status: "succeeded").sum(:amount)
+        raw = params[:amount].presence || remaining.to_s
+        amount = raw.to_s.match?(/\A[0-9]+\z/) ? raw.to_i : 0
+        if !amount.positive? || amount > remaining
+          { error: "invalid refund amount" }
+        else
+          refund = ticket_item.refunds.create!(requested_by: current_user, amount: amount,
+            currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
+            full_refund: amount == remaining, reason: params[:reason].presence)
+          ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
+            reason: refund.reason, refund_id: refund.id, amount: refund.amount,
+            currency: refund.currency, full_refund: refund.full_refund)
+          { refund: refund }
+        end
+      end
+    end
+    return render_error(outcome[:error]) if outcome[:error]
+    refund = outcome[:refund]
     begin
       refund.update!(provider_ref: send_refund(ticket_item, setting, refund))
       render json: { result: "ok", refund_id: refund.id, status: refund.status }
@@ -586,15 +594,16 @@ class Api::V1::TicketsController < Api::BaseController
     # list reconstructs a history from. A buyer looking at their own orders
     # gets the plain view: the refund rows carry who requested them and why,
     # which is organizer-facing.
-    if event_manager?(params[:event_id])
-      return render json: TicketItemBlueprint.render(
-        items.includes(:user, :ticket, refunds: :requested_by, ticketing_activities: :actor)
-             .order(created_at: :desc),
-        view: :order_detail
-      )
+    manager = event_manager?(params[:event_id])
+    buyer_detail = ActiveModel::Type::Boolean.new.cast(params[:include_refunds])
+    view = manager ? :order_detail : (buyer_detail ? :buyer_detail : :with_profile)
+    items = items.includes(:user, :ticket, refunds: :requested_by, ticketing_activities: :actor).order(created_at: :desc, id: :desc)
+    options = manager ? { viewer: current_user } : {}
+    if params[:page].present? || params[:limit].present?
+      render_collection(items, blueprint: TicketItemBlueprint, view: view, **options)
+    else
+      render json: TicketItemBlueprint.render(items, view: view, **options)
     end
-
-    render json: TicketItemBlueprint.render(items.includes(:user), view: :with_profile)
   end
 
   # GET /api/v1/tickets/order_summary?event_id= — organizer-only revenue
@@ -673,7 +682,7 @@ class Api::V1::TicketsController < Api::BaseController
 
   def event_manager?(event_id)
     event = Event.find_by(id: event_id)
-    event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[manager owner]))
+    event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[manager owner]) || event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
   end
 
   # `ticket_item_id` is the direct form; the chain/product_id/item_id triple is
