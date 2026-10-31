@@ -117,4 +117,50 @@ class Api::V1::CampaignsControllerTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
+  test "positions explicitly reorder associations and survive legacy saves" do
+    other = create_event(group: @group, owner: @owner, status: "published", visibility: "normal")
+    create_campaign(event_ids: [@event.id, other.id], positions: [other.id, @event.id])
+    assert_response :created
+    id = json_response["id"]
+    assert_equal [other.id, @event.id], json_response["positions"]
+    assert_equal [other.id, @event.id], Campaign.find(id).positions
+    assert_equal [other.id, @event.id], Campaign.find(id).event_ids
+    patch "/api/v1/campaigns/#{id}", params: {campaign: {positions: [@event.id, other.id]}}, headers: auth_headers(@owner), as: :json
+    assert_response :success
+    assert_equal [@event.id, other.id], json_response["event_ids"]
+    assert_equal [@event.id, other.id], Campaign.find(id).positions
+    patch "/api/v1/campaigns/#{id}", params: {campaign: {event_ids: [@event.id, other.id]}}, headers: auth_headers(@owner), as: :json
+    assert_response :success
+    assert_equal [@event.id, other.id], Campaign.find(id).positions
+    patch "/api/v1/campaigns/#{id}", params: {campaign: {title: "新名称"}}, headers: auth_headers(@owner), as: :json
+    assert_response :success
+    assert_equal [@event.id, other.id], Campaign.find(id).positions
+  end
+
+  test "invalid positions fail atomically without changing review state" do
+    create_campaign
+    id = json_response["id"]
+    [[@event.id, @event.id], [], ["missing"], "invalid"].each do |positions|
+      patch "/api/v1/campaigns/#{id}", params: {campaign: {positions: positions, title: "错误更新"}}, headers: auth_headers(@owner), as: :json
+      assert_response :unprocessable_entity
+      campaign = Campaign.find(id)
+      assert_equal "城市共读", campaign.title
+      assert_equal "approved", campaign.review_status
+      assert_equal [@event.id], campaign.positions
+      assert_equal [@event.id], campaign.event_ids
+    end
+  end
+
+  test "deleting an event removes its stored position and hidden events are never exposed" do
+    other = create_event(group: @group, owner: @owner, status: "published", visibility: "normal")
+    create_campaign(event_ids: [@event.id, other.id])
+    id = json_response["id"]
+    other.update!(visibility: "unlisted")
+    get "/api/v1/campaigns/#{id}"
+    assert_response :success
+    assert_equal [@event.id], json_response["positions"]
+    other.destroy!
+    assert_equal [@event.id], Campaign.find(id).positions
+  end
+
 end

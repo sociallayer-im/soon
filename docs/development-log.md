@@ -247,3 +247,9 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - OAuth identity/UserInfo 拒绝 inactive 用户，身份 API 禁止缓存，scope错误返回403、失效凭据返回401。
 - 新增对接文档 docs/wiconnect-identity-api.md，说明生产issuer、OAuth注册、PKCE、网关可信上下文和授权期限边界。未修改WiConnect登录入口、注册生产客户端或部署。
 - 本地验证：59 项 OAuth接口/身份/配置测试，235断言通过，包含完整授权码换token、身份查询、撤销与失效验证。
+
+### 2026-10-31 专题positions数组与前端拖动排序
+
+- campaigns新增positions字符串数组，按campaign_events原position顺序回填；创建/编辑校验完整且无重复的活动ID排列，同步关联顺序，兼容event_ids旧客户端。
+- 删除活动时清理positions，公开响应继续按Event.visible_to过滤；event_ids/positions共享本次渲染内查询结果，避免为新字段新增每卡片查询。
+- 沿用现有事务、行锁、编辑权限和重新审核策略。29项专题/审核/发现流测试、189断言通过。未部署。

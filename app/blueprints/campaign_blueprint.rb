@@ -12,10 +12,24 @@ class CampaignBlueprint < Blueprinter::Base
     CampaignPolicy.new(options[:current_user], campaign).update?
   end
   field :event_ids do |campaign, options|
-    campaign.events.merge(Event.visible_to(options[:current_user])).pluck(:id)
+    CampaignBlueprint.visible_event_ids(campaign, options)
+  end
+  # Association order and visibility are authoritative; never leak hidden IDs
+  # from the stored array when an event becomes private after submission.
+  field :positions do |campaign, options|
+    CampaignBlueprint.visible_event_ids(campaign, options)
   end
   field :cities do |campaign, options|
     ids = campaign.events.merge(Event.visible_to(options[:current_user])).select(:group_id)
     Group.where(id: ids).where.not(city: [nil, ""]).distinct.order(:city).pluck(:city)
   end
+
+  # These two response fields have the same visible order. Share one lookup
+  # within this render rather than adding a query per campaign card.
+  def self.visible_event_ids(campaign, options)
+    cache = options[:campaign_visible_event_ids] ||= {}
+    cache[[campaign.id, options[:current_user]&.id]] ||=
+      campaign.events.merge(Event.visible_to(options[:current_user])).pluck(:id)
+  end
+
 end

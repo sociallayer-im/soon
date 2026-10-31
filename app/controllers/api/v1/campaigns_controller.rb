@@ -25,7 +25,7 @@ class Api::V1::CampaignsController < Api::BaseController
   end
 
   def create
-    @campaign = Campaign.new(campaign_params.except(:event_ids))
+    @campaign = Campaign.new(campaign_params.except(:event_ids, :positions))
     @campaign.owner = current_user
     @campaign.review_status = "pending"
     authorize @campaign
@@ -39,7 +39,7 @@ class Api::V1::CampaignsController < Api::BaseController
     authorize @campaign
     # The owning group and author are immutable.
     @campaign.with_lock do
-      @campaign.assign_attributes(campaign_params.except(:event_ids, :group_id))
+      @campaign.assign_attributes(campaign_params.except(:event_ids, :positions, :group_id))
       @campaign.assign_attributes(review_status: "pending", review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
       persist_campaign!
       @campaign.campaign_review_logs.create!(reviewer: current_user, decision: "resubmitted")
@@ -63,7 +63,7 @@ class Api::V1::CampaignsController < Api::BaseController
 
   def campaign_params
     params.require(:campaign).permit(:group_id, :title, :kicker, :introduction,
-      :cover_url, :status, event_ids: [], resource_links: [], media: [:type, :url])
+      :cover_url, :status, event_ids: [], positions: [], resource_links: [], media: [:type, :url])
   end
 
   def persist_campaign!
@@ -71,6 +71,11 @@ class Api::V1::CampaignsController < Api::BaseController
       # Serialize edits so two replacements cannot mix their association rows.
       Campaign.where(id: @campaign.id).lock.load if @campaign.persisted?
       ids = campaign_params.key?(:event_ids) ? campaign_params[:event_ids].uniq : @campaign.event_ids
+      if params[:campaign].key?(:positions)
+        positions = params[:campaign][:positions]
+        invalid!("positions must contain every associated event ID exactly once") unless positions.is_a?(Array) && positions.all? { |id| id.is_a?(String) } && positions.size == ids.size && positions.uniq.size == positions.size && positions.sort == ids.sort
+        ids = positions
+      end
       invalid!("at most 200 events may be included") if ids.size > 200
       invalid!("published campaigns require at least one event") if @campaign.status == "published" && ids.empty?
       events = Event.where(id: ids)
@@ -83,10 +88,11 @@ class Api::V1::CampaignsController < Api::BaseController
         invalid!("event is not available") unless public_event || EventPolicy.new(current_user, event).update?
       end
       @campaign.save!
-      if campaign_params.key?(:event_ids)
+      if campaign_params.key?(:event_ids) || params[:campaign].key?(:positions)
         @campaign.campaign_events.destroy_all
         ids.each_with_index { |id, index| @campaign.campaign_events.create!(event_id: id, position: index) }
       end
+      @campaign.update_columns(positions: ids)
     end
   end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_085000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_093000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -172,6 +172,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_085000) do
     t.string "kicker"
     t.jsonb "media", default: [], null: false
     t.string "owner_id", null: false
+    t.string "positions", default: [], null: false, array: true
     t.string "resource_links", default: [], null: false, array: true
     t.text "review_reason"
     t.string "review_status", default: "pending", null: false
