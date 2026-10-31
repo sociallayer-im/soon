@@ -14,5 +14,11 @@ class ParticipantBlueprint < Blueprinter::Base
   field :review_tickets, if: ->(_n, _p, options) { options[:manager] } do |participant, options|
     options.fetch(:review_tickets, {}).fetch(participant.id, [])
   end
+  field :requires_refund_on_exit, if: ->(_n, participant, options) {options[:own] || options[:viewer_id] == participant.user_id} do |participant|
+    !!RefundRequest.required_before_exit?(participant)
+  end
+  field :refund_request_status, if: ->(_n, participant, options) {options[:own] || options[:viewer_id] == participant.user_id} do |participant|
+    RefundRequest.where(ticket_item_id: TicketItem.where(participant_id: participant.id).select(:id), status: %w[requested processing]).order(created_at: :desc).pick(:status)
+  end
   association :user, blueprint: UserBlueprint
 end

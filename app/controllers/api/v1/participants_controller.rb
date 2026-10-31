@@ -1,4 +1,8 @@
 class Api::V1::ParticipantsController < Api::BaseController
+  class PaidRefundRequired < StandardError; end
+  rescue_from PaidRefundRequired do
+    render json: {error: "请先提交退出与退款申请，退款成功后会自动退出活动", code: "PAID_REFUND_REQUIRED"}, status: :unprocessable_entity
+  end
   # Reading the attendee list is as public as reading the event: the same list
   # has always been embedded in GET /events/:id, which anonymous visitors may
   # call. Now that the detail page can ask for the event without it, that page
@@ -284,6 +288,7 @@ class Api::V1::ParticipantsController < Api::BaseController
   def withdraw_participant!(participant, status: "cancelled")
     @event.with_lock do
       participant.with_lock do
+        raise PaidRefundRequired if RefundRequest.required_before_exit?(participant)
         release_orders!(participant)
         participant.reload
         if participant.status != status

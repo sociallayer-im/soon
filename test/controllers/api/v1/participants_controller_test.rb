@@ -357,6 +357,11 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     item.confirm_payment!(txhash: "pi_paid")
 
     delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_equal "PAID_REFUND_REQUIRED", json_response["code"]
+    assert_equal "attending", participant.reload.status
+    event.update!(start_time: 1.hour.ago, end_time: 1.hour.from_now)
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
     assert_response :no_content
 
     # The money is still with the organizer, so the order stays succeeded and

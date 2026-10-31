@@ -406,7 +406,10 @@ class Api::V1::TicketsController < Api::BaseController
     # lock across the provider HTTP call. One pending refund at a time also
     # prevents a later partial from releasing the seat before an earlier one settles.
     outcome = ticket_item.with_lock do
-      if !%w[succeeded partially_refunded].include?(ticket_item.status)
+      application = params[:refund_request_id].present? ? ticket_item.refund_requests.find(params[:refund_request_id]) : nil
+      if application && application.status != "requested"
+        {error: "该退款申请已处理，请刷新订单"}
+      elsif !%w[succeeded partially_refunded].include?(ticket_item.status)
         { error: "ticket_item is not refundable (status: #{ticket_item.status})" }
       elsif ticket_item.txhash.blank?
         { error: "order has no captured payment reference" }
@@ -414,7 +417,7 @@ class Api::V1::TicketsController < Api::BaseController
         { error: "a refund for this order is already in progress" }
       else
         remaining = ticket_item.amount.to_i - ticket_item.refunds.where(status: "succeeded").sum(:amount)
-        raw = params[:amount].presence || remaining.to_s
+        raw = application ? remaining.to_s : params[:amount].presence || remaining.to_s
         amount = raw.to_s.match?(/\A[0-9]+\z/) ? raw.to_i : 0
         if !amount.positive? || amount > remaining
           { error: "invalid refund amount" }
@@ -422,6 +425,8 @@ class Api::V1::TicketsController < Api::BaseController
           refund = ticket_item.refunds.create!(requested_by: current_user, amount: amount,
             currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
             full_refund: amount == remaining, reason: params[:reason].presence)
+          application ||= ticket_item.refund_requests.where(status: %w[requested failed]).order(created_at: :desc).first if refund.full_refund
+          application&.update!(status: "processing", refund: refund, reviewed_at: Time.current, reviewed_by: current_user)
           ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
             reason: refund.reason, refund_id: refund.id, amount: refund.amount,
             currency: refund.currency, full_refund: refund.full_refund)
@@ -597,8 +602,8 @@ class Api::V1::TicketsController < Api::BaseController
     manager = event_manager?(params[:event_id])
     buyer_detail = ActiveModel::Type::Boolean.new.cast(params[:include_refunds])
     view = manager ? :order_detail : (buyer_detail ? :buyer_detail : :with_profile)
-    items = items.includes(:user, :ticket, refunds: :requested_by, ticketing_activities: :actor).order(created_at: :desc, id: :desc)
-    options = manager ? { viewer: current_user } : {}
+    items = items.includes(:user, :ticket, :event, :refund_requests, refunds: :requested_by, ticketing_activities: :actor).order(created_at: :desc, id: :desc)
+    options = {viewer: current_user}
     if params[:page].present? || params[:limit].present?
       render_collection(items, blueprint: TicketItemBlueprint, view: view, **options)
     else

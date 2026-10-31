@@ -23,6 +23,12 @@ class SiteNotificationTasks
     GroupInvite.where(group_id: managed, status: "requesting").where("expires_at IS NULL OR expires_at > ?", Time.current).includes(:group, :receiver).find_each do |invite|
       tasks << task("group_request", invite, "加入群组申请待审核", "#{invite.receiver&.nickname.presence || invite.receiver&.name.presence || 'Surf 成员'} 申请加入「#{invite.group.nickname.presence || invite.group.name}」", "group-detail", invite.group_id)
     end
+    refund_events = Event.where(owner_id: user.id).or(Event.where(id: EventRole.where(item_type: "User", item_id: user.id, role: "co_host").select(:event_id)))
+    refundable_items = TicketItem.where(event_id: refund_events.select(:id)).or(TicketItem.where(ticket_type: "group", group_id: user.memberships.where(role: "owner").select(:group_id)))
+    RefundRequest.where(status: "requested", ticket_item_id: refundable_items.select(:id)).includes(ticket_item: :event).find_each do |request|
+      event = request.ticket_item.event
+      tasks << task("refund_request", request, "退出与退款申请待处理", event.title, "orders", event.id) if event
+    end
     tasks.sort_by { |t| [t[:created_at], t[:id]] }
   end
 

@@ -158,6 +158,8 @@ Rails.application.routes.draw do
       end
 
       get "cities", to: "cities#index"
+      post "tickets/:ticket_item_id/refund_requests", to: "refund_requests#create"
+      post "refund_requests/:id/reject", to: "refund_requests#reject"
       resources :campaigns, only: %i[index show create update destroy]
 
       get "events/:event_id/discussion", to: "event_discussions#index"

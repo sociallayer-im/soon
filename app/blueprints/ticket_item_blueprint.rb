@@ -23,7 +23,16 @@ class TicketItemBlueprint < Blueprinter::Base
   # it was ordered, when the money landed, and every refund with its outcome.
   # A real audit table (design/PAYMENTS_PLAN.md §3.6) would additionally
   # capture expiry and cancellation reasons; this does not.
+  view :refund_application do
+    field :can_request_refund do |item, options|
+      RefundRequest.eligible?(item, options[:viewer]) && item.refund_requests.none? { |request| %w[requested processing].include?(request.status) }
+    end
+    field :refund_requests do |item, options|
+      item.refund_requests.sort_by(&:created_at).reverse.map { |request| JSON.parse(RefundRequestBlueprint.render(request, viewer: options[:viewer])) }
+    end
+  end
   view :buyer_detail do
+    include_view :refund_application
     include_view :with_profile
     fields :payment_provider, :paid_at
     association :ticket, blueprint: TicketRefBlueprint
@@ -33,6 +42,7 @@ class TicketItemBlueprint < Blueprinter::Base
   end
 
   view :order_detail do
+    include_view :refund_application
     field :can_refund do |item, options|
       !!options[:viewer] && TicketItemPolicy.new(options[:viewer], item).refund?
     end

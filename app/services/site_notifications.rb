@@ -29,7 +29,25 @@ class SiteNotifications
   def self.record(record, changes, actor: nil)
     status = changes["status"]
     case record
+    when RefundRequest
+      transition = changes["status"]
+      if changes.key?("id") || transition&.last == "rejected"
+        event = record.ticket_item.event
+        return unless event
+        rejected = record.status == "rejected"
+        ([record.user] + organizers(event).to_a).uniq(&:id).each do |receiver|
+          emit(receiver: receiver, item: record, action: "refund_application", title: rejected ? "退出与退款申请未通过" : "收到退出与退款申请",
+               body: "「#{event.title}」#{rejected ? '退款申请未通过：'+record.review_reason.to_s : '有退出与退款申请，请在订单中查看进度或处理。'}", actor: actor,
+               key: "refund_request:#{record.id}:#{record.status}:#{receiver.id}")
+        end
+      end
     when Participant
+      if record.status == "attending" && record.payment_status != "pending" && (changes.key?("id") || status&.last == "attending" || changes.dig("payment_status", 1) == "succeeded")
+        organizers(record.event).find_each do |receiver|
+          emit(receiver: receiver, item: record.event, action: "registration_received", title: "活动有新的报名", body: "#{record.user.nickname.presence || record.user.name.presence || 'Surf 成员'} 已报名「#{record.event.title}」。", actor: record.user,
+               key: "registration_confirmed:#{record.id}:#{(record.registered_at || record.created_at).iso8601(6)}:#{receiver.id}")
+        end
+      end
       if status && status.last == "pending" && status.first != "pending"
         event = record.event
         managers = User.where(id: event.group.memberships.where(role: %w[owner manager]).select(:user_id)).or(User.where(id: event.owner_id))
@@ -100,17 +118,36 @@ class SiteNotifications
       end
       return unless status && status.last == "succeeded" && record.amount.to_i.positive?
       return unless record.event
+      organizers(record.event).find_each do |receiver|
+        emit(receiver: receiver, item: record.event, action: "payment_received", title: "活动收到报名付款", body: "#{record.user.nickname.presence || record.user.name.presence || 'Surf 成员'} 已完成「#{record.event.title}」的付款。", actor: record.user,
+             key: "payment_received:#{record.id}:#{receiver.id}")
+      end
       emit(receiver: record.user, item: record.event, action: "payment_result", title: "活动订单支付成功",
            body: "「#{record.event.title}」订单已确认支付，请查看报名或审核状态。", actor: nil,
            key: "order:#{record.id}:#{record.updated_at.iso8601(6)}:#{status.last}")
     when Refund
-      return unless status && %w[succeeded failed].include?(status.last) && record.ticket_item.event
-      if status.last == "succeeded"
-        emit(receiver: record.ticket_item.user, item: record.ticket_item.event, action: "refund_result", title: "活动订单退款已处理", body: "「#{record.ticket_item.event.title}」的退款已确认，请查看订单与票券状态。", key: "refund:#{record.id}:succeeded")
-      else
-        emit(receiver: record.requested_by, item: record.ticket_item.event, action: "refund_failed", title: "退款处理失败", body: "退款未完成，请检查订单并重新处理。", key: "refund:#{record.id}:failed")
+      return unless status && %w[pending succeeded failed].include?(status.last) && record.ticket_item.event
+      request = record.refund_request
+      if request && %w[succeeded failed].include?(status.last)
+        request.update!(status: status.last)
+      end
+      event = record.ticket_item.event
+      ([record.ticket_item.user, record.requested_by] + organizers(event).to_a).compact.uniq(&:id).each do |receiver|
+        emit(receiver: receiver, item: record, action: {"failed"=>"refund_failed", "pending"=>"refund_submitted", "succeeded"=>"refund_result"}[status.last],
+             title: {"pending"=>"活动退款已提交", "succeeded"=>"活动订单退款已处理", "failed"=>"退款处理失败"}[status.last],
+             body: "「#{event.title}」#{ {'pending'=>'退款已提交支付平台，等待确认；确认成功后完成退出。','succeeded'=>'退款已确认，请查看订单与报名状态。','failed'=>'退款未完成，请查看订单并联系主办方。'}[status.last] }", actor: actor,
+             key: "refund:#{record.id}:#{status.last}:#{receiver.id}")
       end
     end
+  end
+
+  def self.organizers(event)
+    ids = event.group.memberships.where(role: %w[owner manager]).select(:user_id)
+    roles = event.event_roles.where(role: %w[co_host custom_host group_host])
+    host_groups = roles.where(item_type: "Group").select(:item_id)
+    User.where(id: ids).or(User.where(id: event.owner_id))
+        .or(User.where(id: roles.where(item_type: "User").select(:item_id)))
+        .or(User.where(id: Membership.where(group_id: host_groups, role: %w[owner manager]).select(:user_id))).distinct
   end
 
   def self.audience(event)
@@ -148,6 +185,12 @@ class SiteNotifications
       return {page: "event-detail", id: item.id} if EventPolicy.new(user, item).show?
     when Group
       return {page: "group-detail", id: item.id} if GroupPolicy.new(user, item).show?
+    when RefundRequest, Refund
+      item = item.ticket_item
+      event = item.event
+      if event && (item.user_id == user.id || organizers(event).exists?(id: user.id))
+        return {page: "orders", id: event.id, mine: item.user_id == user.id}
+      end
     when Campaign
       return {page: "campaign-detail", id: item.id} if CampaignPolicy.new(user, item).show?
     when Topic

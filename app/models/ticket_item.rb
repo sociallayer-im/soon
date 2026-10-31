@@ -8,6 +8,7 @@ class TicketItem < ApplicationRecord
   belongs_to :group, optional: true
   belongs_to :coupon, optional: true
 
+  has_many :refund_requests, dependent: :destroy
   has_many :refunds, dependent: :destroy
   # dependent: nil — an order's history outlives the order. Cascading the
   # delete would erase exactly the record a chargeback needs.

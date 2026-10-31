@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_083000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_085000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1248,6 +1248,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_083000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "refund_requests", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "reason"
+    t.string "refund_id"
+    t.text "review_reason"
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
+    t.string "status", default: "requested", null: false
+    t.string "ticket_item_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["refund_id"], name: "index_refund_requests_on_refund_id", unique: true
+    t.index ["reviewed_by_id"], name: "index_refund_requests_on_reviewed_by_id"
+    t.index ["status", "created_at", "id"], name: "index_refund_requests_on_status_and_created_at_and_id"
+    t.index ["ticket_item_id"], name: "index_refund_requests_on_ticket_item_id"
+    t.index ["ticket_item_id"], name: "index_refund_requests_one_open", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'processing'::character varying])::text[]))"
+    t.index ["user_id"], name: "index_refund_requests_on_user_id"
+  end
+
   create_table "refunds", id: :string, force: :cascade do |t|
     t.string "after_sale_request_id", comment: "the shop's after-sale case this refund settles, when there is one"
     t.integer "amount", null: false, comment: "minor units; equal to the item amount for a full refund"
@@ -1831,6 +1850,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_083000) do
   add_foreign_key "product_variants", "products"
   add_foreign_key "products", "groups"
   add_foreign_key "products", "shops"
+  add_foreign_key "refund_requests", "refunds"
+  add_foreign_key "refund_requests", "ticket_items"
+  add_foreign_key "refund_requests", "users"
+  add_foreign_key "refund_requests", "users", column: "reviewed_by_id"
   add_foreign_key "replies", "topics"
   add_foreign_key "replies", "users"
   add_foreign_key "shipment_items", "order_items"
