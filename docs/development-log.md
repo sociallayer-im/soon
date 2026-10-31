@@ -170,3 +170,11 @@ RegistrationReview在event→participant→ticket锁下检查活动与所选票�
 Added tickets/list?mine=true so authenticated WeChat accounts without public names can resume pending orders. The query always scopes to current_user and event_id, even if a conflicting profile_handle is supplied; old explicit-handle and organizer-list behavior is unchanged. Anonymous callers remain unauthorized. Frontend now uses mine=true only when the public handle is absent, skips fresh application-form requests for restored orders, and guards delayed save/payment/pass responses against session changes.
 
 Verification: full backend 1,429 tests / 5,337 assertions passed, including a nameless buyer, conflicting other-user handle, and anonymous request. Frontend 217 tests and build checks passed. No migration, production payment, SMS/mail, push or deployment in this follow-up.
+
+### 2026-10-31 · Atlas deployment of Mini Program review fixes
+
+- Pushed frontend main through d9cfefc and backend surf through d904c527bf87604fd37ebbb07056daf19750504e.
+- Atlas operation op_477069e7-4b7e-4e64-b15a-78f0e92c05aa succeeded, deployment dep_9a74ab29-6560-4e03-b988-91d2a2e61418. Runtime ready with one replica, route targets the new deployment and no active operation remains. Variable revision stayed 5; credentials were not changed.
+- The target budget remained 3072MB; the global Nomad node had exhausted memory reservations. Reused the user's existing Surf-only short-downtime authorization: after Atlas admitted the source deployment, scaled only retained old Surf job atlas-d2508fc7-1806-46f2-beaa-4c1ae539f3f5 app to zero to place its build runner. No unrelated service or infrastructure was stopped. Ruby gems, Bun dependencies and JavaScript assets were cached; source build completed successfully.
+- Public HTTPS version reports clean application commit d904c52 and deployment above. /up returns 200. Verified event pagination, detail capability booleans with omitted full participants, authorized summary shape, user-topic and membership pagination, and unified user agenda. Anonymous team registrations and mine-order requests return 401.
+- No schema migration was added in these review changes, no production test payment or message was sent. Mini Program still requires the user's upload/release and real-device acceptance; Web was not published.
