@@ -134,4 +134,17 @@ class Api::V1::MiniprogramReviewContractsTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "mine orders do not require a public handle and never reveal another buyers order" do
+    @viewer.update!(name:nil)
+    ticket=create_ticket(event:@event)
+    own=TicketItem.create!(event:@event,ticket:ticket,user:@viewer,ticket_type:"event",status:"pending",amount:10,currency:"cny")
+    other=TicketItem.create!(event:@event,ticket:ticket,user:@owner,ticket_type:"event",status:"pending",amount:10,currency:"cny")
+    get "/api/v1/tickets/list",params:{event_id:@event.id,mine:true,status:"pending",profile_handle:@owner.name},headers:auth_headers(@viewer)
+    assert_response :success
+    assert_equal [own.id],json_response.map { |row| row["id"] }
+    assert_not_includes json_response.map { |row| row["id"] },other.id
+    get "/api/v1/tickets/list",params:{event_id:@event.id,mine:true}
+    assert_response :unauthorized
+  end
+
 end

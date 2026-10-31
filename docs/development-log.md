@@ -164,3 +164,9 @@ RegistrationReview在event→participant→ticket锁下检查活动与所选票�
 - Venue availability replacement runs under a venue row lock and transaction, so an invalid later interval cannot erase existing availability. Frontend retains the saved venue ID and reports partial save status if the third API call fails; unchanged addresses reuse the existing Place.
 - Verification: full backend 1,428 tests / 5,332 assertions, zero failures/errors. Added 10 contract tests covering capabilities, email editor/judge separation, lifecycle, unified agenda, team admission, ranked/authorized candidates, profile post visibility, membership compatibility, summary authorization, and availability rollback. Frontend 202 tests, typecheck, and 39 browser-based WXSS layout tests passed. No production payments/messages were sent, and this revision has not been deployed.
 - Preserved product decisions: no backend mandatory phone constraint and no coupling ticket quantities to event capacity. Deploy these backend contracts before publishing the updated Mini Program; no Web publication is included.
+
+### 2026-10-31 · Handle-independent current-user order lookup
+
+Added tickets/list?mine=true so authenticated WeChat accounts without public names can resume pending orders. The query always scopes to current_user and event_id, even if a conflicting profile_handle is supplied; old explicit-handle and organizer-list behavior is unchanged. Anonymous callers remain unauthorized. Frontend now uses mine=true only when the public handle is absent, skips fresh application-form requests for restored orders, and guards delayed save/payment/pass responses against session changes.
+
+Verification: full backend 1,429 tests / 5,337 assertions passed, including a nameless buyer, conflicting other-user handle, and anonymous request. Frontend 217 tests and build checks passed. No migration, production payment, SMS/mail, push or deployment in this follow-up.

@@ -567,7 +567,9 @@ class Api::V1::TicketsController < Api::BaseController
 
   # GET /api/v1/tickets/list?profile_handle=&event_id=
   def list
-    if params[:profile_handle].present?
+    if ActiveModel::Type::Boolean.new.cast(params[:mine])
+      items = TicketItem.where(user_id: current_user.id, event_id: params[:event_id])
+    elsif params[:profile_handle].present?
       user = User.find_by(name: params[:profile_handle])
       return render_error("user not found") unless user
       return render_error("not authorized", status: :forbidden) unless user.id == current_user.id || event_manager?(params[:event_id])
