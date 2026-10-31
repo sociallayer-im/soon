@@ -210,7 +210,7 @@ class DiscoveryFeed
 
   def common_members(ids)
     return Set.new unless @user && ids.any? && context[:joined].any?
-    Membership.where(user_id: ids, group_id: context[:joined].to_a).distinct.pluck(:user_id).to_set
+    Membership.active.where(user_id: ids, group_id: context[:joined].to_a).distinct.pluck(:user_id).to_set
   end
 
   def upcoming

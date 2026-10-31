@@ -24,11 +24,11 @@ class ApplicationPolicy
   # blueprint fields (can_edit, can_manage) whose clients are typed boolean —
   # a null there is not the same value as false.
   def group_admin?(group)
-    !!user&.memberships&.exists?(group: group, role: %w[manager owner])
+    !!user&.memberships&.active&.exists?(group: group, role: %w[manager owner])
   end
 
   def group_member?(group)
-    !!user&.memberships&.exists?(group: group)
+    !!user&.memberships&.active&.exists?(group: group)
   end
 
   class Scope

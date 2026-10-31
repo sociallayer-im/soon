@@ -1,5 +1,9 @@
 class User < ApplicationRecord
   scope :publicly_discoverable, -> { where(active: true).where("COALESCE(users.data->>'visibility', 'public') = 'public'") }
+  # Private notifications cannot retain foreign keys to a removed identity.
+  # Merging repoints both associations first; explicit account deletion removes them.
+  has_many :received_activities, class_name: "Activity", foreign_key: :receiver_id, dependent: :delete_all
+  has_many :initiated_activities, class_name: "Activity", foreign_key: :initiator_id, dependent: :delete_all
   has_many :campaigns, foreign_key: :owner_id, dependent: :destroy
   has_many :memberships, dependent: :delete_all
   has_many :follows, dependent: :destroy

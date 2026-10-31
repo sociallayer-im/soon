@@ -124,7 +124,7 @@ class Group < ApplicationRecord
   # many people the broadcast will reach) and GroupBroadcastMailJob (which
   # actually sends it) can never disagree about who that is.
   def member_emails
-    memberships.where(active: true).joins(:user)
+    memberships.active.joins(:user)
                .where.not(users: { email: [ nil, "" ] })
                .distinct.pluck(Arel.sql("users.email"))
   end
@@ -134,7 +134,7 @@ class Group < ApplicationRecord
   # to your group". Same shape and reasoning as member_emails: one definition
   # so the job that sends and anything that counts recipients can't disagree.
   def admin_notification_emails
-    memberships.where(active: true, role: %w[owner manager], admin_notification: true)
+    memberships.active.where(role: %w[owner manager], admin_notification: true)
                .joins(:user)
                .where.not(users: { email: [ nil, "" ] })
                .distinct.pluck(Arel.sql("users.email"))
@@ -150,7 +150,7 @@ class Group < ApplicationRecord
   def add_member(user_id, role)
     membership = memberships.find_by(user_id: user_id)
     if membership
-      membership.update!(role: role, expires_at: nil)
+      membership.update!(role: role, expires_at: nil, active: true)
     else
       membership = memberships.create!(user_id: user_id, role: role, active: true)
     end

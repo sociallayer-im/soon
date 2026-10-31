@@ -49,9 +49,22 @@ class ReviewNotifications
       order = record.ticket_item
       review.merge!(amount: order.amount - order.refunds.where(status: "succeeded").sum(:amount), currency: order.currency, application_reason: record.reason)
     end
-    SiteNotifications.emit(receiver: applicant, item: record, actor: applicant, allow_self: true,
+    receipt = SiteNotifications.emit(receiver: applicant, item: record, actor: applicant, allow_self: true,
       action: "review_submitted", title: "#{label}已提交审核", body: "「#{title(record)}」已提交，等待管理员处理。点击查看审核详情。", key: key,
       payload: {review: review})
+    if record.is_a?(Campaign) || record.is_a?(Group) || record.is_a?(Event)
+      reviewers = if record.is_a?(Event)
+        User.where(id: record.group.memberships.active.where(role: %w[owner manager]).select(:user_id))
+      else
+        User.where("admin = TRUE OR ? = ANY(permissions)", "admin")
+      end
+      reviewers.where(active: true).find_each do |reviewer|
+        SiteNotifications.emit(receiver: reviewer, item: record, actor: applicant,
+          action: "review_requested", title: "#{label}等待审核", body: "「#{title(record)}」已提交，请查看并处理。",
+          key: "review-requested:#{receipt.id}:#{reviewer.id}")
+      end
+    end
+    receipt
   end
 
   def self.receipt_id(record, receiver)

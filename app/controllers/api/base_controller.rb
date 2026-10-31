@@ -116,9 +116,9 @@ class Api::BaseController < ActionController::API
   # partial index. Remove once legacy tokens have aged out.
   def user_from_payload(payload)
     if (id = payload["user_id"]).present?
-      User.find_by(id: id)
+      User.find_by(id: id, active: true)
     elsif (legacy_id = payload["id"]).present?
-      User.find_by(ref_id: legacy_id.to_s)
+      User.find_by(ref_id: legacy_id.to_s, active: true)
     end
   end
 

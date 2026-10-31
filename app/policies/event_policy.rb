@@ -8,7 +8,7 @@ class EventPolicy < ApplicationPolicy
   # membership gate. It used to be, back when this value was called "private";
   # the rename to "unlisted" wasn't matched here until 2026-08-24.
   def show?
-    return owner?(record) || group_admin?(record.group) if %w[draft archived].include?(record.status)
+    return update? || user&.platform_admin? if %w[draft pending archived].include?(record.status)
     true
   end
 

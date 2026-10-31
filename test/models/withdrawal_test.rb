@@ -39,11 +39,11 @@ class WithdrawalTest < ActiveSupport::TestCase
     assert_equal 5_760, Withdrawal.available_balance(@group)
   end
 
-  test "a pending refund does not reduce the balance yet" do
+  test "a pending refund reserves its balance until the provider resolves it" do
     item = build_item(status: "partially_refunded", amount: 10_000)
     Refund.create!(ticket_item: item, requested_by: @owner, amount: 4_000, status: "pending")
 
-    assert_equal 9_600, Withdrawal.available_balance(@group)
+    assert_equal 5_760, Withdrawal.available_balance(@group)
   end
 
   test "fully refunded orders contribute nothing" do

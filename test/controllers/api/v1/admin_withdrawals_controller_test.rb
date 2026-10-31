@@ -7,6 +7,8 @@ class Api::V1::AdminWithdrawalsControllerTest < ActionDispatch::IntegrationTest
     @admin = create_user(admin: true)
     @owner = create_user
     @group = create_group(owner: @owner)
+    event = create_event(group: @group, owner: @owner)
+    TicketItem.create!(ticket: create_ticket(event: event), event: event, user: create_user, ticket_type: "event", status: "succeeded", amount: 100_000, currency: "cny", payment_provider: "wechat")
     @withdrawal = Withdrawal.create!(group: @group, user: @owner, amount: 9_600, currency: "cny",
       status: "pending", bank_name: "Test Bank", bank_account_number: "1234", bank_account_name: "Owner Name")
   end
@@ -141,9 +143,9 @@ class Api::V1::AdminWithdrawalsControllerTest < ActionDispatch::IntegrationTest
   test "inactive administrators cannot view bank details or settle requests" do
     @admin.update!(active: false)
     get "/api/v1/admin/withdrawals/#{@withdrawal.id}", headers: auth_headers(@admin)
-    assert_response :forbidden
+    assert_response :unauthorized
     patch "/api/v1/admin/withdrawals/#{@withdrawal.id}", params: {status: "completed"}, headers: auth_headers(@admin)
-    assert_response :forbidden
+    assert_response :unauthorized
     assert_equal "pending", @withdrawal.reload.status
   end
 

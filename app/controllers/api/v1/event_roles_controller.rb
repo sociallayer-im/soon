@@ -3,6 +3,7 @@ class Api::V1::EventRolesController < Api::BaseController
 
   # GET /api/v1/events/:event_id/event_roles
   def index
+    authorize @event, :show?
     render json: EventRoleBlueprint.render(@event.event_roles)
   end
 
@@ -13,11 +14,10 @@ class Api::V1::EventRolesController < Api::BaseController
     return render_error("item_type must be User or Group") unless valid_item_type?
 
     role = @event.event_roles.new(event_role_params)
-    if role.save
-      render json: EventRoleBlueprint.render(role), status: :created
-    else
-      render_error(role.errors.full_messages.join(", "))
-    end
+    change_roles { role.save! }
+    render json: EventRoleBlueprint.render(role), status: :created
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # PATCH /api/v1/events/:event_id/event_roles/:id
@@ -27,11 +27,10 @@ class Api::V1::EventRolesController < Api::BaseController
     return render_error("item_type must be User or Group") unless valid_item_type?
 
     role = @event.event_roles.find(params[:id])
-    if role.update(event_role_params)
-      render json: EventRoleBlueprint.render(role)
-    else
-      render_error(role.errors.full_messages.join(", "))
-    end
+    change_roles { role.update!(event_role_params) }
+    render json: EventRoleBlueprint.render(role)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -42,7 +41,7 @@ class Api::V1::EventRolesController < Api::BaseController
     return if performed?
 
     role = @event.event_roles.find(params[:id])
-    role.destroy
+    change_roles { role.destroy! }
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_not_found
@@ -57,10 +56,16 @@ class Api::V1::EventRolesController < Api::BaseController
   end
 
   def authorize_event_manager!
-    is_manager = @event.owner_id == current_user.id ||
-                 @event.event_roles.exists?(item: current_user) ||
-                 current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
-    render json: { error: "Forbidden" }, status: :forbidden unless is_manager
+    authorize @event, :update?
+  end
+
+  def change_roles
+    @event.with_lock do
+      authorize @event, :update?
+      before = SiteNotifications.role_links(@event)
+      yield
+      SiteNotifications.roles_changed(@event, before, actor: current_user)
+    end
   end
 
   def event_role_params

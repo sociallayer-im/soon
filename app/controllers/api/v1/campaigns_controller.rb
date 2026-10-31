@@ -8,7 +8,7 @@ class Api::V1::CampaignsController < Api::BaseController
     scope = Campaign.publicly_visible
     if ActiveModel::Type::Boolean.new.cast(params[:mine])
       return render_error("Unauthorized", status: :unauthorized) unless current_user
-      managed = Membership.where(user_id: current_user.id, role: %w[owner manager]).select(:group_id)
+      managed = Membership.active.where(user_id: current_user.id, role: %w[owner manager]).select(:group_id)
       scope = Campaign.where(owner_id: current_user.id).or(Campaign.where(group_id: managed))
     end
     scope = scope.where(group_id: Group.resolve!(params[:group_id]).id) if params[:group_id].present?

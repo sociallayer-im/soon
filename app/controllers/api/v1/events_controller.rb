@@ -77,6 +77,8 @@ class Api::V1::EventsController < Api::BaseController
     attrs = event_params.to_h.except("group_id")
     gate_pinned!(attrs, @event.group)
     gate_pending_status!(attrs, @event)
+    # Publishing a draft/archived event is a submission, regardless of endpoint.
+    gate_approval!(attrs, @event.group) if attrs["status"] == "published" && @event.status != "published"
     normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
     @event.assign_attributes(attrs)
     if (err = reference_error(@event))
@@ -113,7 +115,7 @@ class Api::V1::EventsController < Api::BaseController
   # GET /api/v1/events/pending_approval — events awaiting review in groups the
   # caller manages (the dashboard inbox).
   def pending_approval
-    managed = current_user.memberships.where(role: %w[manager owner]).select(:group_id)
+    managed = current_user.memberships.active.where(role: %w[manager owner]).select(:group_id)
     scope = Event.includes(:group, :place, :venue, :owner, :track)
                  .where(status: "pending", group_id: managed).order(:start_time)
     render_collection scope, blueprint: EventBlueprint
@@ -227,7 +229,7 @@ class Api::V1::EventsController < Api::BaseController
     options = personalization_options
     options[:manage_participants] = EventPolicy.new(current_user, @event).update?
     options[:can_manage_orders] = current_user && (@event.owner_id == current_user.id ||
-      current_user.memberships.exists?(group_id: @event.group_id, role: %w[owner manager]) ||
+      current_user.memberships.active.exists?(group_id: @event.group_id, role: %w[owner manager]) ||
       @event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
     options[:can_edit] = options[:manage_participants]
     options[:can_register] = @event.registration_open? && (!current_user || EventPolicy.new(current_user, @event).join?)
@@ -280,7 +282,7 @@ class Api::V1::EventsController < Api::BaseController
   # asking anything of a reviewer; it becomes news if and when it's published.
   def notify_group_admins_of_submission(event)
     return if event.group_id.blank? || event.status == "draft"
-    return if current_user.memberships.exists?(group_id: event.group_id, role: %w[manager owner])
+    return if current_user.memberships.active.exists?(group_id: event.group_id, role: %w[manager owner])
 
     EventSubmittedMailJob.perform_later(event_id: event.id)
   end

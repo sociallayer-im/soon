@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_093000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -28,7 +28,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_093000) do
     t.index ["created_at"], name: "index_activities_on_created_at"
     t.index ["initiator_id"], name: "index_activities_on_initiator_id"
     t.index ["item_type", "item_id"], name: "index_activities_on_item_type_and_item_id"
+    t.index ["receiver_id", "created_at", "id"], name: "idx_activities_receiver_timeline"
     t.index ["receiver_id", "notification_key"], name: "index_activities_notification_dedup", unique: true, where: "(notification_key IS NOT NULL)"
+    t.index ["receiver_id"], name: "idx_activities_receiver_unread", where: "(has_read = false)"
     t.index ["receiver_id"], name: "index_activities_on_receiver_id"
   end
 
@@ -722,6 +724,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_093000) do
     t.string "status", default: "sending", null: false, comment: "sending | requesting | accepted | cancelled | revoked"
     t.string "ticket_id"
     t.datetime "updated_at", null: false
+    t.index ["group_id", "status", "created_at", "id"], name: "idx_group_invites_review_tasks"
     t.index ["group_id"], name: "index_group_invites_on_group_id"
     t.index ["receiver_id"], name: "index_group_invites_on_receiver_id"
     t.index ["sender_id"], name: "index_group_invites_on_sender_id"
@@ -1738,6 +1741,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_093000) do
     t.string "user_id", null: false
     t.index ["group_id"], name: "index_withdrawals_on_group_id"
     t.index ["processed_by_id"], name: "index_withdrawals_on_processed_by_id"
+    t.index ["status", "created_at", "id"], name: "idx_withdrawals_pending_tasks"
     t.index ["user_id", "status"], name: "index_withdrawals_on_user_id_and_status"
     t.index ["user_id"], name: "index_withdrawals_on_user_id"
   end

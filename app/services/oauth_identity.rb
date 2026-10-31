@@ -19,8 +19,8 @@ class OauthIdentity
     if group_id
       # Exact indexed lookup, not UserInfo's truncated membership list. Both
       # the boolean and temporal validity matter; neither implies the other.
-      membership = user.memberships.where(active: true, group_id: group_id)
-        .active.joins(:group).where(groups: {active: true, review_status: "approved"})
+      membership = user.memberships.active.where(group_id: group_id)
+        .joins(:group).where(groups: {active: true, review_status: "approved"})
         .where(role: %w[owner manager member]).first
       result[:group] = {
         id: group_id, member: membership.present?, role: membership&.role,

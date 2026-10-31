@@ -26,13 +26,17 @@ class Api::V1::AdminWithdrawalsController < Api::BaseController
     end
     # Serialize terminal status changes: two administrators must not settle
     # and reject the same request based on the same stale pending status.
-    outcome = @withdrawal.with_lock do
-      if @withdrawal.status != "pending"
-        { error: "only a pending withdrawal can be settled or rejected" }
-      else
-        attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
-        attrs[:note] = params[:note] if params[:note].present?
-        @withdrawal.update(attrs) ? { ok: true } : { error: @withdrawal.errors.full_messages.join(", ") }
+    outcome = @withdrawal.group.with_lock do
+      @withdrawal.with_lock do
+        if @withdrawal.status != "pending"
+          { error: "only a pending withdrawal can be settled or rejected" }
+        elsif params[:status] == "completed" && Withdrawal.wechat_net_amount(@withdrawal.group) * Withdrawal::NET_NUM / Withdrawal::NET_DEN < Withdrawal.withdrawn_amount(@withdrawal.group)
+          { error: "可结算余额不足，存在退款或余额变更，请重新核对并拒绝原申请后重新申请" }
+        else
+          attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
+          attrs[:note] = params[:note] if params[:note].present?
+          @withdrawal.update(attrs) ? { ok: true } : { error: @withdrawal.errors.full_messages.join(", ") }
+        end
       end
     end
     if outcome[:ok]

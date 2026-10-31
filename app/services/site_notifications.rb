@@ -27,6 +27,11 @@ class SiteNotifications
   end
 
   def self.record(record, changes, actor: nil)
+    applicants = if record.is_a?(Campaign) || record.is_a?(Group) || record.is_a?(Event)
+      User.where(id: ReviewNotifications.receipts(record).where("payload -> 'review' ->> 'status' = ?", "pending").select(:receiver_id)).to_a
+    else
+      []
+    end
     ReviewNotifications.changed(record, changes, actor: actor)
     status = changes["status"]
     case record
@@ -58,7 +63,7 @@ class SiteNotifications
       end
       if status && status.last == "pending" && status.first != "pending"
         event = record.event
-        managers = User.where(id: event.group.memberships.where(role: %w[owner manager]).select(:user_id)).or(User.where(id: event.owner_id))
+        managers = User.where(id: event.group.memberships.active.where(role: %w[owner manager]).select(:user_id)).or(User.where(id: event.owner_id))
         role_ids = event.event_roles.where(role: EventPolicy::EDITOR_ROLES, item_type: "User").pluck(:item_id)
         role_emails = event.event_roles.where(role: EventPolicy::EDITOR_ROLES).where.not(email: [nil, ""]).pluck(:email)
         managers = managers.or(User.where(id: role_ids)).or(User.where(email: role_emails))
@@ -74,7 +79,9 @@ class SiteNotifications
     when Event
       return unless status || (changes.keys & %w[start_time end_time timezone venue_id place_id location meeting_url]).any?
       if status == ["pending", "published"]
-        emit(receiver: record.owner, item: record, action: "event_approved", title: "活动已通过发布审核", body: "「#{record.title}」已发布。", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, record.owner)})
+        ([record.owner] + applicants).uniq(&:id).each do |receiver|
+        emit(receiver: receiver, item: record, action: "event_approved", title: "活动已通过发布审核", body: "「#{record.title}」已发布。", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, receiver)})
+        end
       end
       return unless record.status.in?(%w[published cancelled]) && !changes.key?("id")
       cancelled = status && status.last == "cancelled"
@@ -88,14 +95,16 @@ class SiteNotifications
     when Campaign
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
-      emit(receiver: record.owner, item: record, action: "campaign_review_result", title: decision.last == "approved" ? "专题审核已通过" : "专题审核未通过",
-           body: "「#{record.title}」#{decision.last == 'approved' ? '已通过审核并公开展示。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, record.owner)})
+      ([record.owner] + applicants).uniq(&:id).each do |receiver|
+        emit(receiver: receiver, item: record, action: "campaign_review_result", title: decision.last == "approved" ? "专题审核已通过" : "专题审核未通过",
+           body: "「#{record.title}」#{decision.last == 'approved' ? '已通过审核并公开展示。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, receiver)})
+      end
     when Group
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
-      record.memberships.where(role: "owner").includes(:user).each do |membership|
-        emit(receiver: membership.user, item: record, action: "group_review_result", title: decision.last == "approved" ? "群组审核已通过" : "群组审核未通过",
-             body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, membership.user)})
+      (record.memberships.active.where(role: "owner").includes(:user).map(&:user) + applicants).uniq(&:id).each do |receiver|
+        emit(receiver: receiver, item: record, action: "group_review_result", title: decision.last == "approved" ? "群组审核已通过" : "群组审核未通过",
+             body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, receiver)})
       end
     when Reply
       return unless changes.key?("id") && record.deleted_at.nil? && record.flagged_at.nil?
@@ -150,16 +159,16 @@ class SiteNotifications
   end
 
   def self.organizers(event)
-    ids = event.group.memberships.where(role: %w[owner manager]).select(:user_id)
+    ids = event.group.memberships.active.where(role: %w[owner manager]).select(:user_id)
     roles = event.event_roles.where(role: %w[co_host custom_host group_host])
     host_groups = roles.where(item_type: "Group").select(:item_id)
     User.where(id: ids).or(User.where(id: event.owner_id))
         .or(User.where(id: roles.where(item_type: "User").select(:item_id)))
-        .or(User.where(id: Membership.where(group_id: host_groups, role: %w[owner manager]).select(:user_id))).distinct
+        .or(User.where(id: Membership.active.where(group_id: host_groups, role: %w[owner manager]).select(:user_id))).distinct
   end
 
   def self.audience(event)
-    ids = event.participants.where(status: %w[attending pending]).pluck(:user_id)
+    ids = event.participants.where(status: %w[attending pending awaiting_payment]).pluck(:user_id)
     ids << event.owner_id
     ids.concat(event.event_roles.where(item_type: "User").where.not(item_id: nil).pluck(:item_id))
     emails = event.event_roles.where(item_type: "User").where.not(email: [nil, ""]).pluck(:email)

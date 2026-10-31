@@ -12,6 +12,6 @@ class TicketItemPolicy < ApplicationPolicy
       return true if event.event_roles.exists?(item_type: "User", item_id: user.id, role: "co_host")
     end
     record.ticket_type == "group" && record.group.present? &&
-      record.group.memberships.exists?(user_id: user.id, role: "owner")
+      record.group.memberships.active.exists?(user_id: user.id, role: "owner")
   end
 end

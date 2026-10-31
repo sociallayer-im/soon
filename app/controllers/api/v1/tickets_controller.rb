@@ -111,7 +111,7 @@ class Api::V1::TicketsController < Api::BaseController
         return render_error("已有进行中的报名，请先完成支付或撤回申请后重新选择票种")
       end
       was_seated = participant&.seated?
-      is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
+      is_manager = current_user.memberships.active.exists?(group: @event.group, role: %w[manager owner])
       # Approval belongs to the person/event: an already confirmed attendee
       # buying an additional ticket keeps that confirmed registration.
       needs_approval = !is_manager && !was_seated && !(participant&.status == "awaiting_payment" && participant.reviewed_at) &&
@@ -405,32 +405,34 @@ class Api::V1::TicketsController < Api::BaseController
     # Reserve the refund balance under the order lock; never hold a database
     # lock across the provider HTTP call. One pending refund at a time also
     # prevents a later partial from releasing the seat before an earlier one settles.
-    outcome = ticket_item.with_lock do
-      application = params[:refund_request_id].present? ? ticket_item.refund_requests.find(params[:refund_request_id]) : nil
-      if application && application.status != "requested"
-        {error: "该退款申请已处理，请刷新订单"}
-      elsif !%w[succeeded partially_refunded].include?(ticket_item.status)
-        { error: "ticket_item is not refundable (status: #{ticket_item.status})" }
-      elsif ticket_item.txhash.blank?
-        { error: "order has no captured payment reference" }
-      elsif ticket_item.refunds.where(status: "pending").exists?
-        { error: "a refund for this order is already in progress" }
-      else
-        remaining = ticket_item.amount.to_i - ticket_item.refunds.where(status: "succeeded").sum(:amount)
-        raw = application ? remaining.to_s : params[:amount].presence || remaining.to_s
-        amount = raw.to_s.match?(/\A[0-9]+\z/) ? raw.to_i : 0
-        if !amount.positive? || amount > remaining
-          { error: "invalid refund amount" }
+    outcome = (ticket_item.group || ticket_item.event.group).with_lock do
+      ticket_item.with_lock do
+        application = params[:refund_request_id].present? ? ticket_item.refund_requests.find(params[:refund_request_id]) : nil
+        if application && application.status != "requested"
+          {error: "该退款申请已处理，请刷新订单"}
+        elsif !%w[succeeded partially_refunded].include?(ticket_item.status)
+          { error: "ticket_item is not refundable (status: #{ticket_item.status})" }
+        elsif ticket_item.txhash.blank?
+          { error: "order has no captured payment reference" }
+        elsif ticket_item.refunds.where(status: "pending").exists?
+          { error: "a refund for this order is already in progress" }
         else
-          refund = ticket_item.refunds.create!(requested_by: current_user, amount: amount,
-            currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
-            full_refund: amount == remaining, reason: params[:reason].presence)
-          application ||= ticket_item.refund_requests.where(status: %w[requested failed]).order(created_at: :desc).first if refund.full_refund
-          application&.update!(status: "processing", refund: refund, reviewed_at: Time.current, reviewed_by: current_user)
-          ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
-            reason: refund.reason, refund_id: refund.id, amount: refund.amount,
-            currency: refund.currency, full_refund: refund.full_refund)
-          { refund: refund }
+          remaining = ticket_item.amount.to_i - ticket_item.refunds.where(status: "succeeded").sum(:amount)
+          raw = application ? remaining.to_s : params[:amount].presence || remaining.to_s
+          amount = raw.to_s.match?(/\A[0-9]+\z/) ? raw.to_i : 0
+          if !amount.positive? || amount > remaining
+            { error: "invalid refund amount" }
+          else
+            refund = ticket_item.refunds.create!(requested_by: current_user, amount: amount,
+              currency: ticket_item.currency || (ticket_item.payment_provider == "wechat" ? "cny" : "usd"),
+              full_refund: amount == remaining, reason: params[:reason].presence)
+            application ||= ticket_item.refund_requests.where(status: %w[requested failed]).order(created_at: :desc).first if refund.full_refund
+            application&.update!(status: "processing", refund: refund, reviewed_at: Time.current, reviewed_by: current_user)
+            ticket_item.record_activity!("refund_requested", source: "api", actor: current_user,
+              reason: refund.reason, refund_id: refund.id, amount: refund.amount,
+              currency: refund.currency, full_refund: refund.full_refund)
+            { refund: refund }
+          end
         end
       end
     end
@@ -687,7 +689,7 @@ class Api::V1::TicketsController < Api::BaseController
 
   def event_manager?(event_id)
     event = Event.find_by(id: event_id)
-    event && (event.owner_id == current_user.id || current_user.memberships.exists?(group: event.group, role: %w[manager owner]) || event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
+    event && (event.owner_id == current_user.id || current_user.memberships.active.exists?(group: event.group, role: %w[manager owner]) || event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
   end
 
   # `ticket_item_id` is the direct form; the chain/product_id/item_id triple is
@@ -929,7 +931,7 @@ class Api::V1::TicketsController < Api::BaseController
   def wechat_organizer_rejected?(event)
     return false unless Array(ticket_params[:payment_methods_attributes]).any? { |pm| pm[:chain] == "wechat" }
 
-    group_role = ->(user_id) { event.group.memberships.exists?(user_id: user_id, role: %w[manager owner]) }
+    group_role = ->(user_id) { event.group.memberships.active.exists?(user_id: user_id, role: %w[manager owner]) }
 
     unless group_role.call(current_user.id)
       render_error("only a group manager or owner may set up a WeChat-paid ticket")

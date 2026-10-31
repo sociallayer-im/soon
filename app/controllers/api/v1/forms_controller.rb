@@ -143,6 +143,6 @@ class Api::V1::FormsController < Api::BaseController
   end
 
   def group_admin_of?(group)
-    current_user.memberships.exists?(group: group, role: %w[manager owner])
+    current_user.memberships.active.exists?(group: group, role: %w[manager owner])
   end
 end

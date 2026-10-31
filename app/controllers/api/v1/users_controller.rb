@@ -17,7 +17,7 @@ class Api::V1::UsersController < Api::BaseController
     followed = Follow.where(user_id: current_user.id, target_type: "User", status: "active").select("target_id AS user_id")
     group = Group.find_by(id: params[:group_id]) if params[:group_id].present?
     members = if group && GroupPolicy.new(current_user, group).members?
-      group.memberships.where(active: true).where.not(role: %w[pending declined]).select(:user_id)
+      group.memberships.active.where(active: true).where.not(role: %w[pending declined]).select(:user_id)
     else
       Membership.none.select(:user_id)
     end

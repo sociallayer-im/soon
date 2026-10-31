@@ -28,7 +28,7 @@ class Api::V1::GroupsController < Api::BaseController
       return render_error("请先登录", status: :unauthorized) unless current_user
       return render_error("invalid purpose") unless %w[event post campaign].include?(params[:purpose])
       if params[:purpose] == "campaign"
-        scope = scope.where(id: current_user.memberships.where(role: %w[owner manager]).select(:group_id)) unless current_user.platform_admin?
+        scope = scope.where(id: current_user.memberships.active.where(role: %w[owner manager]).select(:group_id)) unless current_user.platform_admin?
         return render_collection scope, blueprint: GroupBlueprint, view: :card
       end
       allowed = scope.select do |group|
@@ -52,10 +52,12 @@ class Api::V1::GroupsController < Api::BaseController
     # soon as there is a current_user, so a signed-in response is never stored.
     authenticate_optional!
     cache_when_anonymous!(max_age: 30)
-    group = Group.with_detail_associations.resolve!(params[:id])
+    compact = ActiveModel::Type::Boolean.new.cast(params[:compact])
+    scope = compact ? Group.includes(:parent, :children, tracks: :group) : Group.with_detail_associations
+    group = scope.resolve!(params[:id])
     return render_not_found unless group.review_status == "approved" || GroupPolicy.new(current_user, group).manage?
     render json: GroupBlueprint.render(group, view: :detail,
-                                       member_group_ids: member_group_ids, review_history: GroupPolicy.new(current_user,group).manage?)
+                                       compact: compact, viewer: current_user, member_group_ids: member_group_ids, review_history: GroupPolicy.new(current_user,group).manage?)
   end
 
   # POST /api/v1/groups/:id/freeze

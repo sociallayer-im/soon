@@ -85,7 +85,7 @@ class Event < ApplicationRecord
   # as a draft), plus anything they own or manage (group admin/owner). Callers
   # still scope by group membership on top of this.
   scope :visible_to, ->(user) {
-    managed = Membership.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
+    managed = Membership.active.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
     # NULL-safe on purpose: `status` has a default but no NOT NULL constraint,
     # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
     # which would silently drop every legacy row that has none.

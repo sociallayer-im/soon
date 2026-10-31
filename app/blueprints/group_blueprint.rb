@@ -45,8 +45,19 @@ class GroupBlueprint < Blueprinter::Base
     association :tracks, blueprint: TrackBlueprint
     # Source is active_venues (archived: false) but the key stays `venues` —
     # removed venues are soft-deleted and must not appear in any list.
-    association :active_venues, blueprint: VenueBlueprint, name: :venues
-    association :memberships, blueprint: MembershipBlueprint
+    field :venues do |group, options|
+      VenueBlueprint.render_as_hash(options[:compact] ? group.active_venues.includes(:place).order(:id).limit(5) : group.active_venues)
+    end
+    field :venue_next_page, if: ->(_field, _group, options) { options[:compact] } do |group|
+      group.active_venues.count > 5 ? 2 : nil
+    end
+    field :memberships do |group, options|
+      rows = options[:compact] ? group.memberships.active.where(user_id: options[:viewer]&.id).includes(user: :teams).to_a : group.memberships
+      MembershipBlueprint.render_as_hash(rows, member_group_ids: options[:member_group_ids])
+    end
+    field :member_preview, if: ->(_field, _group, options) { options[:compact] } do |group, options|
+      MembershipBlueprint.render_as_hash(group.memberships.active.includes(user: :teams).order(created_at: :asc, id: :asc).limit(5), member_group_ids: options[:member_group_ids])
+    end
   end
 
   view :extended do

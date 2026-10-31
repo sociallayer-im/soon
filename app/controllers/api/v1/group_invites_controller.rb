@@ -49,7 +49,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     end
     render json: { users: users.order(:created_at).limit(10).map { |u|
       { id: u.id, name: u.name, nickname: u.nickname, image_url: u.image_url,
-        already_member: @group.memberships.exists?(user_id: u.id) }
+        already_member: @group.memberships.active.exists?(user_id: u.id) }
     } }
   end
 
@@ -119,7 +119,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
   #
   # Self-service join request.
   def request_invite
-    if @group.memberships.exists?(user_id: current_user.id)
+    if @group.memberships.active.exists?(user_id: current_user.id)
       return render_error("already a member")
     end
     pending = GroupInvite.find_by(group: @group, receiver_id: current_user.id, status: "requesting")
@@ -156,7 +156,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     return render_error("invalid code") unless invite.status == "sending"
     return render_error("code expired") if invite.expired?
 
-    existing = @group.memberships.exists?(user_id: current_user.id)
+    existing = @group.memberships.active.exists?(user_id: current_user.id)
     membership = @group.memberships.find_by(user_id: current_user.id)
     unless membership && GroupInvite::ROLE_RANK.fetch(membership.role) >= GroupInvite::ROLE_RANK.fetch(invite.role)
       @group.add_member(current_user.id, invite.role)
@@ -194,7 +194,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     end
 
     if user && ActiveModel::Type::Boolean.new.cast(params[:require_confirmation])
-      return { address: address, result: "already_member" } if @group.memberships.exists?(user_id: user.id)
+      return { address: address, result: "already_member" } if @group.memberships.active.exists?(user_id: user.id)
       invite = @group.group_invites.where(receiver_id: user.id, status: "sending").where("expires_at IS NULL OR expires_at > ?", Time.current).first
       unless invite
         invite = GroupInvite.create!(group: @group, sender: current_user, receiver: user,

@@ -65,7 +65,7 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     @event.with_lock do
       return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
-      is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
+      is_manager = current_user.memberships.active.exists?(group: @event.group, role: %w[manager owner])
       status = "attending"
       status = "pending" if @event.require_approval && !is_manager
 
