@@ -5,6 +5,9 @@ class SiteNotificationTasks
     tasks = []
     managed = user.memberships.where(role: %w[owner manager]).select(:group_id)
     if user.platform_admin?
+      Campaign.where(status: "published", review_status: "pending").find_each do |campaign|
+        tasks << task("campaign_review", campaign, "专题等待审核", campaign.title, "campaign-detail", campaign.id)
+      end
       Group.where(review_status: "pending").find_each do |group|
         tasks << task("group_review", group, "群组等待审核", group.nickname.presence || group.name, "group-detail", group.id)
       end

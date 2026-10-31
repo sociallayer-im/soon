@@ -1,9 +1,12 @@
 class CampaignBlueprint < Blueprinter::Base
   identifier :id
   fields :group_id, :owner_id, :title, :kicker, :introduction, :media,
-    :resource_links, :status, :created_at, :updated_at
+    :resource_links, :status, :review_status, :created_at, :updated_at
   field :cover_url do |campaign|
     campaign.cover_url.presence || campaign.media.first&.fetch("url", nil)
+  end
+  field :review_reason do |campaign, options|
+    campaign.review_reason if CampaignPolicy.new(options[:current_user], campaign).update?
   end
   field :can_edit do |campaign, options|
     CampaignPolicy.new(options[:current_user], campaign).update?

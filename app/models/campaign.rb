@@ -1,4 +1,17 @@
 class Campaign < ApplicationRecord
+  include SiteNotifiable
+  has_many :campaign_review_logs, dependent: :destroy
+  validates :review_status, inclusion: {in: %w[pending approved rejected]}
+  scope :publicly_visible, -> { where(status: "published", review_status: "approved", group_id: Group.where(active: true, review_status: "approved").select(:id)) }
+
+  def public_submission_errors
+    errors = []
+    errors << "专题介绍不能为空" if introduction.blank?
+    errors << "专题至少需要关联一个公开活动" unless events.exists?
+    errors << "所属群组尚未通过审核或已停用" unless group.active? && group.review_status == "approved"
+    errors << "专题只能收录已发布的公开活动" if events.where.not(status: "published").exists? || events.where.not(visibility: %w[normal open_registration]).exists?
+    errors
+  end
   belongs_to :group
   belongs_to :owner, class_name: "User"
   has_many :campaign_events, -> { order(:position, :id) }, dependent: :destroy

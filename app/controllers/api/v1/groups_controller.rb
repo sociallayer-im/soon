@@ -26,7 +26,11 @@ class Api::V1::GroupsController < Api::BaseController
     scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
     if params[:purpose].present?
       return render_error("请先登录", status: :unauthorized) unless current_user
-      return render_error("invalid purpose") unless %w[event post].include?(params[:purpose])
+      return render_error("invalid purpose") unless %w[event post campaign].include?(params[:purpose])
+      if params[:purpose] == "campaign"
+        scope = scope.where(id: current_user.memberships.where(role: %w[owner manager]).select(:group_id)) unless current_user.platform_admin?
+        return render_collection scope, blueprint: GroupBlueprint, view: :card
+      end
       allowed = scope.select do |group|
         if params[:purpose] == "event"
           EventPolicy.new(current_user, Event.new(group: group)).create?

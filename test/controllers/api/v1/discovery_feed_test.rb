@@ -208,8 +208,8 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
   test "old campaign with an earlier upcoming event precedes newly created later campaigns" do
     soon = event
     later = event(start_time: @now+5.days, end_time: @now+5.days+1.hour)
-    first = Campaign.create!(owner: @owner, group: @local, title: "马上开始的老专题", introduction: "介绍", status: "published", created_at: 1.year.ago)
-    second = Campaign.create!(owner: @owner, group: @local, title: "刚创建的专题", introduction: "介绍", status: "published")
+    first = Campaign.create!(review_status: "approved", owner: @owner, group: @local, title: "马上开始的老专题", introduction: "介绍", status: "published", created_at: 1.year.ago)
+    second = Campaign.create!(review_status: "approved", owner: @owner, group: @local, title: "刚创建的专题", introduction: "介绍", status: "published")
     CampaignEvent.create!(campaign: first, event: soon)
     CampaignEvent.create!(campaign: second, event: later)
     get "/api/v1/discovery/home"

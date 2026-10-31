@@ -240,7 +240,7 @@ class DiscoveryFeed
     # Only campaigns with an upcoming/ongoing public event enter this surface.
     events = public_events.where(id: pools[:events]).select(:id)
     ids = CampaignEvent.joins(:event, :campaign).merge(public_events).where(event_id: events,
-      campaigns: {status: "published", group_id: Group.where(active: true, review_status: "approved").select(:id)})
+      campaigns: {status: "published", review_status: "approved", group_id: Group.where(active: true, review_status: "approved").select(:id)})
       .group(:campaign_id).order(Arel.sql("MIN(events.start_time), campaign_id")).limit(12).pluck(:campaign_id)
     rows = Campaign.where(id: ids, status: "published").to_a
     details = CampaignEvent.joins(:event).merge(public_events).where(campaign_id: rows.map(&:id))

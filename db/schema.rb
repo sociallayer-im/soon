@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_007000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_083000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -153,6 +153,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_007000) do
     t.index ["event_id"], name: "index_campaign_events_on_event_id"
   end
 
+  create_table "campaign_review_logs", id: :string, force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.datetime "created_at", null: false
+    t.string "decision", null: false
+    t.text "reason"
+    t.string "reviewer_id"
+    t.datetime "updated_at", null: false
+    t.index ["campaign_id"], name: "index_campaign_review_logs_on_campaign_id"
+    t.index ["reviewer_id"], name: "index_campaign_review_logs_on_reviewer_id"
+  end
+
   create_table "campaigns", id: :string, force: :cascade do |t|
     t.string "cover_url"
     t.datetime "created_at", null: false
@@ -162,12 +173,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_007000) do
     t.jsonb "media", default: [], null: false
     t.string "owner_id", null: false
     t.string "resource_links", default: [], null: false, array: true
+    t.text "review_reason"
+    t.string "review_status", default: "pending", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
     t.string "status", default: "draft", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["group_id", "status"], name: "index_campaigns_on_group_id_and_status"
     t.index ["group_id"], name: "index_campaigns_on_group_id"
     t.index ["owner_id"], name: "index_campaigns_on_owner_id"
+    t.index ["review_status", "created_at", "id"], name: "index_campaigns_on_review_status_and_created_at_and_id"
+    t.index ["reviewed_by_id"], name: "index_campaigns_on_reviewed_by_id"
+    t.index ["status", "review_status", "created_at", "id"], name: "index_campaigns_public_review"
   end
 
   create_table "cart_items", id: :string, force: :cascade do |t|
@@ -1719,8 +1737,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_007000) do
   add_foreign_key "badges", "vouchers"
   add_foreign_key "campaign_events", "campaigns"
   add_foreign_key "campaign_events", "events"
+  add_foreign_key "campaign_review_logs", "campaigns"
+  add_foreign_key "campaign_review_logs", "users", column: "reviewer_id"
   add_foreign_key "campaigns", "groups"
   add_foreign_key "campaigns", "users", column: "owner_id"
+  add_foreign_key "campaigns", "users", column: "reviewed_by_id"
   add_foreign_key "cart_items", "carts"
   add_foreign_key "cart_items", "product_variants"
   add_foreign_key "carts", "shops"

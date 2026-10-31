@@ -59,6 +59,11 @@ class SiteNotifications
              title: cancelled ? "活动已取消" : "活动安排有变更",
              body: "「#{record.title}」#{cancelled ? '已取消，请查看后续安排；付费订单退款以实际处理结果为准。' : '时间或地点已更新，请查看最新安排。'}", actor: actor)
       end
+    when Campaign
+      decision = changes["review_status"]
+      return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
+      emit(receiver: record.owner, item: record, action: "campaign_review_result", title: decision.last == "approved" ? "专题审核已通过" : "专题审核未通过",
+           body: "「#{record.title}」#{decision.last == 'approved' ? '已通过审核并公开展示。' : '未通过审核：'+record.review_reason.to_s}", actor: actor)
     when Group
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
@@ -143,6 +148,8 @@ class SiteNotifications
       return {page: "event-detail", id: item.id} if EventPolicy.new(user, item).show?
     when Group
       return {page: "group-detail", id: item.id} if GroupPolicy.new(user, item).show?
+    when Campaign
+      return {page: "campaign-detail", id: item.id} if CampaignPolicy.new(user, item).show?
     when Topic
       return {page: "post-detail", id: item.id} if TopicPolicy.new(user, item).show?
     when Membership

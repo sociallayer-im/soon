@@ -1,13 +1,15 @@
 class Api::V1::CampaignsController < Api::BaseController
+  include IdempotentCreation
   skip_before_action :authenticate!, only: %i[index show]
   before_action :authenticate_optional!, only: %i[index show]
   before_action :set_campaign, only: %i[show update destroy]
 
   def index
-    scope = Campaign.where(status: "published")
-    if current_user
+    scope = Campaign.publicly_visible
+    if ActiveModel::Type::Boolean.new.cast(params[:mine])
+      return render_error("Unauthorized", status: :unauthorized) unless current_user
       managed = Membership.where(user_id: current_user.id, role: %w[owner manager]).select(:group_id)
-      scope = current_user.platform_admin? ? Campaign.all : Campaign.where(status: "published").or(Campaign.where(owner_id: current_user.id)).or(Campaign.where(group_id: managed))
+      scope = Campaign.where(owner_id: current_user.id).or(Campaign.where(group_id: managed))
     end
     scope = scope.where(group_id: Group.resolve!(params[:group_id]).id) if params[:group_id].present?
     if params[:city].present?
@@ -25,6 +27,7 @@ class Api::V1::CampaignsController < Api::BaseController
   def create
     @campaign = Campaign.new(campaign_params.except(:event_ids))
     @campaign.owner = current_user
+    @campaign.review_status = "pending"
     authorize @campaign
     persist_campaign!
     render json: CampaignBlueprint.render(@campaign, current_user: current_user), status: :created
@@ -35,8 +38,12 @@ class Api::V1::CampaignsController < Api::BaseController
   def update
     authorize @campaign
     # The owning group and author are immutable.
-    @campaign.assign_attributes(campaign_params.except(:event_ids, :group_id))
-    persist_campaign!
+    @campaign.with_lock do
+      @campaign.assign_attributes(campaign_params.except(:event_ids, :group_id))
+      @campaign.assign_attributes(review_status: "pending", review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
+      persist_campaign!
+      @campaign.campaign_review_logs.create!(reviewer: current_user, decision: "resubmitted")
+    end
     render json: CampaignBlueprint.render(@campaign.reload, current_user: current_user)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))

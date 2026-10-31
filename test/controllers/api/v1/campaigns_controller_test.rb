@@ -7,8 +7,9 @@ class Api::V1::CampaignsControllerTest < ActionDispatch::IntegrationTest
     @event = create_event(group: @group, owner: @owner, status: "published", visibility: "normal")
   end
 
-  def create_campaign(**attrs)
+  def create_campaign(approve: true, **attrs)
     post "/api/v1/campaigns", params: { campaign: { group_id: @group.id, title: "城市共读", introduction: "每周相聚", status: "published", event_ids: [@event.id] }.merge(attrs) }, headers: auth_headers(@owner), as: :json
+    Campaign.find(json_response["id"]).update!(review_status: "approved") if approve && response.status == 201 && attrs[:status] != "draft"
   end
 
   test "create series with ordered cross-city events and media then browse it publicly" do
@@ -96,6 +97,7 @@ class Api::V1::CampaignsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal @group.id, json_response["group_id"]
     assert_equal [@event.id], json_response["event_ids"]
+    Campaign.find(id).update!(review_status: "approved")
     @event.update!(status: "draft")
     get "/api/v1/campaigns/#{id}"
     assert_response :success
