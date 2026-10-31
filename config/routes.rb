@@ -342,7 +342,7 @@ Rails.application.routes.draw do
       # Platform admins only — gated on users.admin. NOT behind
       # WECHAT_PAY_ENABLED: an SG admin should still be able to see/settle
       # historical CN withdrawals if deployments are ever consolidated.
-      resources :admin_withdrawals, path: "admin/withdrawals", only: %i[index update]
+      resources :admin_withdrawals, path: "admin/withdrawals", only: %i[index show update]
 
       resources :vouchers, only: %i[index show create] do
         collection do

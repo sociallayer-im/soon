@@ -5,13 +5,18 @@
 # outcome here.
 class Api::V1::AdminWithdrawalsController < Api::BaseController
   before_action :require_platform_admin!
-  before_action :set_withdrawal, only: %i[update]
+  before_action :set_withdrawal, only: %i[show update]
 
   # GET /api/v1/admin/withdrawals?status=
   def index
     scope = Withdrawal.includes(:user, :group, :processed_by).order(created_at: :desc)
     scope = scope.where(status: params[:status]) if params[:status].present?
     render_collection(scope, blueprint: WithdrawalBlueprint, view: :admin)
+  end
+
+  # Exact notification target, including requests outside the first list page.
+  def show
+    render json: WithdrawalBlueprint.render_as_hash(@withdrawal, view: :admin)
   end
 
   # PATCH /api/v1/admin/withdrawals/:id — settle or reject a pending request.
@@ -44,6 +49,6 @@ class Api::V1::AdminWithdrawalsController < Api::BaseController
   end
 
   def require_platform_admin!
-    render json: { error: "Forbidden" }, status: :forbidden unless current_user&.platform_admin?
+    render json: { error: "Forbidden" }, status: :forbidden unless current_user&.active? && current_user.platform_admin?
   end
 end

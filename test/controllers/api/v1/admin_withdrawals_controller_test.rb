@@ -95,4 +95,55 @@ class Api::V1::AdminWithdrawalsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_equal "pending", @withdrawal.reload.status
   end
+  test "notification target requires current platform administration" do
+    get "/api/v1/admin/withdrawals/#{@withdrawal.id}", headers: auth_headers(@admin)
+    assert_response :success
+    assert_equal @withdrawal.id, json_response["id"]
+    get "/api/v1/admin/withdrawals/#{@withdrawal.id}", headers: auth_headers(@owner)
+    assert_response :forbidden
+    @admin.update!(admin: false)
+    notice = Activity.for_receiver(@admin).find_by!(action: "surf/withdrawal_requested", item: @withdrawal)
+    assert_nil SiteNotifications.target(notice, @admin)
+  end
+
+  test "new requests notify active administrators once without banking details and create live tasks" do
+    legacy_admin = create_user(permissions: ["admin"])
+    disabled = create_user(admin: true, active: false)
+    withdrawal = Withdrawal.create!(group: @group, user: @owner, amount: 100, currency: "cny", status: "pending", bank_name: "SensitiveBank", bank_account_number: "PRIVATE-ACCOUNT", bank_account_name: "PrivateName")
+    [@admin, legacy_admin].each do |admin|
+      notices = Activity.for_receiver(admin).where(action: "surf/withdrawal_requested", item: withdrawal)
+      assert_equal 1, notices.count
+      assert_equal({page: "admin-withdrawals", id: withdrawal.id}, SiteNotifications.target(notices.first, admin))
+      assert_not_includes notices.first.payload.to_json, "PRIVATE-ACCOUNT"
+      assert_not_includes notices.first.payload.to_json, "PrivateName"
+      assert_not_includes notices.first.payload.to_json, "SensitiveBank"
+      assert SiteNotificationTasks.for(admin).any? { |task| task[:kind] == "withdrawal_request" && task[:resource_id] == withdrawal.id }
+    end
+    assert_empty Activity.for_receiver(disabled).where(item: withdrawal)
+    assert_empty Activity.for_receiver(@owner).where(item: withdrawal)
+    withdrawal.update!(note: "备注")
+    assert_equal 1, Activity.for_receiver(@admin).where(item: withdrawal).count
+    patch "/api/v1/admin/withdrawals/#{withdrawal.id}", params: {status: "completed"}, headers: auth_headers(@admin)
+    assert_response :success
+    assert_not SiteNotificationTasks.for(legacy_admin).any? { |task| task[:resource_id] == withdrawal.id }
+  end
+
+  test "rolled back requests do not emit notifications" do
+    count = Activity.count
+    Withdrawal.transaction do
+      Withdrawal.create!(group: @group, user: @owner, amount: 100, currency: "cny", status: "pending", bank_name: "Bank", bank_account_number: "Account", bank_account_name: "Name")
+      raise ActiveRecord::Rollback
+    end
+    assert_equal count, Activity.count
+  end
+
+  test "inactive administrators cannot view bank details or settle requests" do
+    @admin.update!(active: false)
+    get "/api/v1/admin/withdrawals/#{@withdrawal.id}", headers: auth_headers(@admin)
+    assert_response :forbidden
+    patch "/api/v1/admin/withdrawals/#{@withdrawal.id}", params: {status: "completed"}, headers: auth_headers(@admin)
+    assert_response :forbidden
+    assert_equal "pending", @withdrawal.reload.status
+  end
+
 end

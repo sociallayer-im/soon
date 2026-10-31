@@ -253,3 +253,11 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - campaigns新增positions字符串数组，按campaign_events原position顺序回填；创建/编辑校验完整且无重复的活动ID排列，同步关联顺序，兼容event_ids旧客户端。
 - 删除活动时清理positions，公开响应继续按Event.visible_to过滤；event_ids/positions共享本次渲染内查询结果，避免为新字段新增每卡片查询。
 - 沿用现有事务、行锁、编辑权限和重新审核策略。29项专题/审核/发现流测试、189断言通过。未部署。
+
+### 2026-10-31 提现申请站内消息与处理待办
+
+- Withdrawal接入SiteNotifiable，在新pending申请的事务内向active超级管理员发送站内消息（admin字段或permissions含admin）。通知键按申请/接收人去重，修改备注不重复发出，事务回滚不会留下通知；现有邮件任务保留。
+- 通知只包含群组、金额和处理提示，不包含银行/卡号/收款户名。目标每次按实时管理员身份重新验证。
+- 待处理提现作为SiteNotificationTasks实时任务，已读不代表完成，结算/拒绝后所有管理员的任务同步移除。历史pending申请也能出现在实时待办中。
+- 新增GET /api/v1/admin/withdrawals/:id，支持从通知精确定位较旧申请；非管理员和停用管理员不能读取或处理银行信息。结算仍沿用with_lock和pending状态检查，不触发任何实际银行转账。
+- 38项提现/通知接口测试、178断言通过，包括事务回滚、重复保存、角色撤销、敏感字段隔离、停用账号及处理后待办消失。未执行真实结算、未部署。

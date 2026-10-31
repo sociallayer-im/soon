@@ -5,6 +5,9 @@ class SiteNotificationTasks
     tasks = []
     managed = user.memberships.where(role: %w[owner manager]).select(:group_id)
     if user.platform_admin?
+      Withdrawal.where(status: "pending").includes(:group).find_each do |withdrawal|
+        tasks << task("withdrawal_request", withdrawal, "提现申请待处理", "#{withdrawal.group.nickname.presence || withdrawal.group.name} · ¥#{format('%.2f', withdrawal.amount / 100.0)}", "admin-withdrawals", withdrawal.id)
+      end
       Campaign.where(status: "published", review_status: "pending").find_each do |campaign|
         tasks << task("campaign_review", campaign, "专题等待审核", campaign.title, "campaign-detail", campaign.id)
       end

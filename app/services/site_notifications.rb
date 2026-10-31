@@ -29,6 +29,13 @@ class SiteNotifications
   def self.record(record, changes, actor: nil)
     status = changes["status"]
     case record
+    when Withdrawal
+      return unless changes.key?("id") && record.status == "pending"
+      User.where(active: true).where("admin = TRUE OR ? = ANY(permissions)", "admin").find_each do |receiver|
+        emit(receiver: receiver, item: record, action: "withdrawal_requested", title: "收到新的提现申请",
+          body: "「#{record.group.nickname.presence || record.group.name}」申请提现 ¥#{format('%.2f', record.amount / 100.0)}，请核对后安排线下结算。",
+          actor: actor, key: "withdrawal_requested:#{record.id}:#{receiver.id}")
+      end
     when RefundRequest
       transition = changes["status"]
       if changes.key?("id") || transition&.last == "rejected"
@@ -181,6 +188,8 @@ class SiteNotifications
   def self.target(notice, user)
     item = notice.item
     case item
+    when Withdrawal
+      return {page: "admin-withdrawals", id: item.id} if user.active? && user.platform_admin?
     when Event
       return {page: "event-detail", id: item.id} if EventPolicy.new(user, item).show?
     when Group
