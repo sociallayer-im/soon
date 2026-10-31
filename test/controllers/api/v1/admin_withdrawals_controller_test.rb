@@ -120,7 +120,8 @@ class Api::V1::AdminWithdrawalsControllerTest < ActionDispatch::IntegrationTest
       assert SiteNotificationTasks.for(admin).any? { |task| task[:kind] == "withdrawal_request" && task[:resource_id] == withdrawal.id }
     end
     assert_empty Activity.for_receiver(disabled).where(item: withdrawal)
-    assert_empty Activity.for_receiver(@owner).where(item: withdrawal)
+    assert_empty Activity.for_receiver(@owner).where(item: withdrawal, action: "surf/withdrawal_requested")
+    assert_equal 1, Activity.for_receiver(@owner).where(item: withdrawal, action: ReviewNotifications::ACTION).count
     withdrawal.update!(note: "备注")
     assert_equal 1, Activity.for_receiver(@admin).where(item: withdrawal).count
     patch "/api/v1/admin/withdrawals/#{withdrawal.id}", params: {status: "completed"}, headers: auth_headers(@admin)

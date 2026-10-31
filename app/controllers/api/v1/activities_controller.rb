@@ -4,6 +4,16 @@ class Api::V1::ActivitiesController < Api::BaseController
     render_collection Activity.for_receiver(current_user).includes(:initiator, :item).order(created_at: :desc, id: :desc), blueprint: ActivityBlueprint, viewer: current_user
   end
 
+  # Private submission receipt. Recipient ownership, not public content
+  # visibility, is the gate; a removed/deleted resource cannot expose others.
+  def review
+    return render_error("Forbidden", status: :forbidden) unless current_user.active?
+    notice = Activity.for_receiver(current_user).find(params[:id])
+    return render_not_found unless notice.action == ReviewNotifications::ACTION && notice.payload["review"].is_a?(Hash)
+    response.headers["Cache-Control"] = "no-store"
+    render json: ReviewNotifications.detail(notice, current_user)
+  end
+
   def summary
     invitations = GroupInvite.where(status: "sending").where("expires_at IS NULL OR expires_at > ?", Time.current)
     recipient = GroupInvite.where(receiver_id: current_user.id)

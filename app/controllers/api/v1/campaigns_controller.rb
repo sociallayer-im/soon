@@ -29,7 +29,10 @@ class Api::V1::CampaignsController < Api::BaseController
     @campaign.owner = current_user
     @campaign.review_status = "pending"
     authorize @campaign
-    persist_campaign!
+    Campaign.transaction do
+      persist_campaign!
+      ReviewNotifications.submitted(@campaign, applicant: current_user, cycle: "created")
+    end
     render json: CampaignBlueprint.render(@campaign, current_user: current_user), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
@@ -42,7 +45,8 @@ class Api::V1::CampaignsController < Api::BaseController
       @campaign.assign_attributes(campaign_params.except(:event_ids, :positions, :group_id))
       @campaign.assign_attributes(review_status: "pending", review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
       persist_campaign!
-      @campaign.campaign_review_logs.create!(reviewer: current_user, decision: "resubmitted")
+      log = @campaign.campaign_review_logs.create!(reviewer: current_user, decision: "resubmitted")
+      ReviewNotifications.submitted(@campaign, applicant: current_user, cycle: log.id)
     end
     render json: CampaignBlueprint.render(@campaign.reload, current_user: current_user)
   rescue ActiveRecord::RecordInvalid => e

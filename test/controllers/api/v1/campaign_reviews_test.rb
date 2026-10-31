@@ -50,7 +50,8 @@ class Api::V1::CampaignReviewsTest < ActionDispatch::IntegrationTest
     assert_not SiteNotificationTasks.for(@admin).any? { |task| task[:resource_id] == campaign.id && task[:kind] == "campaign_review" }
     notice = Activity.find_by(receiver: @owner, item: campaign, action: "surf/campaign_review_result")
     assert notice
-    assert_equal({page: "campaign-detail", id: campaign.id}, SiteNotifications.target(notice, @owner))
+    receipt = Activity.for_receiver(@owner).find_by!(item: campaign, action: ReviewNotifications::ACTION)
+    assert_equal({page: "review-detail", id: receipt.id}, SiteNotifications.target(notice, @owner))
     review(campaign, "rejected", reason: "再次处理")
     assert_response :conflict
     assert_equal "approved", campaign.reload.review_status

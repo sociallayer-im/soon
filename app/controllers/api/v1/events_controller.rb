@@ -59,6 +59,7 @@ class Api::V1::EventsController < Api::BaseController
       create_nested_roles!(event, params[:event_roles])
       SiteNotifications.roles_changed(event, {}, actor: current_user)
       create_nested_tickets!(event, params[:tickets], event.group_id)
+      ReviewNotifications.submitted(event, applicant: current_user, cycle: "created")
     end
     notify_group_admins_of_submission(event)
     render json: EventBlueprint.render(event), status: :created
@@ -90,6 +91,7 @@ class Api::V1::EventsController < Api::BaseController
         SiteNotifications.roles_changed(@event, prior_roles, actor: current_user)
       end
       apply_group_ticket_designation!(@event)
+      ReviewNotifications.submitted(@event, applicant: current_user)
     end
     notify_attendees_of_update if calendar_relevant_change?
     render json: EventBlueprint.render(@event)

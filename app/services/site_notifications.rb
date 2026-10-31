@@ -2,8 +2,8 @@
 class SiteNotifications
   ROLES = {"co_host"=>"共创者", "speaker"=>"演讲者", "judge"=>"评委", "custom_host"=>"主办方", "group_host"=>"主办方"}.freeze
 
-  def self.emit(receiver:, item:, action:, title:, body:, actor: nil, key: nil)
-    return unless receiver && receiver.id != actor&.id
+  def self.emit(receiver:, item:, action:, title:, body:, actor: nil, key: nil, allow_self: false, payload: {})
+    return unless receiver && (allow_self || receiver.id != actor&.id)
     key ||= "#{action}:#{item.class.name}:#{item.id}:#{item.updated_at&.iso8601(6)}"
     # Saves of this event hold its database row lock. Coalesce only unread
     # edits; a change after reading must create a fresh notification.
@@ -22,11 +22,12 @@ class SiteNotifications
       notice.initiator = actor || receiver
       notice.item = item
       notice.action = "surf/#{action}"
-      notice.payload = {title: title, body: body}
+      notice.payload = {title: title, body: body}.merge(payload)
     end
   end
 
   def self.record(record, changes, actor: nil)
+    ReviewNotifications.changed(record, changes, actor: actor)
     status = changes["status"]
     case record
     when Withdrawal
@@ -45,7 +46,7 @@ class SiteNotifications
         ([record.user] + organizers(event).to_a).uniq(&:id).each do |receiver|
           emit(receiver: receiver, item: record, action: "refund_application", title: rejected ? "退出与退款申请未通过" : "收到退出与退款申请",
                body: "「#{event.title}」#{rejected ? '退款申请未通过：'+record.review_reason.to_s : '有退出与退款申请，请在订单中查看进度或处理。'}", actor: actor,
-               key: "refund_request:#{record.id}:#{record.status}:#{receiver.id}")
+               key: "refund_request:#{record.id}:#{record.status}:#{receiver.id}", payload: {review_receipt_id: rejected ? ReviewNotifications.receipt_id(record, receiver) : nil})
         end
       end
     when Participant
@@ -69,11 +70,11 @@ class SiteNotifications
       emit(receiver: record.user, item: record.event, action: "registration_result",
            title: status.last == "declined" ? "报名申请未通过" : "报名审核已通过",
            body: "「#{record.event.title}」#{status.last == 'declined' ? '未通过报名审核：'+record.review_reason.to_s : status.last == 'awaiting_payment' ? '审核通过，请在支付期限内完成付款。' : '审核通过，报名成功。'}", actor: actor,
-           key: "participant:#{record.id}:#{record.updated_at.iso8601(6)}:#{status.last}")
+           key: "participant:#{record.id}:#{record.updated_at.iso8601(6)}:#{status.last}", payload: {review_receipt_id: ReviewNotifications.receipt_id(record, record.user)})
     when Event
       return unless status || (changes.keys & %w[start_time end_time timezone venue_id place_id location meeting_url]).any?
       if status == ["pending", "published"]
-        emit(receiver: record.owner, item: record, action: "event_approved", title: "活动已通过发布审核", body: "「#{record.title}」已发布。", actor: actor)
+        emit(receiver: record.owner, item: record, action: "event_approved", title: "活动已通过发布审核", body: "「#{record.title}」已发布。", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, record.owner)})
       end
       return unless record.status.in?(%w[published cancelled]) && !changes.key?("id")
       cancelled = status && status.last == "cancelled"
@@ -88,13 +89,13 @@ class SiteNotifications
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
       emit(receiver: record.owner, item: record, action: "campaign_review_result", title: decision.last == "approved" ? "专题审核已通过" : "专题审核未通过",
-           body: "「#{record.title}」#{decision.last == 'approved' ? '已通过审核并公开展示。' : '未通过审核：'+record.review_reason.to_s}", actor: actor)
+           body: "「#{record.title}」#{decision.last == 'approved' ? '已通过审核并公开展示。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, record.owner)})
     when Group
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
       record.memberships.where(role: "owner").includes(:user).each do |membership|
         emit(receiver: membership.user, item: record, action: "group_review_result", title: decision.last == "approved" ? "群组审核已通过" : "群组审核未通过",
-             body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor)
+             body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, membership.user)})
       end
     when Reply
       return unless changes.key?("id") && record.deleted_at.nil? && record.flagged_at.nil?
@@ -117,7 +118,7 @@ class SiteNotifications
       users.each do |user|
         emit(receiver: user, item: record.group, action: "invitation_result", title: "群组#{status.first == 'requesting' ? '加入申请' : '邀请'}#{result}",
              body: "「#{record.group.nickname.presence || record.group.name}」的#{status.first == 'requesting' ? '加入申请' : '邀请'}#{result}。", actor: actor,
-             key: "invite:#{record.id}:#{status.last}")
+             key: "invite:#{record.id}:#{status.last}", payload: {review_receipt_id: ReviewNotifications.receipt_id(record, user)})
       end
     when TicketItem
       if status && status.last == "timeout" && record.event
@@ -186,10 +187,19 @@ class SiteNotifications
   end
 
   def self.target(notice, user)
+    if notice.receiver_id == user.id
+      return {page: "review-detail", id: notice.id} if notice.action == ReviewNotifications::ACTION
+      return {page: "review-detail", id: notice.payload["review_receipt_id"]} if notice.payload["review_receipt_id"].present?
+    end
+    content_target(notice, user)
+  end
+
+  def self.content_target(notice, user)
     item = notice.item
     case item
     when Withdrawal
       return {page: "admin-withdrawals", id: item.id} if user.active? && user.platform_admin?
+      return {page: "withdrawals", id: item.group_id} if Withdrawal.may_manage?(user, item.group)
     when Event
       return {page: "event-detail", id: item.id} if EventPolicy.new(user, item).show?
     when Group
@@ -204,6 +214,8 @@ class SiteNotifications
       return {page: "campaign-detail", id: item.id} if CampaignPolicy.new(user, item).show?
     when Topic
       return {page: "post-detail", id: item.id} if TopicPolicy.new(user, item).show?
+    when Participant
+      return {page: "event-detail", id: item.event_id} if EventPolicy.new(user, item.event).show?
     when Membership
       return {page: "group-detail", id: item.group_id} if GroupPolicy.new(user, item.group).show?
     when GroupInvite

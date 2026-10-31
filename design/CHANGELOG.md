@@ -2296,3 +2296,10 @@ were individually verified end-to-end via live HTTP round-trips, not just model-
 - Added core API gems: `blueprinter`, `pagy`, `jwt`, `pundit`, `rack-cors`, `oga`, `resend`, `icalendar`, `httpx`.
 - Added `dotenv-rails` (development/test) for loading environment variables from `.env`.
 - Initial commit: Rails 8.1 app scaffold.
+
+## 2026-10-31 审核提交回执与详情
+
+- 专题创建/重新编辑、群组创建/重新提交、需审核活动发布、报名、加入群组、退款、提现进入审核后，向申请人发送站内通知。直接发布、草稿和事务失败不发送回执。
+- 通知打开独立审核详情页，展示提交摘要、时间、审核状态、处理人和原因；每次重新提交单独保存记录，旧申请标记已重新提交。退款审核通过与实际退款到账分别展示。
+- 回执复用 Activity 私有通知记录与现有索引，按提交周期去重；仅通知收件人可访问，删除资源仍保留审核摘要，不保存银行资料。
+- 验证：后端跨流程回归259项/1000断言通过，最终补充金融及过期边界40项/216断言通过；前端281项通过、TypeScript及小程序构建通过，审核详情320/375/430px布局检查通过。尚未部署或上传。

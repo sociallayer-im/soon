@@ -68,6 +68,7 @@ Rails.application.routes.draw do
       resources :oauth_grants, path: "oauth/grants", only: %i[index destroy]
 
       post "groups/:id/resubmit", to: "groups#resubmit"
+      get "activities/:id/review", to: "activities#review"
       get "admin/campaign_reviews", to: "campaign_reviews#index"
       post "admin/campaign_reviews/:id/review", to: "campaign_reviews#review"
       get "admin/group_reviews", to: "group_reviews#index"

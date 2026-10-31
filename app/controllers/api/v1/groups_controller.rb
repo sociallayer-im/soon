@@ -104,6 +104,7 @@ class Api::V1::GroupsController < Api::BaseController
           body: "你已成为「#{group.nickname.presence || group.name}」的管理员。群组目前等待平台审核。", actor: current_user,
           key: "group-manager:#{group.id}:#{manager.id}")
       end
+      ReviewNotifications.submitted(group, applicant: current_user, cycle: "created")
     end
     # Enqueued after the transaction commits, not inside it — a job picked up
     # before the commit lands would look up a group that isn't there yet.
@@ -120,6 +121,7 @@ class Api::V1::GroupsController < Api::BaseController
       return render_error("仅已拒绝的申请可重新提交", status: :conflict) unless @group.review_status == "rejected"
       @group.group_review_logs.create!(reviewer: current_user, decision: "resubmitted", reason: @group.review_reason)
       @group.update!(review_status: "pending", active: false, review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
+      ReviewNotifications.submitted(@group, applicant: current_user)
     end
     GroupRegisteredMailJob.perform_later(group_id: @group.id)
     render json: GroupBlueprint.render(@group, view: :detail)
