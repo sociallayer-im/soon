@@ -178,3 +178,9 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - The target budget remained 3072MB; the global Nomad node had exhausted memory reservations. Reused the user's existing Surf-only short-downtime authorization: after Atlas admitted the source deployment, scaled only retained old Surf job atlas-d2508fc7-1806-46f2-beaa-4c1ae539f3f5 app to zero to place its build runner. No unrelated service or infrastructure was stopped. Ruby gems, Bun dependencies and JavaScript assets were cached; source build completed successfully.
 - Public HTTPS version reports clean application commit d904c52 and deployment above. /up returns 200. Verified event pagination, detail capability booleans with omitted full participants, authorized summary shape, user-topic and membership pagination, and unified user agenda. Anonymous team registrations and mine-order requests return 401.
 - No schema migration was added in these review changes, no production test payment or message was sent. Mini Program still requires the user's upload/release and real-device acceptance; Web was not published.
+
+## 2026-10-31 — Surf 小程序接入既有提现机制
+
+- 小程序接入 Seastar 同源的社区余额、银行账户提现申请和超级管理员人工结算接口；无需 schema 或凭证变更。
+- 管理员更新提现记录时增加行锁，并在锁内重查 pending 状态，防止两个管理员基于旧状态分别批准/拒绝。
+- 验证：withdrawal model、withdrawals controller、admin withdrawals controller 共 32 tests / 64 assertions 通过。未操作线上资金或发起真实提现；本次后端修复尚未部署。

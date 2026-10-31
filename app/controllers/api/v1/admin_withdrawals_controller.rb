@@ -19,17 +19,21 @@ class Api::V1::AdminWithdrawalsController < Api::BaseController
     unless %w[completed rejected].include?(params[:status])
       return render_error("status must be completed or rejected")
     end
-    unless @withdrawal.status == "pending"
-      return render_error("only a pending withdrawal can be settled or rejected")
+    # Serialize terminal status changes: two administrators must not settle
+    # and reject the same request based on the same stale pending status.
+    outcome = @withdrawal.with_lock do
+      if @withdrawal.status != "pending"
+        { error: "only a pending withdrawal can be settled or rejected" }
+      else
+        attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
+        attrs[:note] = params[:note] if params[:note].present?
+        @withdrawal.update(attrs) ? { ok: true } : { error: @withdrawal.errors.full_messages.join(", ") }
+      end
     end
-
-    attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
-    attrs[:note] = params[:note] if params[:note].present?
-
-    if @withdrawal.update(attrs)
+    if outcome[:ok]
       render json: WithdrawalBlueprint.render_as_hash(@withdrawal, view: :admin)
     else
-      render_error(@withdrawal.errors.full_messages.join(", "))
+      render_error(outcome[:error])
     end
   end
 
