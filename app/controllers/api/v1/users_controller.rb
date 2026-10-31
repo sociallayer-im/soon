@@ -50,13 +50,13 @@ class Api::V1::UsersController < Api::BaseController
   def show
     if params[:id] == "me"
       return render json: { error: "Unauthorized" }, status: :unauthorized unless current_user
-      return render json: UserBlueprint.render(current_user, view: :self)
+      return render json: UserBlueprint.render(current_user, view: :self, profile_counts: true)
     end
 
     user = User.resolve!(params[:id])
     # Own record gets private fields (email); everyone else the public profile.
     view = user.id == current_user&.id ? :self : :profile
-    render json: UserBlueprint.render(user, view: view)
+    render json: UserBlueprint.render(user, view: view, profile_counts: true)
   end
 
   # GET /api/v1/users/by_email?email= — platform-admin-only. Email is the login

@@ -28,6 +28,11 @@ class Api::V1::FollowsController < Api::BaseController
 
       scope = scope.where(user_id: user.id)
     end
+    if params[:target_ids].present?
+      ids = params[:target_ids].to_s.split(",").uniq
+      return render_error("too many targets") if ids.length > 100
+      scope = scope.where(target_type: "User", target_id: ids, status: "active")
+    end
     scope = scope.includes(:user, :target) if include_profiles?
     render_collection scope, blueprint: FollowBlueprint, include_profiles: include_profiles?
   end

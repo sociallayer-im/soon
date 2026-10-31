@@ -148,4 +148,24 @@ class Api::V1::FollowsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "ok", json_response["result"]
     assert_not Follow.exists?(follow.id)
   end
+  test "visible user relationship batch is filtered and profile counts persist through unfollow" do
+    user = create_user
+    target = create_user
+    other = create_user
+    follow = create_follow(user: user, target: target)
+    create_follow(user: user, target: other)
+    create_follow(user: other, target: target, status: "pending")
+    get "/api/v1/follows", params: {target_ids: target.id, include: "", limit: 100}, headers: auth_headers(user)
+    assert_response :ok
+    assert_equal [follow.id], json_response["data"].map { |row| row["id"] }
+    get "/api/v1/users/#{target.id}", headers: auth_headers(user)
+    assert_equal 1, json_response["followers_count"]
+    delete "/api/v1/follows/#{follow.id}", headers: auth_headers(user)
+    assert_response :ok
+    get "/api/v1/follows", params: {target_ids: target.id}, headers: auth_headers(user)
+    assert_empty json_response["data"]
+    get "/api/v1/users/#{target.id}", headers: auth_headers(user)
+    assert_equal 0, json_response["followers_count"]
+  end
+
 end
