@@ -1,11 +1,21 @@
 require "test_helper"
 
 class Api::V1::WechatMiniprogramPhoneTest < ActionDispatch::IntegrationTest
-  test "requires an authenticated WeChat account" do
+  test "requires an authenticated account" do
     post "/api/v1/auth/wechat_miniprogram_phone", params: {phone_code: "code"}
     assert_response :unauthorized
-    post "/api/v1/auth/wechat_miniprogram_phone", params: {phone_code: "code"}, headers: auth_headers(create_user)
-    assert_response :forbidden
+
+  end
+
+  test "email accounts can authorize a WeChat number without changing their login identity" do
+    user = create_user
+    WechatMiniprogramPhone.stub(:phone_number, "+8613800138011") do
+      post "/api/v1/auth/wechat_miniprogram_phone", params: {phone_code: "code"}, headers: auth_headers(user)
+    end
+    assert_response :success
+    assert_equal "+8613800138011", user.reload.phone
+    assert_nil user.wechat_openid
+    assert_equal user.id, json_response["id"]
   end
 
   test "binds only the server verified number ignoring client asserted phone" do

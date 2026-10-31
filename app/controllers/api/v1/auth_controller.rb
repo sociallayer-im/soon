@@ -213,9 +213,9 @@ class Api::V1::AuthController < Api::BaseController
     render json: { error: "WeChat login code expired or invalid. Please try again.", code: "WECHAT_INVALID_CODE" }, status: :unauthorized
   end
 
-  # A logged-in WeChat identity plus a fresh, server-redeemed phone code.
+  # Any authenticated account can prove control of a number with a fresh
+  # WeChat phone authorization code; it does not require switching login identity.
   def wechat_miniprogram_phone
-    return render_error("请先使用微信登录", status: :forbidden) if current_user.wechat_openid.blank?
     return render json: UserBlueprint.render(current_user, view: :self) if current_user.phone.present?
     code = params[:phone_code].to_s.strip
     return render_error("请先授权微信手机号") if code.blank?
