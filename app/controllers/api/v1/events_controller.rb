@@ -232,7 +232,7 @@ class Api::V1::EventsController < Api::BaseController
     options[:registration_unavailable_reason] = if !@event.registration_open?
       {"draft" => "尚未发布", "pending" => "待审核", "closed" => "报名已截止", "archived" => "已归档", "cancelled" => "活动已取消"}[@event.status] || "报名已结束"
     elsif !options[:can_register]
-      "当前账号不符合节点的报名条件"
+      "当前账号不符合群组的报名条件"
     end
     options[:viewer_id] = current_user&.id
     options[:include_participants] = false if params[:include_participants].to_s == "false"

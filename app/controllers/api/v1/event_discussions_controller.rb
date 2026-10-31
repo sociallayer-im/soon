@@ -26,7 +26,7 @@ class Api::V1::EventDiscussionsController < Api::BaseController
     category = Category.visible_to(current_user, group: @event.group).listed.sorted.find do |board|
       TopicPolicy.new(current_user, Topic.new(category: board, group: @event.group)).create?
     end
-    return render_error("该节点暂无可发布的分类，请联系管理员") unless category
+    return render_error("该群组暂无可发布的分类，请联系管理员") unless category
     topic = Topic.new(attrs.except(:sync_to_community))
     topic.assign_attributes(event: @event, category: category, group: @event.group, user: current_user,
       sync_to_community: syncing,

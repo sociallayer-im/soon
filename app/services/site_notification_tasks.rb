@@ -6,7 +6,7 @@ class SiteNotificationTasks
     managed = user.memberships.where(role: %w[owner manager]).select(:group_id)
     if user.platform_admin?
       Group.where(review_status: "pending").find_each do |group|
-        tasks << task("group_review", group, "节点等待审核", group.nickname.presence || group.name, "group-detail", group.id)
+        tasks << task("group_review", group, "群组等待审核", group.nickname.presence || group.name, "group-detail", group.id)
       end
     end
     Event.where(status: "pending", group_id: managed).find_each do |event|
@@ -18,7 +18,7 @@ class SiteNotificationTasks
       tasks << task("participant_review", participant, "报名申请待审核", "#{participant.user.nickname.presence || participant.user.name.presence || 'Surf 成员'} 申请参加「#{participant.event.title}」", "event-detail", participant.event_id)
     end
     GroupInvite.where(group_id: managed, status: "requesting").where("expires_at IS NULL OR expires_at > ?", Time.current).includes(:group, :receiver).find_each do |invite|
-      tasks << task("group_request", invite, "加入节点申请待审核", "#{invite.receiver&.nickname.presence || invite.receiver&.name.presence || 'Surf 成员'} 申请加入「#{invite.group.nickname.presence || invite.group.name}」", "group-detail", invite.group_id)
+      tasks << task("group_request", invite, "加入群组申请待审核", "#{invite.receiver&.nickname.presence || invite.receiver&.name.presence || 'Surf 成员'} 申请加入「#{invite.group.nickname.presence || invite.group.name}」", "group-detail", invite.group_id)
     end
     tasks.sort_by { |t| [t[:created_at], t[:id]] }
   end

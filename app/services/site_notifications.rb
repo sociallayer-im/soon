@@ -63,7 +63,7 @@ class SiteNotifications
       decision = changes["review_status"]
       return unless decision && decision.first == "pending" && %w[approved rejected].include?(decision.last)
       record.memberships.where(role: "owner").includes(:user).each do |membership|
-        emit(receiver: membership.user, item: record, action: "group_review_result", title: decision.last == "approved" ? "节点审核已通过" : "节点审核未通过",
+        emit(receiver: membership.user, item: record, action: "group_review_result", title: decision.last == "approved" ? "群组审核已通过" : "群组审核未通过",
              body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor)
       end
     when Reply
@@ -74,7 +74,7 @@ class SiteNotifications
       end
     when Membership
       return unless changes["role"] && !changes.key?("id")
-      emit(receiver: record.user, item: record.group, action: "membership_role", title: "节点管理身份已更新", body: "你在「#{record.group.nickname.presence || record.group.name}」的身份已更新为#{ {'owner'=>'创建者','manager'=>'管理员','member'=>'成员'}[record.role] }。", actor: actor)
+      emit(receiver: record.user, item: record.group, action: "membership_role", title: "群组管理身份已更新", body: "你在「#{record.group.nickname.presence || record.group.name}」的身份已更新为#{ {'owner'=>'创建者','manager'=>'管理员','member'=>'成员'}[record.role] }。", actor: actor)
     when GroupInvite
       return unless status && %w[accepted cancelled revoked].include?(status.last)
       # Only results here: sent invitations already have a legacy Activity and live pending card.
@@ -85,7 +85,7 @@ class SiteNotifications
                else "未通过" end
       users = [record.sender, record.receiver].compact.uniq(&:id)
       users.each do |user|
-        emit(receiver: user, item: record.group, action: "invitation_result", title: "节点#{status.first == 'requesting' ? '加入申请' : '邀请'}#{result}",
+        emit(receiver: user, item: record.group, action: "invitation_result", title: "群组#{status.first == 'requesting' ? '加入申请' : '邀请'}#{result}",
              body: "「#{record.group.nickname.presence || record.group.name}」的#{status.first == 'requesting' ? '加入申请' : '邀请'}#{result}。", actor: actor,
              key: "invite:#{record.id}:#{status.last}")
       end

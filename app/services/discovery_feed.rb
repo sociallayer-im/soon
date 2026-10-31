@@ -30,6 +30,7 @@ class DiscoveryFeed
   def page(kind, scope: "discover", cursor: nil, limit: 20)
     raise InvalidCursor unless %w[events topics groups people].include?(kind) && %w[discover following].include?(scope)
     limit = limit.to_i.clamp(1, 40)
+    return event_page(cursor: cursor, limit: limit) if kind == "events"
     if cursor.present?
       snapshot = verifier.verified(cursor, purpose: "discovery-page")&.stringify_keys
       raise InvalidCursor unless snapshot && snapshot.values_at("kind", "city", "viewer", "scope") == [kind, @city, @user&.id, scope]
@@ -43,6 +44,37 @@ class DiscoveryFeed
       verifier.generate({kind: kind, city: @city, viewer: @user&.id, scope: scope, ids: ids, position: position}, purpose: "discovery-page", expires_in: 15.minutes)
     end
     {data: serialize(kind, slice), next_cursor: next_cursor}
+  end
+
+  # A bounded personalized prefix followed by an exhaustive keyset timeline.
+  # Cursors carry only prefix IDs and the last (start_time, id), never the directory.
+  def event_page(cursor:, limit:)
+    state = if cursor.present?
+      verifier.verified(cursor, purpose: "discovery-events-v2")&.stringify_keys
+    else
+      prefix = @user ? ranked_ids("events", "discover").first(12) : []
+      {"city" => @city, "viewer" => @user&.id, "prefix" => prefix, "position" => 0}
+    end
+    raise InvalidCursor unless state && state.values_at("city", "viewer") == [@city, @user&.id]
+    prefix = state.fetch("prefix")
+    position = state.fetch("position")
+    ids = prefix.slice(position, limit) || []
+    state["position"] = position + ids.length
+    remaining = limit - ids.length
+    scope = public_events.where.not(id: prefix)
+    if state["after_time"]
+      scope = scope.where("(events.start_time, events.id) > (?, ?)", Time.iso8601(state["after_time"]), state["after_id"])
+    end
+    rows = remaining.positive? ? scope.order(:start_time, :id).limit(remaining + 1).pluck(:id, :start_time) : []
+    page_rows = rows.first(remaining)
+    ids.concat(page_rows.map(&:first))
+    if page_rows.any?
+      state["after_id"], at = page_rows.last
+      state["after_time"] = at.iso8601(6)
+    end
+    more = state["position"] < prefix.length || rows.length > remaining || (remaining.zero? && scope.exists?)
+    token = more ? verifier.generate(state, purpose: "discovery-events-v2", expires_in: 2.hours) : nil
+    {data: serialize("events", ids), next_cursor: token}
   end
 
   def public_groups
@@ -135,7 +167,7 @@ class DiscoveryFeed
         event = events[id]
         next unless event
         card = JSON.parse(EventBlueprint.render(event))
-        card["recommendation_reason"] = related?(event.owner_id, event.group_id) ? "来自你关注的人或节点" : @city ? "#{@city} · 即将发生" : "即将发生"
+        card["recommendation_reason"] = !@user ? nil : related?(event.owner_id, event.group_id) ? "来自你关注的人或群组" : @city ? "#{@city} · 即将发生" : "即将发生"
         card
       end
     when "topics"
@@ -166,7 +198,7 @@ class DiscoveryFeed
       common = common_members(rows.keys)
       ids.filter_map do |id|
         next unless rows[id]
-        JSON.parse(UserSuggestionBlueprint.render(rows[id], recommendation_reason: common.include?(id) ? "与你在同一个节点" : "#{@city ? @city+' · ' : ''}近期有公开分享"))
+        JSON.parse(UserSuggestionBlueprint.render(rows[id], recommendation_reason: common.include?(id) ? "与你在同一个群组" : "#{@city ? @city+' · ' : ''}近期有公开分享"))
       end
     end
   end

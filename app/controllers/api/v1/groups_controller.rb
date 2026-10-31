@@ -96,8 +96,8 @@ class Api::V1::GroupsController < Api::BaseController
       group.add_member(current_user.id, "owner") # creator remains owner, never demoted
       managers.each do |manager|
         group.add_member(manager.id, "manager")
-        SiteNotifications.emit(receiver: manager, item: group, action: "membership_role", title: "你已被设为节点管理员",
-          body: "你已成为「#{group.nickname.presence || group.name}」的管理员。节点目前等待平台审核。", actor: current_user,
+        SiteNotifications.emit(receiver: manager, item: group, action: "membership_role", title: "你已被设为群组管理员",
+          body: "你已成为「#{group.nickname.presence || group.name}」的管理员。群组目前等待平台审核。", actor: current_user,
           key: "group-manager:#{group.id}:#{manager.id}")
       end
     end

@@ -35,6 +35,34 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     assert_equal "上海", @local.reload.browse_city
   end
 
+  test "guest timeline exhausts all city events beyond recommendation pool without reasons or duplicates" do
+    expected = 125.times.map { |i| event(start_time: @now+(i+1).hours, end_time: @now+(i+2).hours) }
+    seen = []
+    cursor = nil
+    10.times do
+      result = DiscoveryFeed.new(user: nil).page("events", limit: 20, cursor: cursor)
+      assert result[:data].all? { |row| row["recommendation_reason"].nil? }
+      seen.concat(result[:data].map { |row| row["id"] })
+      cursor = result[:next_cursor]
+      break unless cursor
+    end
+    assert_nil cursor
+    assert_equal expected.map(&:id), seen
+    assert_equal seen.uniq, seen
+  end
+
+  test "personalized prefix continues into complete chronological tail including own agenda" do
+    regular = event(start_time: @now+1.hour)
+    related = event(owner: @friend, start_time: @now+2.days, end_time: @now+3.days)
+    Follow.create!(user: @viewer, target: @friend, status: "active")
+    Participant.create!(event: regular, user: @viewer, status: "attending")
+    first = DiscoveryFeed.new(user: @viewer).page("events", limit: 1)
+    assert_equal [related.id], first[:data].map { |row| row["id"] }
+    second = DiscoveryFeed.new(user: @viewer).page("events", limit: 1, cursor: first[:next_cursor])
+    assert_equal [regular.id], second[:data].map { |row| row["id"] }
+    assert_nil second[:next_cursor]
+  end
+
   test "agenda includes settled attendees and linked guests without duplicate bookings" do
     attending = event
     unpaid = event
@@ -86,7 +114,7 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     create_membership(group: @local, user: @friend)
     get "/api/v1/discovery/community", headers: auth_headers(@viewer)
     assert_equal @friend.id, json_response["people"].first["id"]
-    assert_equal "与你在同一个节点", json_response["people"].first["recommendation_reason"]
+    assert_equal "与你在同一个群组", json_response["people"].first["recommendation_reason"]
     assert_not json_response["people"].any? { |u| u["id"] == private_user.id }
     Follow.create!(user: @viewer, target: @friend, status: "active")
     get "/api/v1/discovery/community", headers: auth_headers(@viewer)

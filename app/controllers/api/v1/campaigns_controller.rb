@@ -11,7 +11,7 @@ class Api::V1::CampaignsController < Api::BaseController
     end
     scope = scope.where(group_id: Group.resolve!(params[:group_id]).id) if params[:group_id].present?
     if params[:city].present?
-      events = Event.visible_to(current_user).where(group_id: Group.where(city: params[:city].to_s.strip).select(:id))
+      events = Event.visible_to(current_user).where(group_id: Group.where(browse_city: DiscoveryCity.normalize(params[:city])).select(:id))
       scope = scope.where(id: CampaignEvent.where(event_id: events.select(:id)).select(:campaign_id))
     end
     render_collection scope.order(created_at: :desc), blueprint: CampaignBlueprint, current_user: current_user
