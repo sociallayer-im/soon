@@ -238,3 +238,12 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - 审核期间保留报名；同意复用原支付退款接口、原收款账户和幂等机制，强制退清剩余余额。支付平台回调确认成功后自动退出并释放资源；超时保持处理中，失败保留报名并可重试。
 - 参与者在活动开始前通过旧退出 API 绕过退款会收到 PAID_REFUND_REQUIRED；活动开始后的原退出行为保留。所有申请、处理及结果通知可打开订单页，待办引导核对金额后确认，不从通知直接触发退款。
 - 验证：132 项报名/退款/微信及 Stripe 回调测试、527 断言通过，含重复申请/审批、越权、失败、超时、报名保留和成功后退出。未进行真实扣款或退款。
+
+### 2026-10-31 WiConnect 的 Surf 身份 API
+
+- 新增 GET /api/v1/oauth/identity，复用现有 OAuth 授权码/PKCE、Access Token、撤销和应用管理。必须 openid scope；profile 控制展示字段，groups:read 控制指定群组关系查询。
+- 返回 issuer/subject 及 token 到期时间；可返回单个群组的当前有效成员关系、角色与到期时间。过期/停用成员、未审核/停用群组均不算有效资格，不自动把平台管理员变成所有群组成员。
+- 使用既有 token 和 (user_id,group_id) 唯一索引，不扫描全量群组、不加迁移、不暴露手机号、微信身份、支付数据或全权限登录JWT。保持账号身份与联网授权分离。
+- OAuth identity/UserInfo 拒绝 inactive 用户，身份 API 禁止缓存，scope错误返回403、失效凭据返回401。
+- 新增对接文档 docs/wiconnect-identity-api.md，说明生产issuer、OAuth注册、PKCE、网关可信上下文和授权期限边界。未修改WiConnect登录入口、注册生产客户端或部署。
+- 本地验证：59 项 OAuth接口/身份/配置测试，235断言通过，包含完整授权码换token、身份查询、撤销与失效验证。

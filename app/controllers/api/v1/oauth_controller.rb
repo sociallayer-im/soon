@@ -12,7 +12,7 @@ class Api::V1::OauthController < Api::BaseController
   # RFC 6749 §5.1 makes these a MUST on any response carrying a token, and
   # RFC 6750 §5.3 repeats it for the resource endpoint. Without them a proxy or
   # a browser is entitled to keep a copy of somebody's access token.
-  before_action :forbid_caching, only: %i[token userinfo revoke]
+  before_action :forbid_caching, only: %i[token userinfo identity revoke]
 
   OauthError = Class.new(StandardError) do
     attr_reader :code, :status
@@ -117,6 +117,25 @@ class Api::V1::OauthController < Api::BaseController
   def userinfo
     at = access_token!
     render json: OauthClaims.new(at.user, at.scopes).to_h.merge(scope: at.scopes.join(" "))
+  end
+
+  # Scoped identity assertion for relying services such as WiConnect.
+  # This reports facts; the consumer owns its network authorization policy.
+  def identity
+    at = access_token!
+    unless at.scope?("openid")
+      response.headers["WWW-Authenticate"] = 'Bearer error="insufficient_scope", scope="openid"'
+      raise OauthError.new("insufficient_scope", "openid scope is required", :forbidden)
+    end
+    group_id = params[:group_id]
+    if group_id.present? && (!group_id.is_a?(String) || !group_id.match?(/\A[a-zA-Z0-9_-]{1,80}\z/))
+      raise OauthError.new("invalid_request", "group_id must be a single group ID")
+    end
+    if group_id.present? && !at.scope?("groups:read")
+      response.headers["WWW-Authenticate"] = 'Bearer error="insufficient_scope", scope="groups:read"'
+      raise OauthError.new("insufficient_scope", "groups:read scope is required", :forbidden)
+    end
+    render json: OauthIdentity.new(at).to_h(group_id: group_id.presence)
   end
 
   # POST /api/v1/oauth/revoke — RFC 7009
@@ -277,6 +296,10 @@ class Api::V1::OauthController < Api::BaseController
       raise OauthError.new("invalid_token", "Invalid or expired access token", :unauthorized)
     end
     raise OauthError.new("invalid_token", "Application is disabled", :unauthorized) unless at.oauth_application.status == "active"
+    unless at.user.active?
+      response.headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
+      raise OauthError.new("invalid_token", "Account is inactive", :unauthorized)
+    end
     at
   end
 

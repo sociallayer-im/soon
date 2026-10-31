@@ -57,6 +57,7 @@ Rails.application.routes.draw do
       get  "oauth/userinfo",  to: "oauth#userinfo"
       post "oauth/userinfo",  to: "oauth#userinfo"
       post "oauth/revoke",    to: "oauth#revoke"
+      get  "oauth/identity",  to: "oauth#identity"
 
       # Developer portal and the user's own consent management (session JWT).
       resources :oauth_applications, path: "oauth/applications" do
