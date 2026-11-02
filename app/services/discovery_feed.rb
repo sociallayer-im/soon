@@ -253,11 +253,7 @@ class DiscoveryFeed
     end
   end
 
-  def cities
-    Rails.cache.fetch("discovery-cities-v1", expires_in: 1.minute, race_condition_ttl: 5.seconds) do
-      Group.where(active: true, review_status: "approved").where.not(browse_city: [nil, ""]).distinct.order(:browse_city).pluck(:browse_city)
-    end
-  end
+  def cities = DiscoveryCity.options
 
   def verifier = Rails.application.message_verifier("discovery-page")
 end

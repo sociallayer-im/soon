@@ -217,4 +217,25 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     assert_equal 1, json_response["campaigns"].first["event_count"]
   end
 
+  test "city endpoint and both discovery screens share a normalized approved catalogue" do
+    create_group(city: "Shanghai")
+    create_group(city: "上海")
+    create_group(city: "隐藏城市", active: false)
+    create_group(city: "待审核城市", review_status: "pending", active: true)
+    create_group(city: nil)
+    get "/api/v1/cities"
+    assert_response :ok
+    catalogue = json_response["data"]
+    assert_includes catalogue, "上海"
+    assert_equal 1, catalogue.count("上海")
+    assert_not_includes catalogue, "上海市"
+    assert_not_includes catalogue, "shanghai"
+    assert_not_includes catalogue, "隐藏城市"
+    assert_not_includes catalogue, "待审核城市"
+    get "/api/v1/discovery/home", params: {city: "上海"}
+    assert_equal catalogue, json_response["cities"]
+    get "/api/v1/discovery/community", params: {city: "上海"}
+    assert_equal catalogue, json_response["cities"]
+  end
+
 end
