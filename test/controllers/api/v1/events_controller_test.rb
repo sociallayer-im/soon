@@ -705,9 +705,9 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_not event.pinned
   end
 
-  test "create inherits the group's timezone when none is given" do
+  test "create defaults to Shanghai independently of the group timezone" do
     owner = create_user
-    group = create_group(owner: owner, timezone: "Asia/Shanghai")
+    group = create_group(owner: owner, timezone: "UTC")
 
     post "/api/v1/events", params: {
       event: { title: "Meetup", start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id }
@@ -716,7 +716,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Asia/Shanghai", Event.find(json_response["id"]).timezone
   end
 
-  test "create keeps an explicit timezone over the group's" do
+  test "create uses Shanghai even when an older client sends another timezone" do
     owner = create_user
     group = create_group(owner: owner, timezone: "Asia/Shanghai")
 
@@ -725,7 +725,7 @@ class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
                start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, group_id: group.id }
     }, headers: auth_headers(owner)
     assert_response :created
-    assert_equal "America/New_York", Event.find(json_response["id"]).timezone
+    assert_equal "Asia/Shanghai", Event.find(json_response["id"]).timezone
   end
 
   test "create interprets a naive start_time in the event's timezone" do

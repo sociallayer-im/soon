@@ -43,6 +43,8 @@ class Api::V1::EventsController < Api::BaseController
   # children against a partially-created parent.
   def create
     attrs = event_params.to_h
+    # Surf events are authored in Shanghai time, independently of device/group defaults.
+    attrs[:timezone] = "Asia/Shanghai"
     group = Group.find_by(id: attrs[:group_id])
     gate_pinned!(attrs, group)
     gate_approval!(attrs, group)
