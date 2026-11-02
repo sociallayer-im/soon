@@ -1,11 +1,11 @@
-# Derived from Group#city; the original city remains the source of truth.
+# Shared city normalization and selectable city catalogue.
 class DiscoveryCity
   ALIASES = {"shanghai"=>"上海", "beijing"=>"北京", "hangzhou"=>"杭州", "shenzhen"=>"深圳", "guangzhou"=>"广州", "chengdu"=>"成都", "dali"=>"大理"}.freeze
-  # One canonical catalogue for discovery, calendar and group city selectors.
+  # Product-maintained catalogue, independent of free-form legacy Group cities.
+  OPTIONS = %w[上海 杭州 深圳 成都].freeze
+
   def self.options
-    Rails.cache.fetch("discovery-cities-v2", expires_in: 1.minute, race_condition_ttl: 5.seconds) do
-      Group.where(active: true, review_status: "approved").where.not(browse_city: [nil, ""]).distinct.order(:browse_city).pluck(:browse_city)
-    end
+    OPTIONS.dup
   end
 
   def self.normalize(value)
