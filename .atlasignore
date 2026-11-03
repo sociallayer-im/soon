@@ -9,6 +9,11 @@ public/assets/**
 .atlas/**
 .env*
 ginger.surf.yml
+ginger*.yml
+ginger*.yaml
+atlas*.json
+atlas*.yml
+atlas*.yaml
 # Non-runtime files should not invalidate the application layer.
 docs/**
 design/**

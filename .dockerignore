@@ -49,6 +49,8 @@
 # Private Atlas state, migration backups and legacy deployment credentials.
 /.atlas/
 /ginger.surf.yml
+/ginger*.yml
+/ginger*.yaml
 # Operational/review files do not affect the runtime or asset fingerprints.
 /docs/
 /design/
