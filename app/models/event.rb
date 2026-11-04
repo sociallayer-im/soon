@@ -1,5 +1,5 @@
 class Event < ApplicationRecord
-  after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id status visibility group_id]).any? }
+  after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id status visibility group_id moderated_at]).any? }
   after_destroy :refresh_discovery_signal
   def refresh_discovery_signal
     ([group_id] + Array(saved_changes["group_id"]).compact).uniq.each { |id| DiscoverySignals.refresh_group!(id) }
@@ -13,7 +13,7 @@ class Event < ApplicationRecord
     team_for(user).or(where(id: Participant.where(user_id: user.id, status: "attending", payment_status: [nil, "succeeded"]).select(:event_id)))
   }
   scope :publicly_discoverable, -> {
-    joins(:group).where(groups: {active: true, review_status: "approved"})
+    joins(:group).where(moderated_at: nil, groups: {active: true, review_status: "approved"})
       .where(status: "published", visibility: %w[normal open_registration])
   }
   belongs_to :group, inverse_of: :events
@@ -36,7 +36,7 @@ class Event < ApplicationRecord
 
   # All signup paths, including manager approval, use the same lifecycle gate.
   def registration_open?
-    status == "published" && end_time.present? && end_time > Time.current
+    moderated_at.nil? && status == "published" && end_time.present? && end_time > Time.current
   end
 
   STATUSES = %w(draft pending published archived closed cancelled).freeze
@@ -89,7 +89,9 @@ class Event < ApplicationRecord
     # NULL-safe on purpose: `status` has a default but no NOT NULL constraint,
     # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
     # which would silently drop every legacy row that has none.
-    where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
+    where("events.moderated_at IS NULL OR events.owner_id = :uid OR events.group_id IN (:managed) OR events.id IN (:attending) OR events.id IN (:team)",
+      uid: user&.id, managed: managed, attending: Participant.where(user_id: user&.id).select(:event_id), team: EventRole.linked_to(user).select(:event_id))
+    .where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
       "(events.visibility IN ('normal', 'open_registration') AND events.status NOT IN ('draft', 'pending', 'archived')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed) OR (events.status = 'published' AND events.id IN (:team))",
       uid: user&.id, managed: managed, team: EventRole.linked_to(user).select(:event_id)

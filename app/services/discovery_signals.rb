@@ -7,7 +7,7 @@ class DiscoverySignals
 
   def self.refresh_group!(id)
     return unless id
-    latest_event = Event.where(group_id: id, status: "published", visibility: %w[normal open_registration]).order(created_at: :desc, id: :desc).limit(1).pick(:created_at)
+    latest_event = Event.where(group_id: id, moderated_at: nil, status: "published", visibility: %w[normal open_registration]).order(created_at: :desc, id: :desc).limit(1).pick(:created_at)
     latest_post = public_topics.where(group_id: id).order(created_at: :desc, id: :desc).limit(1).pick(:created_at)
     Group.where(id: id).update_all(discovery_active_at: [latest_event, latest_post].compact.max)
   end

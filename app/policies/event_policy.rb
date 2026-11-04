@@ -8,6 +8,7 @@ class EventPolicy < ApplicationPolicy
   # membership gate. It used to be, back when this value was called "private";
   # the rename to "unlisted" wasn't matched here until 2026-08-24.
   def show?
+    return update? || user&.platform_admin? || (user && Participant.where(event_id: record.id, user_id: user.id).exists?) if record.moderated_at.present?
     return update? || user&.platform_admin? if %w[draft pending archived].include?(record.status)
     true
   end

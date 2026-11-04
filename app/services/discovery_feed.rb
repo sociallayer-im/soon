@@ -216,7 +216,7 @@ class DiscoveryFeed
   def upcoming
     return [] unless @user
     valid = Participant.where(user_id: @user.id, status: "attending", payment_status: [nil, "succeeded"]).select(:event_id)
-    window = Event.where(status: "published").where("start_time > ?", @now)
+    window = Event.where(status: "published", moderated_at: nil).where("start_time > ?", @now)
     # Three bounded index lookups avoid an OR over the entire event history.
     mine = window.where(owner_id: @user.id).order(:start_time, :id).limit(6).pluck(:id)
     guest = window.where(id: EventRole.linked_to(@user).select(:event_id)).order(:start_time, :id).limit(6).pluck(:id)

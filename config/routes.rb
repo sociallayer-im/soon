@@ -69,6 +69,10 @@ Rails.application.routes.draw do
 
       post "groups/:id/resubmit", to: "groups#resubmit"
       get "activities/:id/review", to: "activities#review"
+      resources :content_reports, only: [:create]
+      get "admin/content_reports", to: "admin_content_reports#index"
+      post "admin/content_reports/:id/review", to: "admin_content_reports#review"
+      post "admin/content_reports/:id/restore", to: "admin_content_reports#restore"
       get "admin/campaign_reviews", to: "campaign_reviews#index"
       post "admin/campaign_reviews/:id/review", to: "campaign_reviews#review"
       get "admin/group_reviews", to: "group_reviews#index"

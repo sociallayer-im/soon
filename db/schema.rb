@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_04_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -258,6 +258,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.index ["user_id"], name: "index_comments_on_user_id"
   end
 
+  create_table "content_reports", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "decision"
+    t.string "reason", null: false
+    t.string "reporter_id", null: false
+    t.text "restore_note"
+    t.datetime "restored_at"
+    t.string "restored_by_id"
+    t.text "review_note"
+    t.datetime "reviewed_at"
+    t.string "reviewer_id"
+    t.string "status", default: "pending", null: false
+    t.string "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["reporter_id", "target_type", "target_id"], name: "index_content_reports_pending_unique", unique: true, where: "((status)::text = 'pending'::text)"
+    t.index ["status", "created_at", "id"], name: "index_content_reports_on_status_and_created_at_and_id"
+  end
+
   create_table "coupon_redemptions", id: :string, force: :cascade do |t|
     t.string "coupon_id", null: false
     t.datetime "created_at", null: false
@@ -359,6 +378,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.string "kind"
     t.integer "max_participant"
     t.string "meeting_url"
+    t.datetime "moderated_at"
+    t.string "moderated_by_id"
+    t.text "moderation_reason"
     t.text "notes"
     t.string "op_assigned_users", default: [], array: true
     t.string "op_labels", default: [], array: true
@@ -384,7 +406,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.string "visibility", default: "normal", comment: "normal | open_registration | unlisted"
     t.index ["end_time", "start_time"], name: "idx_events_discovery_end", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["form_id"], name: "index_events_on_form_id"
-    t.index ["group_id", "created_at", "id"], name: "idx_events_discovery_contribution", order: { created_at: :desc, id: :desc }, where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY ((ARRAY['normal'::character varying, 'open_registration'::character varying])::text[])))"
+    t.index ["group_id", "created_at", "id"], name: "idx_events_discovery_contribution", order: { created_at: :desc, id: :desc }, where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["group_id", "start_time", "id"], name: "idx_events_discovery_group_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["group_id"], name: "index_events_on_group_id"
     t.index ["owner_id", "start_time", "id"], name: "idx_events_owner_start"
@@ -552,8 +574,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.index ["target_type", "target_id", "created_at"], name: "index_follows_on_target_type_and_target_id_and_created_at"
     t.index ["user_id", "target_type", "target_id"], name: "index_follows_on_user_id_and_target_type_and_target_id", unique: true
     t.check_constraint "NOT (target_type::text = 'User'::text AND target_id::text = user_id::text)", name: "follows_no_self"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'pending'::character varying, 'declined'::character varying]::text[])", name: "follows_status_valid"
-    t.check_constraint "target_type::text = ANY (ARRAY['User'::character varying, 'Group'::character varying]::text[])", name: "follows_target_type_valid"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'pending'::character varying::text, 'declined'::character varying::text])", name: "follows_status_valid"
+    t.check_constraint "target_type::text = ANY (ARRAY['User'::character varying::text, 'Group'::character varying::text])", name: "follows_target_type_valid"
   end
 
   create_table "form_answers", id: :string, force: :cascade do |t|
@@ -809,7 +831,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["review_status", "created_at"], name: "index_groups_on_review_status_and_created_at"
     t.index ["reviewed_by_id"], name: "index_groups_on_reviewed_by_id"
-    t.check_constraint "review_status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying]::text[])", name: "groups_review_status"
+    t.check_constraint "review_status::text = ANY (ARRAY['pending'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text])", name: "groups_review_status"
   end
 
   create_table "hackathon_project_members", id: :string, force: :cascade do |t|
@@ -1267,7 +1289,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.index ["reviewed_by_id"], name: "index_refund_requests_on_reviewed_by_id"
     t.index ["status", "created_at", "id"], name: "index_refund_requests_on_status_and_created_at_and_id"
     t.index ["ticket_item_id"], name: "index_refund_requests_on_ticket_item_id"
-    t.index ["ticket_item_id"], name: "index_refund_requests_one_open", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'processing'::character varying])::text[]))"
+    t.index ["ticket_item_id"], name: "index_refund_requests_one_open", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('processing'::character varying)::text]))"
     t.index ["user_id"], name: "index_refund_requests_on_user_id"
   end
 
@@ -1287,7 +1309,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_110000) do
     t.string "ticket_item_id"
     t.datetime "updated_at", null: false
     t.index ["refundable_type", "refundable_id"], name: "index_refunds_on_refundable_type_and_refundable_id"
-    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
     t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
