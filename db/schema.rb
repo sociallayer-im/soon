@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_04_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -275,6 +275,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_100000) do
     t.datetime "updated_at", null: false
     t.index ["reporter_id", "target_type", "target_id"], name: "index_content_reports_pending_unique", unique: true, where: "((status)::text = 'pending'::text)"
     t.index ["status", "created_at", "id"], name: "index_content_reports_on_status_and_created_at_and_id"
+  end
+
+  create_table "content_safety_images", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "sha256", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["url"], name: "index_content_safety_images_on_url", unique: true
   end
 
   create_table "coupon_redemptions", id: :string, force: :cascade do |t|

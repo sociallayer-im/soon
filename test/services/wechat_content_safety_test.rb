@@ -27,6 +27,28 @@ class WechatContentSafetyTest < ActiveSupport::TestCase
       WechatContentSafety.check!(user: Struct.new(:wechat_openid).new("server-openid"), content: "test content")
     end
   end
+  test "image endpoint sends a multipart file and fails closed" do
+    response = Struct.new(:status, :body)
+    [0, 87014, 45009].each do |code|
+      client = Object.new
+      client.define_singleton_method(:post) do |url, **options|
+        if url.end_with?("stable_token")
+          response.new(200, {access_token: "test-token"}.to_json)
+        else
+          raise unless url.end_with?("img_sec_check") && options[:form][:media].read == "image-bytes"
+          response.new(200, {errcode: code}.to_json)
+        end
+      end
+      HTTPX.stub(:with, client) do
+        case code
+        when 0 then assert WechatContentSafety.check_image!("image-bytes")
+        when 87014 then assert_raises(WechatContentSafety::Rejected) { WechatContentSafety.check_image!("image-bytes") }
+        else assert_raises(WechatContentSafety::Unavailable) { WechatContentSafety.check_image!("image-bytes") }
+        end
+      end
+    end
+  end
+
   test "accepts only explicit pass" do
     assert check_response({errcode: 0, result: {suggest: "pass"}})
   end

@@ -74,7 +74,7 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def update
-    return unless safe_text_submission?(event_params, scene: 4)
+    return unless safe_text_submission?(event_params, scene: 4, previous: @event)
     authorize @event
     # group_id is intentionally not updatable — moving an event into another
     # group would escape the authorization that was checked against its current

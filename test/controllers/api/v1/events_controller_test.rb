@@ -1,6 +1,7 @@
 require "test_helper"
 
 class Api::V1::EventsControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
   test "index lists only events in the current user's groups" do
     owner = create_user
     group = create_group(owner: owner)

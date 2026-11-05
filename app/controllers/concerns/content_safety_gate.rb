@@ -3,10 +3,14 @@ module ContentSafetyGate
 
   private
 
-  def safe_text_submission?(attrs, scene:)
+  def safe_text_submission?(attrs, scene:, previous: nil)
     text = attrs.to_h.slice("title", "content", "description", "name", "after_signup", "signup_message", "notes", "tags", "requirement_tags").values.compact.join("\n")
     WechatContentSafety.check!(user: current_user, content: text, scene: scene)
+    ContentImageReferences.check!(attrs, previous: previous)
     true
+  rescue WechatContentSafety::RejectedImage
+    render_error("请重新上传图片，完成内容安全检测后再发布。")
+    false
   rescue WechatContentSafety::Rejected
     render_error("发布内容含违规信息，请修改后重试。")
     false

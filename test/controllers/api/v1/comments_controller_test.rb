@@ -1,6 +1,7 @@
 require "test_helper"
 
 class Api::V1::CommentsControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
   test "create requires authentication" do
     post "/api/v1/comments", params: { comment: { comment_type: "comment", content: "hi" } }
     assert_response :unauthorized

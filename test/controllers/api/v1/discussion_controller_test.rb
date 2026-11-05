@@ -3,6 +3,7 @@ require "test_helper"
 # The endpoints, including the two gates that turn the whole feature off and
 # every read path a private board could leak through.
 class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
   def setup
     @owner = create_user
     @author = create_user

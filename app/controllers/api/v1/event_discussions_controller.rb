@@ -1,4 +1,5 @@
 class Api::V1::EventDiscussionsController < Api::BaseController
+  include ContentSafetyGate
   include IdempotentCreation
   include DiscussionGate
   include DiscussionRateLimit
@@ -16,6 +17,7 @@ class Api::V1::EventDiscussionsController < Api::BaseController
 
   def create
     attrs = params.require(:discussion).permit(:title, :content, :image_url, :sync_to_community)
+    return unless safe_text_submission?(attrs, scene: 3)
     return render_error("请输入分享内容") if attrs[:content].blank?
     syncing = ActiveModel::Type::Boolean.new.cast(attrs[:sync_to_community])
     if syncing && !(@event.status == "published" && %w[normal open_registration].include?(@event.visibility))

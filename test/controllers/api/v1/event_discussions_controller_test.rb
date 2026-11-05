@@ -1,6 +1,7 @@
 require "test_helper"
 
 class Api::V1::EventDiscussionsControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
   setup do
     @previous_gate = ENV["DISCUSSION_ENABLED"]
     ENV["DISCUSSION_ENABLED"] = "true"

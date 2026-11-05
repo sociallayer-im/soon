@@ -74,7 +74,7 @@ class Api::V1::TopicsController < Api::BaseController
   # PATCH /api/v1/topics/:id — moving between boards is a manager action,
   # because it changes who can see the topic.
   def update
-    return unless safe_text_submission?(topic_params, scene: 3)
+    return unless safe_text_submission?(topic_params, scene: 3, previous: @topic)
     authorize @topic, :update?
 
     attrs = topic_params.except(:category_id)

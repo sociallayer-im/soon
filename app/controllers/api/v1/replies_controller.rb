@@ -46,7 +46,7 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   def update
-    return unless safe_text_submission?(reply_params, scene: 2)
+    return unless safe_text_submission?(reply_params, scene: 2, previous: @reply)
     authorize @reply, :update?
     @reply.update!(reply_params.except(:reply_to_id))
     render json: ReplyBlueprint.render(@reply, view: :with_permissions,
