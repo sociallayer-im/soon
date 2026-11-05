@@ -32,6 +32,12 @@ class SafeImageUploadTest < ActiveSupport::TestCase
     end
   end
 
+  test "SVG cannot be disguised as a raster upload" do
+    assert_raises(SafeImageUpload::InvalidImage) do
+      SafeImageUpload.upload!(StringIO.new('<svg xmlns="http://www.w3.org/2000/svg"><image href="http://localhost/private"/></svg>'))
+    end
+  end
+
   test "invalid bytes fail before checking or storing" do
     assert_raises(SafeImageUpload::InvalidImage) { SafeImageUpload.upload!(StringIO.new("not an image")) }
   end

@@ -8,7 +8,11 @@ class SafeImageUpload
   def self.upload!(file)
     # Normalize the actual bytes we will serve, rather than checking a thumbnail
     # and then serving an unchecked original/animation/SVG.
-    image = Vips::Image.new_from_buffer(file.read, "", access: :sequential)
+    source = file.read.b
+    supported = source.start_with?("\xFF\xD8\xFF".b, "\x89PNG\r\n\x1A\n".b, "GIF87a".b, "GIF89a".b) ||
+      (source.start_with?("RIFF".b) && source.byteslice(8, 4) == "WEBP")
+    raise InvalidImage, "请选择 JPG、PNG、GIF 或静态 WebP 图片。" unless supported
+    image = Vips::Image.new_from_buffer(source, "", access: :sequential)
     raise InvalidImage, "请选择静态图片，暂不支持动态图。" if image.get_typeof("n-pages") != 0 && image.get("n-pages") > 1
     raise InvalidImage, "图片尺寸过大，请压缩后重试。" if image.width * image.height > 40_000_000
     image = image.autorot
