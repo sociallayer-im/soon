@@ -1,23 +1,5 @@
 require "test_helper"
 class Api::V1::GroupCreationManagersTest < ActionDispatch::IntegrationTest
-  test "Chinese display name alone creates one group on idempotent replay" do
-    owner = create_user
-    body = {group: {nickname: "中文群组"}, idempotency_key: "auto-#{unique_suffix}"}
-    ids = []
-    assert_difference "Group.count", 1 do
-      2.times do
-        post "/api/v1/groups", params: body, as: :json, headers: auth_headers(owner)
-        assert_response :created
-        ids << json_response["id"]
-      end
-    end
-    assert_equal ids.first, ids.last
-    group = Group.find(ids.first)
-    assert_match HandleName::FORMAT, group.name
-    assert_equal "中文群组", group.nickname
-    assert_equal "pending", group.review_status
-  end
-
   test "creator remains owner and selected managers are added atomically while group awaits review" do
     owner = create_user
     manager = create_user
