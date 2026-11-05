@@ -1,4 +1,5 @@
 class Api::V1::TopicsController < Api::BaseController
+  include ContentSafetyGate
   include IdempotentCreation
   include DiscussionRateLimit
   include DiscussionGate
@@ -45,6 +46,7 @@ class Api::V1::TopicsController < Api::BaseController
   end
 
   def create
+    return unless safe_text_submission?(topic_params, scene: 3)
     category = Category.find_by(id: topic_params[:category_id])
     return render_not_found if category.nil?
     return render_not_found unless category.group.discussion_enabled?
@@ -72,6 +74,7 @@ class Api::V1::TopicsController < Api::BaseController
   # PATCH /api/v1/topics/:id — moving between boards is a manager action,
   # because it changes who can see the topic.
   def update
+    return unless safe_text_submission?(topic_params, scene: 3)
     authorize @topic, :update?
 
     attrs = topic_params.except(:category_id)

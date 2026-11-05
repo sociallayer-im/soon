@@ -1,10 +1,12 @@
 class Api::V1::CommentsController < Api::BaseController
+  include ContentSafetyGate
   # Comment threads render on public event/group pages.
   skip_before_action :authenticate!, only: :index
   before_action :set_comment, only: %i[remove]
 
   # POST /api/v1/comments
   def create
+    return unless safe_text_submission?(comment_params, scene: 2)
     comment = Comment.new(comment_params.merge(user: current_user))
     if comment.save
       CommentMailer.feedback(comment_id: comment.id).deliver_later if comment.comment_type == "feedback"

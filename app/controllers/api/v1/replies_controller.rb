@@ -1,4 +1,5 @@
 class Api::V1::RepliesController < Api::BaseController
+  include ContentSafetyGate
   include DiscussionRateLimit
   include DiscussionGate
 
@@ -24,6 +25,7 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   def create
+    return unless safe_text_submission?(reply_params, scene: 2)
     topic = Topic.find(params[:topic_id])
     return unless require_group_discussion!(topic.group)
     return render_not_found unless TopicPolicy.new(current_user, topic).show?
@@ -44,6 +46,7 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   def update
+    return unless safe_text_submission?(reply_params, scene: 2)
     authorize @reply, :update?
     @reply.update!(reply_params.except(:reply_to_id))
     render json: ReplyBlueprint.render(@reply, view: :with_permissions,

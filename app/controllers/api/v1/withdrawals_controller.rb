@@ -54,6 +54,9 @@ class Api::V1::WithdrawalsController < Api::BaseController
   # of one group, who would each see the other's un-deducted balance.
   def create
     outcome = @group.with_lock do
+      week_start = Time.use_zone("Asia/Shanghai") { Time.current.beginning_of_week(:monday) }
+      next { error: "每个群组每周只能申请提现一次，请下周再试。" } if @group.withdrawals.where(created_at: week_start...).exists?
+
       amount = Withdrawal.available_balance(@group)
       next { error: "no withdrawable balance" } if amount <= 0
 

@@ -20,6 +20,24 @@ class Api::V1::WithdrawalsControllerTest < ActionDispatch::IntegrationTest
     ENV.delete("WECHAT_PAY_ENABLED")
   end
 
+  test "one application per Shanghai calendar week including rejected requests" do
+    Time.use_zone("Asia/Shanghai") do
+      travel_to Time.zone.parse("2026-11-05 12:00") do
+        @group.withdrawals.create!(user: @owner, amount: 100, currency: "cny", status: "rejected",
+          bank_name: "Bank", bank_account_number: "123", bank_account_name: "Owner")
+        assert_no_difference "Withdrawal.count" do
+          post "/api/v1/withdrawals", params: {group_id: @group.id, bank_name: "Bank", bank_account_number: "123", bank_account_name: "Owner"}, headers: auth_headers(@manager)
+        end
+        assert_response :unprocessable_entity
+        assert_includes response.body, "每周只能申请"
+      end
+      travel_to Time.zone.parse("2026-11-09 00:00") do
+        post "/api/v1/withdrawals", params: {group_id: @group.id, bank_name: "Bank", bank_account_number: "123", bank_account_name: "Owner"}, headers: auth_headers(@manager)
+        assert_response :created
+      end
+    end
+  end
+
   test "the whole controller 404s when WECHAT_PAY_ENABLED is not set (SG deployments)" do
     ENV.delete("WECHAT_PAY_ENABLED")
     get "/api/v1/withdrawals/groups", headers: auth_headers(@owner)

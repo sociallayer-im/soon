@@ -1,4 +1,5 @@
 class Api::V1::EventsController < Api::BaseController
+  include ContentSafetyGate
   include IdempotentCreation
   # Raised when a nested role/ticket in an atomic create is malformed; rolls the
   # whole event create back with a precise message.
@@ -42,6 +43,7 @@ class Api::V1::EventsController < Api::BaseController
   # retry after failure starts from a clean slate instead of duplicating
   # children against a partially-created parent.
   def create
+    return unless safe_text_submission?(event_params, scene: 4)
     attrs = event_params.to_h
     # Surf events are authored in Shanghai time, independently of device/group defaults.
     attrs[:timezone] = "Asia/Shanghai"
@@ -72,6 +74,7 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def update
+    return unless safe_text_submission?(event_params, scene: 4)
     authorize @event
     # group_id is intentionally not updatable — moving an event into another
     # group would escape the authorization that was checked against its current
