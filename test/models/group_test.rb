@@ -1,6 +1,18 @@
 require "test_helper"
 
 class GroupTest < ActiveSupport::TestCase
+  test "Chinese display names receive unique editable handles automatically" do
+    first = Group.create!(nickname: "城市漫游")
+    second = Group.create!(nickname: "城市漫游")
+    assert_match HandleName::FORMAT, first.name
+    assert_not_equal first.name, second.name
+    assert_equal first.id, Domain.find_by!(name: first.name).item_id
+    old_name = first.name
+    first.update!(name: "city-walkers")
+    assert_nil Domain.find_by(name: old_name)
+    assert_equal first.id, Domain.find_by!(name: "city-walkers").item_id
+  end
+
   test "add_member creates a new membership and increments memberships_count" do
     group = Group.create!(name: "test-group")
     user = create_user

@@ -54,6 +54,20 @@ class Group < ApplicationRecord
   # (/group/<name>) so it must be well-formed and unique. Same shape as a user
   # name; see HandleName, which is also where the guard that keeps the six
   # existing out-of-range group handles saveable lives.
+  before_validation :assign_generated_handle, on: :create
+
+  # Display names can be Chinese; the URL identifier is generated independently.
+  def assign_generated_handle
+    return if name.present? || nickname.blank?
+    loop do
+      candidate = "group-#{SecureRandom.hex(7)}"
+      next if Domain.exists?(name: candidate) || User.exists?(name: candidate) || Group.exists?(name: candidate)
+      self.name = candidate
+      break
+    end
+  end
+  private :assign_generated_handle
+
   validates :name, presence: true, uniqueness: true
   include HandleName
 
