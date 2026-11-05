@@ -49,6 +49,27 @@ class WechatContentSafetyTest < ActiveSupport::TestCase
     end
   end
 
+  test "expired v2 identity still requires an explicit successful v1 safety check" do
+    response = Struct.new(:status, :body)
+    [0, 87014].each do |fallback_code|
+      client = Object.new
+      client.define_singleton_method(:post) do |url, **options|
+        result = if url.end_with?("stable_token")
+          {access_token: "test-token"}
+        elsif options[:json][:version] == 2
+          {errcode: 61010}
+        else
+          {errcode: fallback_code}
+        end
+        response.new(200, result.to_json)
+      end
+      HTTPX.stub(:with, client) do
+        invoke = -> { WechatContentSafety.check!(user: Struct.new(:wechat_openid).new("old-identity"), content: "text") }
+        fallback_code.zero? ? assert(invoke.call) : assert_raises(WechatContentSafety::Rejected, &invoke)
+      end
+    end
+  end
+
   test "accepts only explicit pass" do
     assert check_response({errcode: 0, result: {suggest: "pass"}})
   end

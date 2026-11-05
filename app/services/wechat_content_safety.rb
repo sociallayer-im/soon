@@ -13,6 +13,15 @@ class WechatContentSafety
     body.merge!(version: 2, scene: scene, openid: user.wechat_openid) if user.wechat_openid.present?
     data = parse(client.post("https://api.weixin.qq.com/wxa/msg_sec_check",
       params: { access_token: token }, json: body))
+    # v2 requires a recent WeChat visit. A persistent app session can outlive
+    # that window, or carry an identity from an older AppID. The independently
+    # verified identity-free endpoint must still check the same content; never
+    # interpret an identity error as a content pass.
+    if body[:version] == 2 && [40003, 61010].include?(data["errcode"].to_i)
+      body = { content: content }
+      data = parse(client.post("https://api.weixin.qq.com/wxa/msg_sec_check",
+        params: { access_token: token }, json: body))
+    end
     if [40001, 40014, 42001].include?(data["errcode"].to_i)
       Rails.cache.delete(key)
       raise Unavailable
