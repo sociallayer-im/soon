@@ -17,7 +17,8 @@ class Api::V1::RepliesController < Api::BaseController
     return render_not_found unless TopicPolicy.new(current_user, topic).show?
 
     manager = GroupPolicy.new(current_user, topic.group).manage?
-    scope = topic.replies.visible_to(current_user, manager: manager).chronological
+    scope = topic.replies.visible_to(current_user, manager: manager)
+    scope = params[:sort] == "newest" ? scope.order(created_at: :desc, id: :desc) : scope.chronological
     render_collection scope.includes(:user, reply_to: :user),
                       blueprint: ReplyBlueprint, view: :with_permissions,
                       current_user: current_user, can_manage: manager,

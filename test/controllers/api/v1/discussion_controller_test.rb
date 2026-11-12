@@ -21,6 +21,23 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     ENV.delete("DISCUSSION_ENABLED")
   end
 
+  test "newest replies are ordered before pagination with chronological default" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      time = 1.hour.ago
+      rows = 3.times.map { create_reply(topic: topic, user: @author, created_at: time) }
+      expected = rows.sort_by(&:id).reverse
+      [1, 2, 3].each do |page|
+        get "/api/v1/topics/#{topic.id}/replies", params: {sort: "newest", page: page, limit: 1}
+        assert_response :success
+        assert_equal [expected[page - 1].id], json_response["data"].pluck("id")
+      end
+      get "/api/v1/topics/#{topic.id}/replies", params: {limit: 1}
+      assert_response :success
+      assert_equal [expected.last.id], json_response["data"].pluck("id")
+    end
+  end
+
   test "every discussion endpoint 404s when the deployment gate is closed" do
     topic = with_discussion { create_topic(category: @category, user: @author) }
 

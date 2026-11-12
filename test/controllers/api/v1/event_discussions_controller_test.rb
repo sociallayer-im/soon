@@ -13,6 +13,21 @@ class Api::V1::EventDiscussionsControllerTest < ActionDispatch::IntegrationTest
 
   teardown { ENV["DISCUSSION_ENABLED"] = @previous_gate }
 
+  test "newest discussion sorting precedes pagination and preserves default activity order" do
+    older = create_topic(category: @category, user: @owner, event_id: @event.id, created_at: 2.days.ago)
+    newer = create_topic(category: @category, user: @owner, event_id: @event.id, created_at: 1.day.ago)
+    older.update_columns(last_active_mark: Time.current.to_i)
+    newer.update_columns(last_active_mark: 1)
+    get "/api/v1/events/#{@event.id}/discussion", params: {sort: "newest", limit: 1}
+    assert_response :success
+    assert_equal [newer.id], json_response["data"].pluck("id")
+    get "/api/v1/events/#{@event.id}/discussion", params: {sort: "newest", limit: 1, page: 2}
+    assert_response :success
+    assert_equal [older.id], json_response["data"].pluck("id")
+    get "/api/v1/events/#{@event.id}/discussion", params: {limit: 1}
+    assert_equal [older.id], json_response["data"].pluck("id")
+  end
+
   test "linked post can be edited and deleted by its author while strangers are denied" do
     post "/api/v1/events/#{@event.id}/discussion",params:{discussion:{content:"原内容",title:"原标题",sync_to_community:true}},headers:auth_headers(@owner),as: :json
     assert_response :created

@@ -267,3 +267,10 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - 可选城市固定为上海、杭州、深圳、成都，保持产品指定顺序，不再从群组自由填写的历史 city 派生。
 - `/cities`、首页和社区推荐继续共用 DiscoveryCity.options；日历和创建群组同步使用同一接口。保留“全部城市”浏览入口，不修改历史群组数据。
 - 回归覆盖测试城市不进入目录，并检查三个接口返回一致列表。
+
+### 2026-11-12 评论与活动讨论按最新分页
+
+- GET /api/v1/topics/:topic_id/replies 与 GET /api/v1/events/:event_id/discussion 增加可选 sort=newest，数据库按 created_at DESC, id DESC 排序后分页。
+- 默认行为兼容原调用：评论按时间正序，活动讨论按最近活跃排序。可见性和权限检查继续由现有查询执行。
+- 两个控制器测试集共 32 项、152 个断言通过，包含分页、相同时间 ID 排序及默认顺序回归。
+- 无数据库迁移。本次尚未部署。
