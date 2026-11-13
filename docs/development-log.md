@@ -274,3 +274,10 @@ Verification: full backend 1,429 tests / 5,337 assertions passed, including a na
 - 默认行为兼容原调用：评论按时间正序，活动讨论按最近活跃排序。可见性和权限检查继续由现有查询执行。
 - 两个控制器测试集共 32 项、152 个断言通过，包含分页、相同时间 ID 排序及默认顺序回归。
 - 无数据库迁移。本次尚未部署。
+
+## 2026-11-13 — Framed image safety receipts
+
+- Production uploads returned 200, but event creation returned 422 after cover framing added a `#surf-frame-v1` fragment to the approved image URL.
+- Normalize image reference fragments before safety receipt comparison; retain query strings so a different resource cannot reuse an approval.
+- Regression: approved framed images pass; unapproved images and query-modified resources remain rejected.
+- Validation: content_image_references_test.rb: 4 tests, 5 assertions passed. Requires backend deployment to apply online.

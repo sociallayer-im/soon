@@ -6,6 +6,18 @@ class ContentImageReferencesTest < ActiveSupport::TestCase
     assert_equal %w[https://store/cover https://store/one https://store/two https://store/three], urls
   end
 
+  test "framed approved images retain their safety receipt" do
+    url = "https://store/framed"
+    ContentSafetyImage.create!(url: url, sha256: "framed-hash")
+    ContentImageReferences.check!({"image_url" => "#{url}#surf-frame-v1=1169,1153,1.37326,0.51336,0"})
+    assert_raises(WechatContentSafety::RejectedImage) do
+      ContentImageReferences.check!({"image_url" => "#{url}?different=1#surf-frame-v1=1,1,1,0,0"})
+    end
+    assert_raises(WechatContentSafety::RejectedImage) do
+      ContentImageReferences.check!({"image_url" => "https://untrusted/image#surf-frame-v1=1,1,1,0,0"})
+    end
+  end
+
   test "unchecked remote URL cannot bypass upload safety" do
     assert_raises(WechatContentSafety::RejectedImage) { ContentImageReferences.check!({"content" => "![x](https://untrusted/image.jpg)"}) }
   end

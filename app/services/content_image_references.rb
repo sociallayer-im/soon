@@ -13,7 +13,9 @@ class ContentImageReferences
       html = Kramdown::Document.new(data[field].to_s).to_html
       urls.concat(Nokogiri::HTML.fragment(html).css("img[src]").map { |img| img["src"] })
     end
-    urls.map(&:to_s).reject(&:blank?).uniq
+    # Fragments describe client-side framing and never change fetched bytes.
+    # Preserve query strings: they may identify a different stored resource.
+    urls.map { |url| url.to_s.split("#", 2).first }.reject(&:blank?).uniq
   end
 
   def self.check!(attrs, previous: nil)
