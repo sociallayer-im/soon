@@ -84,8 +84,10 @@ class Api::V1::EventIntegrationImprovementsTest < ActionDispatch::IntegrationTes
     end
     assert_equal originals.map(&:id).sort.reverse, ids
     assert_nil cursor
-    get "/api/v1/comments", params: params.merge(cursor: "invalid")
-    assert_response :unprocessable_entity
+    ["invalid", Base64.urlsafe_encode64("null"), Base64.urlsafe_encode64("[]")].each do |invalid|
+      get "/api/v1/comments", params: params.merge(cursor: invalid)
+      assert_response :unprocessable_entity
+    end
   end
 
 end

@@ -134,6 +134,7 @@ class Api::BaseController < ActionController::API
     unless cursor == "start"
       begin
         payload = JSON.parse(Base64.urlsafe_decode64(cursor))
+        raise ArgumentError unless payload.is_a?(Hash) && payload["created_at"].is_a?(String)
         time = Time.iso8601(payload.fetch("created_at"))
         id = payload.fetch("id")
         raise ArgumentError unless id.is_a?(String) && id.length.between?(1, 128)

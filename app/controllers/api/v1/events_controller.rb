@@ -34,13 +34,13 @@ class Api::V1::EventsController < Api::BaseController
     rows = Event.where(id: visible).where.not(tags: nil)
       .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
       .where("event_tag.value <> ''")
-    rows = rows.where("event_tag.value ILIKE ?", "%#{Event.sanitize_sql_like(query)}%") if query.present?
     # Cache candidates briefly, then re-check their visibility against live rows.
     # This avoids leaking a tag when the last public event becomes private.
-    key = "event-tag-suggestions:v1:#{Digest::SHA256.hexdigest(query.downcase)}:#{limit}"
+    key = "event-tag-suggestions:v1:all"
     candidates = Rails.cache.fetch(key, expires_in: 30.seconds, race_condition_ttl: 2.seconds) do
-      rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).limit(limit).pluck(Arel.sql("event_tag.value"))
+      rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).pluck(Arel.sql("event_tag.value"))
     end
+    candidates = candidates.select { |tag| tag.downcase.include?(query.downcase) }.first(limit)
     if candidates.any?
       still_visible = Event.where(id: visible).where("events.tags && ARRAY[?]::varchar[]", candidates)
         .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
