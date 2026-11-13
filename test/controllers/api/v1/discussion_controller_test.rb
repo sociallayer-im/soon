@@ -21,6 +21,20 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     ENV.delete("DISCUSSION_ENABLED")
   end
 
+  test "reply targets must be visible and belong to the same topic" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      target = create_reply(topic: topic, user: @author)
+      post "/api/v1/topics/#{topic.id}/replies", params: {reply: {content: "回复", reply_to_id: target.id}}, headers: auth_headers(@owner)
+      assert_response :created
+      assert_equal target.id, json_response["reply_to_id"]
+      assert_equal target.user_id, json_response.dig("reply_to", "user", "id")
+      other = create_topic(category: @category, user: @author)
+      post "/api/v1/topics/#{other.id}/replies", params: {reply: {content: "回复", reply_to_id: target.id}}, headers: auth_headers(@owner)
+      assert_response :unprocessable_entity
+    end
+  end
+
   test "newest replies are ordered before pagination with chronological default" do
     with_discussion do
       topic = create_topic(category: @category, user: @author)

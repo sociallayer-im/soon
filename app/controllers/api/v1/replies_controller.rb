@@ -31,6 +31,11 @@ class Api::V1::RepliesController < Api::BaseController
     return unless require_group_discussion!(topic.group)
     return render_not_found unless TopicPolicy.new(current_user, topic).show?
 
+    if reply_params[:reply_to_id].present?
+      manager = GroupPolicy.new(current_user, topic.group).manage?
+      target = topic.replies.visible_to(current_user, manager: manager).find_by(id: reply_params[:reply_to_id])
+      return render_error("回复的评论已不可查看，请刷新后重试") unless target
+    end
     reply = topic.replies.new(reply_params)
     reply.user = current_user
     authorize reply, :create?
