@@ -67,4 +67,25 @@ class Api::V1::EventIntegrationImprovementsTest < ActionDispatch::IntegrationTes
     assert_equal comments.map(&:id).sort.reverse, ids
   end
 
+  test "cursor comments do not repeat when a newer comment is added" do
+    timestamp = 2.minutes.ago.change(usec: 0)
+    originals = 3.times.map { |i| Comment.create!(user: @owner, item: @group, comment_type: "comment", content: "old #{i}", created_at: timestamp) }
+    params = {item_type: "Group", item_id: @group.id, comment_type: "comment", limit: 1, cursor: "start"}
+    get "/api/v1/comments", params: params
+    assert_response :success
+    ids = [json_response["data"].first["id"]]
+    cursor = json_response["meta"]["next_cursor"]
+    Comment.create!(user: @owner, item: @group, comment_type: "comment", content: "new")
+    2.times do
+      get "/api/v1/comments", params: params.merge(cursor: cursor)
+      assert_response :success
+      ids << json_response["data"].first["id"]
+      cursor = json_response["meta"]["next_cursor"]
+    end
+    assert_equal originals.map(&:id).sort.reverse, ids
+    assert_nil cursor
+    get "/api/v1/comments", params: params.merge(cursor: "invalid")
+    assert_response :unprocessable_entity
+  end
+
 end

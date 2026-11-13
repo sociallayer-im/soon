@@ -28,6 +28,20 @@ class Api::V1::EventDiscussionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [older.id], json_response["data"].pluck("id")
   end
 
+  test "newest cursor excludes newly inserted discussions from subsequent pages" do
+    older = create_topic(category: @category, user: @owner, event_id: @event.id, created_at: 2.days.ago)
+    newer = create_topic(category: @category, user: @owner, event_id: @event.id, created_at: 1.day.ago)
+    get "/api/v1/events/#{@event.id}/discussion", params: {sort: "newest", limit: 1, cursor: "start"}
+    assert_response :success
+    assert_equal newer.id, json_response["data"].first["id"]
+    cursor = json_response["meta"]["next_cursor"]
+    create_topic(category: @category, user: @owner, event_id: @event.id)
+    get "/api/v1/events/#{@event.id}/discussion", params: {sort: "newest", limit: 1, cursor: cursor}
+    assert_response :success
+    assert_equal older.id, json_response["data"].first["id"]
+    assert_nil json_response["meta"]["next_cursor"]
+  end
+
   test "linked post can be edited and deleted by its author while strangers are denied" do
     post "/api/v1/events/#{@event.id}/discussion",params:{discussion:{content:"原内容",title:"原标题",sync_to_community:true}},headers:auth_headers(@owner),as: :json
     assert_response :created

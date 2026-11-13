@@ -12,6 +12,10 @@ class Api::V1::EventDiscussionsController < Api::BaseController
     manager = GroupPolicy.new(current_user, @event.group).manage?
     scope = Topic.in_visible_categories(current_user).visible_to(current_user, manager: manager)
       .where(event_id: @event.id)
+    if params[:cursor].present?
+      return render_error("cursor pagination requires sort=newest") unless params[:sort] == "newest"
+      return render_newest_cursor(scope, blueprint: TopicBlueprint, view: :detail, current_user: current_user)
+    end
     scope = params[:sort] == "newest" ? scope.order(created_at: :desc, id: :desc) : scope.recently_active
     render_collection scope, blueprint: TopicBlueprint, view: :detail, current_user: current_user
   end

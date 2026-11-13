@@ -47,6 +47,7 @@ class Api::V1::CommentsController < Api::BaseController
     comments = comments.where(item_type: params[:item_type]) if params[:item_type].present?
     comments = comments.where(item_id: params[:item_id]) if params[:item_id].present?
     comments = comments.where(user_id: params[:user_id]) if params[:user_id].present?
+    return render_newest_cursor(comments, blueprint: CommentBlueprint) if params[:cursor].present?
     render_collection comments.order(created_at: :desc, id: :desc), blueprint: CommentBlueprint
   end
 

@@ -35,8 +35,19 @@ class Api::V1::EventsController < Api::BaseController
       .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
       .where("event_tag.value <> ''")
     rows = rows.where("event_tag.value ILIKE ?", "%#{Event.sanitize_sql_like(query)}%") if query.present?
-    tags = rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).limit(limit).pluck(Arel.sql("event_tag.value"))
-    render json: { data: tags }
+    # Cache candidates briefly, then re-check their visibility against live rows.
+    # This avoids leaking a tag when the last public event becomes private.
+    key = "event-tag-suggestions:v1:#{Digest::SHA256.hexdigest(query.downcase)}:#{limit}"
+    candidates = Rails.cache.fetch(key, expires_in: 30.seconds, race_condition_ttl: 2.seconds) do
+      rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).limit(limit).pluck(Arel.sql("event_tag.value"))
+    end
+    if candidates.any?
+      still_visible = Event.where(id: visible).where("events.tags && ARRAY[?]::varchar[]", candidates)
+        .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
+        .where("event_tag.value IN (?)", candidates).distinct.pluck(Arel.sql("event_tag.value"))
+      candidates &= still_visible
+    end
+    render json: { data: candidates }
   end
 
   # GET /api/v1/events/:id
@@ -48,6 +59,8 @@ class Api::V1::EventsController < Api::BaseController
     authorize @event
     options = show_options
     view = ActiveModel::Type::Boolean.new.cast(params[:summary]) ? :default : :extended
+    options[:ticket_occupied_counts] = TicketItem.where(ticket_id: @event.tickets.select(:id), inventory_reserved: true, released_at: nil).group(:ticket_id).count if view == :extended
+    options[:ticket_occupied_counts] = Hash.new(0).merge(options[:ticket_occupied_counts]) if view == :extended
     render json: EventBlueprint.render(@event, view: view, **options)
   end
 

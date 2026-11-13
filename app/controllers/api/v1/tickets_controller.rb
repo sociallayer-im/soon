@@ -20,7 +20,7 @@ class Api::V1::TicketsController < Api::BaseController
     return if wechat_organizer_rejected?(@event)
     ticket = @event.tickets.new(ticket_params)
     if ticket.save
-      render json: TicketBlueprint.render(ticket, view: :extended), status: :created
+      render json: TicketBlueprint.render(ticket, view: :extended, ticket_occupied_counts: {}), status: :created
     else
       render_error(ticket.errors.full_messages.join(", "))
     end
@@ -53,7 +53,7 @@ class Api::V1::TicketsController < Api::BaseController
         end
       end
       if @ticket.update(attrs)
-        render json: TicketBlueprint.render(@ticket, view: :extended)
+        render json: TicketBlueprint.render(@ticket, view: :extended, ticket_occupied_counts: { @ticket.id => @ticket.ticket_items.where(inventory_reserved: true, released_at: nil).count })
       else
         render_error(@ticket.errors.full_messages.join(", "))
       end
@@ -78,7 +78,8 @@ class Api::V1::TicketsController < Api::BaseController
   # GET /api/v1/events/:event_id/tickets
   def index
     event = Event.find(params[:event_id])
-    render_collection event.tickets, blueprint: TicketBlueprint, view: :extended
+    counts = Hash.new(0).merge(TicketItem.where(ticket_id: event.tickets.select(:id), inventory_reserved: true, released_at: nil).group(:ticket_id).count)
+    render_collection event.tickets, blueprint: TicketBlueprint, view: :extended, ticket_occupied_counts: counts
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
