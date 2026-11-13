@@ -173,6 +173,7 @@ Rails.application.routes.draw do
       resources :events do
         collection do
           get :pending_approval
+          get :tag_suggestions
         end
         member do
           post :approve

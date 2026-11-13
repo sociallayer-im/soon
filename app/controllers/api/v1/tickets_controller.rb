@@ -33,10 +33,30 @@ class Api::V1::TicketsController < Api::BaseController
     return if stripe_setting_rejected?(@event)
     return if wechat_organizer_rejected?(@event)
 
-    if @ticket.update(ticket_params)
-      render json: TicketBlueprint.render(@ticket, view: :extended)
-    else
-      render_error(@ticket.errors.full_messages.join(", "))
+    attrs = ticket_params.to_h
+    total_supplied = params.require(:ticket).key?(:total_quantity)
+    return render_error("quantity and total_quantity cannot be changed together") if total_supplied && attrs.key?("quantity")
+    @event.with_lock do
+      @ticket.lock!
+      if total_supplied
+        raw = params.require(:ticket)[:total_quantity]
+        if raw.nil? || raw == ""
+          attrs["quantity"] = nil
+        else
+          return render_error("total_quantity must be a non-negative integer") unless raw.to_s.match?(/\A\d+\z/)
+          # Reserved inventory includes paid and pending orders; released, refunded,
+          # and not-yet-approved orders do not occupy units.
+          occupied = @ticket.ticket_items.where(inventory_reserved: true, released_at: nil).count
+          total = raw.to_i
+          return render_error("total_quantity cannot be below reserved or sold tickets (#{occupied})") if total < occupied
+          attrs["quantity"] = total - occupied
+        end
+      end
+      if @ticket.update(attrs)
+        render json: TicketBlueprint.render(@ticket, view: :extended)
+      else
+        render_error(@ticket.errors.full_messages.join(", "))
+      end
     end
   end
 

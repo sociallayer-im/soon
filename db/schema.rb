@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_13_080100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -253,6 +253,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.index ["fed_uri"], name: "index_comments_on_fed_uri", unique: true, where: "(fed_uri IS NOT NULL)"
+    t.index ["item_type", "item_id", "comment_type", "created_at", "id"], name: "index_comments_for_newest_threads", where: "(removed = false)"
     t.index ["item_type", "item_id", "removed"], name: "index_comments_on_item_type_and_item_id_and_removed"
     t.index ["user_id", "comment_type"], name: "index_comments_on_user_id_and_comment_type"
     t.index ["user_id"], name: "index_comments_on_user_id"
@@ -422,6 +423,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
     t.index ["place_id"], name: "index_events_on_place_id"
     t.index ["ref_id"], name: "index_events_on_ref_id", where: "(ref_id IS NOT NULL)"
     t.index ["start_time", "id"], name: "idx_events_discovery_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
+    t.index ["tags"], name: "index_events_on_tags", using: :gin
     t.index ["track_id"], name: "index_events_on_track_id"
     t.index ["venue_id"], name: "index_events_on_venue_id"
   end
@@ -808,8 +810,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
     t.string "group_ticket_event_id"
     t.boolean "hackathon_enabled", default: false, null: false
     t.string "image_url"
+    t.decimal "latitude", precision: 10, scale: 6
     t.string "location"
     t.string "logo_url"
+    t.decimal "longitude", precision: 10, scale: 6
     t.boolean "map_enabled", default: false, null: false
     t.integer "memberships_count", default: 0, null: false
     t.string "name"
@@ -1601,6 +1605,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_090000) do
     t.index ["category_id", "last_active_mark"], name: "index_topics_on_category_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["created_at", "id"], name: "idx_topics_discovery_created", order: :desc, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"
     t.index ["deleted_at"], name: "index_topics_on_deleted_at"
+    t.index ["event_id", "created_at", "id"], name: "index_topics_for_event_newest"
     t.index ["event_id"], name: "index_topics_on_event_id"
     t.index ["flagged_at"], name: "index_topics_on_flagged_at"
     t.index ["group_id", "created_at", "id"], name: "idx_topics_discovery_group_created", order: { created_at: :desc, id: :desc }, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"

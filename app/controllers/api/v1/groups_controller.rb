@@ -168,7 +168,7 @@ class Api::V1::GroupsController < Api::BaseController
   PRIVILEGED_TAGS = %w[featured top pin].freeze
 
   def group_params
-    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location, :city,
+    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location, :city, :latitude, :longitude,
       :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
       :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
       :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,

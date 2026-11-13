@@ -1,4 +1,12 @@
 class Group < ApplicationRecord
+  validates :latitude, numericality: { greater_than_or_equal_to: -90, less_than_or_equal_to: 90 }, allow_nil: true
+  validates :longitude, numericality: { greater_than_or_equal_to: -180, less_than_or_equal_to: 180 }, allow_nil: true
+  validate :coordinates_must_be_paired
+
+  def coordinates_must_be_paired
+    errors.add(:base, "latitude and longitude must both be present") if latitude.nil? != longitude.nil?
+  end
+
   before_validation -> { self.browse_city = DiscoveryCity.normalize(city) }
 
   include SiteNotifiable

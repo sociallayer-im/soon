@@ -10,7 +10,7 @@ class GroupBlueprint < Blueprinter::Base
   # which is a 726KB response against sails' 16KB for the same page — and the
   # consumer (sola-sdk popup_city.ts toPopupCity) reads only scalars.
   view :card do
-    fields :review_reason, :reviewed_at, :bio, :location, :timezone, :start_date, :end_date, :active,
+    fields :review_reason, :reviewed_at, :bio, :location, :latitude, :longitude, :timezone, :start_date, :end_date, :active,
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
            :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,

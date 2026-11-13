@@ -7,8 +7,8 @@ class Api::V1::EventsController < Api::BaseController
 
   # Event browsing/pages are public — EventPolicy/visible_to still hide
   # drafts/private events from anonymous viewers.
-  skip_before_action :authenticate!, only: %i[index show]
-  before_action :authenticate_optional!, only: %i[index show]
+  skip_before_action :authenticate!, only: %i[index show tag_suggestions]
+  before_action :authenticate_optional!, only: %i[index show tag_suggestions]
   before_action :set_event, only: %i[show update destroy approve]
 
   # GET /api/v1/events — the browse/schedule listing.
@@ -23,6 +23,20 @@ class Api::V1::EventsController < Api::BaseController
     scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
     scope = apply_filters(scope)
     render_collection scope, blueprint: EventBlueprint, **personalization_options
+  end
+
+  # Suggestions only expose tags from discoverable public events, never drafts or unlisted events.
+  def tag_suggestions
+    query = params[:q].to_s.strip.first(50)
+    limit = params[:limit].to_i.clamp(1, 20)
+    limit = 10 if params[:limit].blank?
+    visible = Event.publicly_discoverable.select(:id)
+    rows = Event.where(id: visible).where.not(tags: nil)
+      .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
+      .where("event_tag.value <> ''")
+    rows = rows.where("event_tag.value ILIKE ?", "%#{Event.sanitize_sql_like(query)}%") if query.present?
+    tags = rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).limit(limit).pluck(Arel.sql("event_tag.value"))
+    render json: { data: tags }
   end
 
   # GET /api/v1/events/:id
@@ -208,6 +222,7 @@ class Api::V1::EventsController < Api::BaseController
     if params[:search_title].present?
       scope = scope.where("title ILIKE ?", "%#{Event.sanitize_sql_like(params[:search_title])}%")
     end
+    scope = scope.where("events.tags @> ARRAY[?]::varchar[]", params[:tag].to_s.strip) if params[:tag].present?
     if params[:tags].present?
       scope = scope.where("tags && ARRAY[?]::varchar[]", Array(params[:tags]))
     end
