@@ -50,3 +50,14 @@ Gemfile 场景没有出现原生扩展重新安装日志；依赖步骤本身约
 最终运行镜像禁用网络、只读根文件系统、uid 1000 烟测通过：生产依赖检查、Eth 原生签名、Oga XML、Vips 图片、bcrypt、资源清单和 Rails zeitwerk:check。测试依赖、Bun、编译器、node_modules、测试/文档目录及私有标记均不在镜像内，script/ 维护入口保留。
 
 测试镜像 229,593,083 字节，迁移前线上镜像 254,695,758 字节。镜像仅用于验证，没有发布替换线上服务；缓存保留预算调整已经生效。
+
+## 2026-11-13: Juluo builder investigation and repair
+
+- Surf uses HomePod's dedicated `atlas-juluo-workspace-buildkit`, with a persistent `atlas-juluo-buildkit-cache` volume and native snapshotter. The builder has not changed since November 3. Atlas runner does not pass `--no-cache`, but also does not export/import an external registry build cache.
+- The daemon's effective GC reserved-space threshold was only 4.096GB, against 15.54GB of cache records during a Rails build. Old intermediate dependency snapshots were absent; both recent Atlas builds recorded only 1 cached step out of 31. Some cache mounts survived, which is different from preserving the completed dependency layers.
+- Increased `--oci-worker-gc-keepstorage` from 4096 to 65536 MB, preserving the exact Docker HostConfig, image, socket, volume and workspace isolation. BuildKit worker reports 65.536GB reserved space. This is disk retention, not RAM allocation or a hard disk quota; GC still applies.
+- Pinned Ruby 4.0.5 slim to the digest used by the accepted build, avoiding invalidation from mutable tag updates. Bun was already pinned.
+- After warming the missing layers, a second identical remote build completed in 2 seconds with all 22 executable/copy steps cached. This was a cache-only verification without image export, registry upload or production replacement; it is not an end-to-end deployment timing.
+- A separate registry failure prolonged export: the kernel killed zot under its 256MiB cgroup limit at 06:22:25 UTC. Raised zot to 768MiB online and updated recovery/provisioning scripts. OSS storage already uses the Aliyun internal endpoint; HomePod-to-Juluo pushes still cross the public network.
+- A separate route-confirmation failure was traced to severe memory reclaim in the shared 128MiB Traefik cgroup (over 823,000 memory-limit events, ~12% pressure stalls). Raised its live limit to 256MiB without restart; HTTPS immediately recovered. Updated the saved recovery spec and provisioning defaults. The running Nomad task's resource declaration remains unchanged until a separately planned shared-job rollout; a future scheduler replacement must use the updated spec.
+- Image-check fix `66c43b9` was then deployed by immutable image (no rebuild): deployment `dep_6d29cf10-5642-4fdd-9bb6-c00f6e1f7bcd`, image digest `sha256:972635ff78f8afc8fa45d04e395720eb22d4bdf06e420440ac54f39f6dec50fd`. `/up` returned 200; read-only production validation accepted the original cover URL with `surf-frame-v1` and its associated image receipt.

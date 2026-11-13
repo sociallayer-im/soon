@@ -2,9 +2,11 @@
 # check=error=true
 
 ARG RUBY_VERSION=4.0.5
+# Pin the base filesystem: republishing a Ruby tag must not invalidate every layer.
+ARG RUBY_IMAGE=docker.io/library/ruby:4.0.5-slim@sha256:42ad5227a4b2758f32563b34b5967e1055e75c80243eef04e6d2572887d1dec4
 ARG BUN_IMAGE=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4
 
-FROM docker.io/library/ruby:${RUBY_VERSION}-slim AS base
+FROM ${RUBY_IMAGE} AS base
 ARG RUBY_VERSION
 ARG TARGETARCH
 WORKDIR /rails
