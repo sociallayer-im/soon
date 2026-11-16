@@ -179,7 +179,6 @@ class DiscoveryFeed
         post = rows[id]
         next unless post
         card = JSON.parse(TopicBlueprint.render(post))
-        card["content"] = post.content
         card["event"] = JSON.parse(EventBlueprint.render(linked[post.event_id])) if linked[post.event_id]
         card
       end.tap do |cards|

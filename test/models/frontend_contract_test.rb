@@ -12,8 +12,11 @@ class FrontendContractTest < ActiveSupport::TestCase
     owner = create_user
     group = create_group(owner: owner)
     topic = create_topic(category: create_category(group: group), user: owner,
-      content: "a" * 700 + "\n![attachment](https://assets.juluo.xyz/photo)")
-    assert_equal topic.content, TopicBlueprint.render_as_hash(topic)[:content]
+      content: "a" * 700 + "\n![Surf 帖子附件](https://assets.juluo.xyz/photo)")
+    result = TopicBlueprint.render_as_hash(topic)
+    assert_includes result[:image_urls], "https://assets.juluo.xyz/photo"
+    assert_operator result[:content].length, :<, topic.content.length
+    assert_equal topic.content, TopicBlueprint.render_as_hash(topic, view: :detail)[:content]
   end
 
   test "event list includes named roles" do
@@ -22,6 +25,9 @@ class FrontendContractTest < ActiveSupport::TestCase
     event.event_roles.create!(role: "speaker", item_type: "User", item_id: owner.id, display_name: "嘉宾")
     result = EventBlueprint.render_as_hash(event)
     assert_equal "嘉宾", result[:event_roles].first[:display_name]
+    assert_not result[:event_roles].first.key?(:email)
+    event.event_roles.first.update!(email: "invite@example.com")
+    assert_equal "invite@example.com", EventBlueprint.render_as_hash(event.reload, view: :extended, manage_participants: true)[:event_roles].first[:email]
   end
 
   test "discussion and stars notify once and never notify self" do

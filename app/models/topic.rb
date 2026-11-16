@@ -20,6 +20,17 @@ class Topic < ApplicationRecord
   include Flaggable
   include Starrable
 
+  def list_media
+    lines = content.to_s.rstrip.split("\n")
+    images = []
+    while (match = /\A!\[Surf 帖子附件\]\(([^\s]+)\)\z/.match(lines.last.to_s.strip))
+      images.unshift(match[1])
+      lines.pop
+      lines.pop while lines.last == ""
+    end
+    {text: lines.join("\n"), images: ([image_url.presence] + images).compact.uniq.first(9)}
+  end
+
   MAX_CONTENT   = 64.kilobytes
   MAX_TAGS      = 10
   MAX_TAG_CHARS = 32

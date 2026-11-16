@@ -9,6 +9,23 @@ class Api::V1::RegistrationEntryPointsTest < ActionDispatch::IntegrationTest
     @base = "/api/v1/events/#{@event.id}/participants"
   end
 
+  test "team registration list batch loads event roles and hides invitation emails" do
+    4.times do
+      event = create_event(group: @group, owner: @owner)
+      event.event_roles.create!(item_type: "User", role: "speaker", display_name: "嘉宾", email: "private@example.com")
+    end
+    queries = []
+    subscriber = ->(_name, _start, _finish, _id, payload) { queries << payload[:sql] unless payload[:cached] }
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      get "/api/v1/registrations", params: {team: true}, headers: auth_headers(@owner)
+    end
+    assert_response :success
+    role_selects = queries.grep(/SELECT "event_roles"\.\* FROM "event_roles"/i)
+    assert_operator role_selects.length, :<=, 1
+    assert_not response.body.include?("private@example.com")
+    assert response.body.include?("嘉宾")
+  end
+
   test "no self update status can promote an unconfirmed registration" do
     p = create_participant(event: @event, user: @user)
     %w[pending awaiting_payment declined cancelled maybe].each do |status|
