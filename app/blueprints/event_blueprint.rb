@@ -28,6 +28,7 @@ class EventBlueprint < Blueprinter::Base
   association :group, blueprint: GroupBlueprint
   association :place, blueprint: PlaceBlueprint
   association :venue, blueprint: VenueRefBlueprint
+  association :event_roles, blueprint: EventRoleBlueprint
   association :owner, blueprint: UserBlueprint
   association :track, blueprint: TrackRefBlueprint
 
@@ -56,7 +57,6 @@ class EventBlueprint < Blueprinter::Base
     # payload entirely for everyone else, so a signed-out fetch can't leak it.
     field :notes, if: ->(_n, _o, options) { options[:reveal_image_note] }
     field :image_note, if: ->(_n, _o, options) { options[:reveal_image_note] }
-    association :event_roles, blueprint: EventRoleBlueprint
     # Withdrawn (soft-deleted) participants are not attendees — reject in Ruby
     # so a preloaded association isn't re-queried.
     #

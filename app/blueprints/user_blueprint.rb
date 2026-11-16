@@ -16,6 +16,7 @@ class UserBlueprint < Blueprinter::Base
   # Public profile page: bio and public identifiers (wallet, social links).
   view :profile do
     fields :bio, :eth, :social_links
+    field(:cover_image_url) { |user| user.data.to_h["cover_image_url"] }
     field(:city) { |user| user.data.to_h["city"] }
   end
 

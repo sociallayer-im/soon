@@ -79,7 +79,7 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
   test "community embeds post excerpts and linked activity in batches without private data" do
     category = create_category(group: @local)
     linked = event
-    post = create_topic(category: category, user: @friend, content: "内容"*2000, event: linked, sync_to_community: true)
+    post = create_topic(category: category, user: @friend, content: "内容"*2000 + "\n![附图](https://assets.juluo.xyz/photo)", event: linked, sync_to_community: true)
     hidden = create_category(group: @local, visibility: "member")
     create_topic(category: hidden, user: @friend)
     create_topic(category: category, user: @friend, event: event(visibility: "unlisted"), sync_to_community: true)
@@ -87,7 +87,7 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [post.id], json_response["topics"].map { |t| t["id"] }
     card = json_response["topics"].first
-    assert_equal 1200, card["content"].length
+    assert_equal post.content, card["content"]
     assert_equal linked.id, card.dig("event", "id")
     assert_equal @local.nickname || @local.name, card["group_name"]
     assert_not card["user"].key?("email")

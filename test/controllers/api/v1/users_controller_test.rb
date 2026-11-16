@@ -1,6 +1,18 @@
 require "test_helper"
 
 class Api::V1::UsersControllerTest < ActionDispatch::IntegrationTest
+  test "cover update preserves other data and supports clearing" do
+    user = create_user(data: {city: "上海", internal: "keep"})
+    patch "/api/v1/users/#{user.id}", params: {user: {data: {cover_image_url: "https://assets.juluo.xyz/cover"}}}, headers: auth_headers(user)
+    assert_response :success
+    assert_equal "https://assets.juluo.xyz/cover", json_response["cover_image_url"]
+    assert_equal "keep", user.reload.data["internal"]
+    patch "/api/v1/users/#{user.id}", params: {user: {data: {cover_image_url: nil}}}, headers: auth_headers(user), as: :json
+    assert_response :success
+    assert_nil json_response["cover_image_url"]
+    assert_equal "上海", user.reload.data["city"]
+  end
+
   test "show 'me' returns the current user" do
     user = create_user
     get "/api/v1/users/me", headers: auth_headers(user)

@@ -106,11 +106,26 @@ class SiteNotifications
         emit(receiver: receiver, item: record, action: "group_review_result", title: decision.last == "approved" ? "群组审核已通过" : "群组审核未通过",
              body: "「#{record.nickname.presence || record.name}」#{decision.last == 'approved' ? '已通过审核。' : '未通过审核：'+record.review_reason.to_s}", actor: actor, payload: {review_receipt_id: ReviewNotifications.receipt_id(record, receiver)})
       end
+    when Topic
+      return unless changes.key?("id") && record.event && !record.deleted_at && !record.flagged?
+      organizers(record.event).each do |receiver|
+        next unless TopicPolicy.new(receiver, record).show?
+        emit(receiver: receiver, item: record, action: "event_discussion", title: "活动收到新讨论",
+             body: "「#{record.event.title}」有新讨论。", actor: record.user, key: "topic:#{record.id}")
+      end
+    when Comment
+      return unless changes.key?("id") && record.comment_type == "star" && !record.removed && record.item_type == "Topic"
+      topic = record.item
+      return unless topic && !topic.deleted_at && TopicPolicy.new(record.user, topic).show? && TopicPolicy.new(topic.user, topic).show?
+      emit(receiver: topic.user, item: topic, action: "topic_star", title: "帖子收到新的赞",
+           body: "你的帖子收到了新的赞。", actor: record.user, key: "topic_star:#{topic.id}:#{record.user_id}")
     when Reply
       return unless changes.key?("id") && record.deleted_at.nil? && record.flagged_at.nil?
-      [record.topic.user, record.reply_to&.user].compact.uniq(&:id).each do |user|
+      receivers = [record.topic.user, record.reply_to&.user]
+      receivers.concat(organizers(record.topic.event).to_a) if record.topic.event
+      receivers.compact.uniq(&:id).each do |user|
         next unless TopicPolicy.new(user, record.topic).show?
-        emit(receiver: user, item: record.topic, action: "reply", title: "收到新的回复", body: "「#{record.topic.title.presence || '社区帖子'}」有新回复。", actor: record.user, key: "reply:#{record.id}")
+        emit(receiver: user, item: record.topic, action: "reply", title: "收到新的回复", body: "「#{record.topic.title.presence || '社区帖子'}」有新回复。", actor: record.user, key: "reply:#{record.id}", payload: {reply_id: record.id})
       end
     when Membership
       return unless changes["role"] && !changes.key?("id")

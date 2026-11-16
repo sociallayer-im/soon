@@ -20,7 +20,7 @@ class Api::V1::EventsController < Api::BaseController
   # is_attending/is_starred/is_owner flags.
   def index
     cache_when_anonymous!(max_age: 30)
-    scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, :event_roles).visible_to(current_user)
     scope = apply_filters(scope)
     render_collection scope, blueprint: EventBlueprint, **personalization_options
   end
@@ -148,7 +148,7 @@ class Api::V1::EventsController < Api::BaseController
   # caller manages (the dashboard inbox).
   def pending_approval
     managed = current_user.memberships.active.where(role: %w[manager owner]).select(:group_id)
-    scope = Event.includes(:group, :place, :venue, :owner, :track)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, :event_roles)
                  .where(status: "pending", group_id: managed).order(:start_time)
     render_collection scope, blueprint: EventBlueprint
   end

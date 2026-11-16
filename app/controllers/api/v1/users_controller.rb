@@ -148,6 +148,6 @@ class Api::V1::UsersController < Api::BaseController
 
   # email is intentionally excluded — it's the login identity, not updatable here.
   def user_params
-    params.require(:user).permit(:name, :nickname, :bio, :image_url, data: [:city], social_links: [:website, :twitter, :github, :telegram, :discord, :ens, :lens, :nostr])
+    params.require(:user).permit(:name, :nickname, :bio, :image_url, data: [:city, :cover_image_url], social_links: [:website, :twitter, :github, :telegram, :discord, :ens, :lens, :nostr])
   end
 end

@@ -3,7 +3,7 @@
 class DiscoveryFeed
   POOL = 120
   GROUP_POOL = 40
-  EVENT_ASSOCIATIONS = %i[group place venue owner track].freeze
+  EVENT_ASSOCIATIONS = %i[group place venue owner track event_roles].freeze
   class InvalidCursor < StandardError; end
 
   def initialize(user:, city: "上海")
@@ -173,8 +173,7 @@ class DiscoveryFeed
     when "topics"
       # Both discovery/following pages re-authorize against public scope at read time.
       visible = ENV["DISCUSSION_ENABLED"] == "true" ? DiscoverySignals.public_topics : Topic.none
-      columns = Topic.column_names.reject { |name| name == "content" }.map { |name| "topics.#{name}" }
-      rows = visible.where(id: ids).select(*columns, Arel.sql("LEFT(topics.content, 1200) AS content")).includes(:user, :category, :last_reply_user).index_by(&:id)
+      rows = visible.where(id: ids).includes(:user, :category, :last_reply_user).index_by(&:id)
       linked = event_records(Event.publicly_discoverable.where(id: rows.values.filter_map(&:event_id))).index_by(&:id)
       ids.filter_map do |id|
         post = rows[id]

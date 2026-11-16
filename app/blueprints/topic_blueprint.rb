@@ -1,11 +1,8 @@
 class TopicBlueprint < Blueprinter::Base
   identifier :id
 
-  # `content` is deliberately absent from the default view: the list renders
-  # cards, and a page of full post bodies is the difference between a small
-  # response and a large one. Same reason EventBlueprint keeps content in
-  # :extended.
-  fields :event_id, :sync_to_community, :group_id, :category_id, :title, :image_url, :tags,
+  # Preserve Markdown attachments, including images after the text preview.
+  fields :content, :event_id, :sync_to_community, :group_id, :category_id, :title, :image_url, :tags,
          :replies_count, :stars_count, :replied_at, :created_at, :updated_at
 
   # A bounded list preview avoids one full-body fetch per feed card.

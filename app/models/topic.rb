@@ -10,6 +10,7 @@
 #
 # See design/DISCUSSION_PLAN.md 1.3.
 class Topic < ApplicationRecord
+  include SiteNotifiable
   after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id deleted_at flagged_at category_id group_id event_id sync_to_community]).any? }
   def refresh_discovery_signal
     ([group_id] + Array(saved_changes["group_id"]).compact).uniq.each { |id| DiscoverySignals.refresh_group!(id) }
