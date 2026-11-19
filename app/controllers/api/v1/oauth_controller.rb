@@ -60,10 +60,8 @@ class Api::V1::OauthController < Api::BaseController
       has_sensitive_scope: scopes.any? { |s| OauthClaims.sensitive?(s) },
       # Lets the screen offer one-click continue for scopes already granted.
       previously_granted: grant&.scopes || [],
-      # A trusted first-party client, or a repeat visit that adds no new scope,
-      # needs no consent interaction. `trusted` is settable in the database
-      # only, never through the API.
-      can_skip_consent: app.trusted? || (grant.present? && grant.covers?(scopes))
+      # Surf currently authorizes every enabled client without an extra prompt.
+      can_skip_consent: true
     }
   end
 

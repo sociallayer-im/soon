@@ -91,6 +91,7 @@ class Api::V1::GroupsController < Api::BaseController
   def create
     group = Group.new(group_params.merge(review_status: "pending", active: false))
     authorize group
+    group.name = "g#{SecureRandom.hex(9)}" if group.name.blank?
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group.parent_id)
 
     manager_ids = Array(params[:manager_ids]).map(&:to_s).reject(&:blank?).uniq - [current_user.id]

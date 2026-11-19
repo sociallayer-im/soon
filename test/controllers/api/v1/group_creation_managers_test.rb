@@ -30,12 +30,15 @@ class Api::V1::GroupCreationManagersTest < ActionDispatch::IntegrationTest
   test "idempotent replay does not duplicate memberships or manager notices" do
     owner = create_user
     manager = create_user
-    body = {group: {name: "node-#{unique_suffix}"}, manager_ids: [manager.id], idempotency_key: "group-managers-#{unique_suffix}"}
+    body = {group: {nickname: "中文群组"}, manager_ids: [manager.id], idempotency_key: "group-managers-#{unique_suffix}"}
     2.times do
       post "/api/v1/groups", params: body, as: :json, headers: auth_headers(owner)
       assert_response :created
     end
     group = Group.find(json_response["id"])
+    assert_match(/\Ag[0-9a-f]{18}\z/, group.name)
+    assert_equal "中文群组", group.nickname
+    assert_equal 1, Group.where(nickname: "中文群组").count
     assert_equal 2, group.memberships.count
     assert_equal 1, Activity.for_receiver(manager).where(item: group, action: "surf/membership_role").count
   end
