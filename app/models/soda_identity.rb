@@ -1,4 +1,7 @@
 class SodaIdentity < ApplicationRecord
+  # This table has a PostgreSQL identity sequence, not a TSID primary key.
+  skip_callback :create, :before, :set_tsid_primary_key
+
   belongs_to :user, inverse_of: :soda_identities
 
   def self.resolve!(issuer:, subject:, nickname:)
@@ -9,6 +12,8 @@ class SodaIdentity < ApplicationRecord
       user
     end
   rescue ActiveRecord::RecordNotUnique
-    find_by!(issuer: issuer, subject: subject).user
+    existing = find_by(issuer: issuer, subject: subject)
+    raise unless existing
+    existing.user
   end
 end

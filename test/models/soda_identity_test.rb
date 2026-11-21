@@ -9,5 +9,8 @@ class SodaIdentityTest < ActiveSupport::TestCase
     assert_equal account.id, SodaIdentity.resolve!(**identity).id
     assert_equal 1, SodaIdentity.where(subject: identity[:subject]).count
     assert account.reload.valid?
+    other = SodaIdentity.resolve!(**identity.merge(subject: "soda-test-5678"))
+    assert_not_equal account.id, other.id
+    assert_equal 2, SodaIdentity.where(issuer: identity[:issuer]).count
   end
 end
