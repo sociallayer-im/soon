@@ -1,5 +1,7 @@
 class SodaOauthLogin
   ISSUER = "https://api.juluo.xyz".freeze
+  # The API hostname is independent of the issuer stored in account links.
+  API_ORIGIN = "https://api.soda.fan".freeze
   AUTHORIZE = "https://soda.fan/oauth/authorize".freeze
   REDIRECTS = %w[https://web.soda.fan/login/soda/callback https://auth.soda.fan/login/soda/callback].freeze
   class Unavailable < StandardError; end
@@ -19,14 +21,14 @@ class SodaOauthLogin
     end
 
     client = HTTPX.with(timeout: { operation_timeout: 8 })
-    token = parse(client.post("#{ISSUER}/api/v1/oauth/token", form: {
+    token = parse(client.post("#{API_ORIGIN}/api/v1/oauth/token", form: {
       grant_type: "authorization_code", client_id: config.fetch(:client_id),
       client_secret: ENV.fetch("SODA_OAUTH_CLIENT_SECRET"), code: code,
       redirect_uri: redirect_uri, code_verifier: verifier
     }))
     access_token = token["access_token"]
     raise InvalidCode unless access_token.is_a?(String) && access_token.match?(/\A[A-Za-z0-9._~-]{1,2048}\z/)
-    profile = parse(client.get("#{ISSUER}/api/v1/oauth/userinfo", headers: { "authorization" => "Bearer #{access_token}" }))
+    profile = parse(client.get("#{API_ORIGIN}/api/v1/oauth/userinfo", headers: { "authorization" => "Bearer #{access_token}" }))
     subject = profile["sub"]
     raise InvalidCode unless subject.is_a?(String) && subject.present? && subject.bytesize <= 255
     { issuer: ISSUER, subject: subject, nickname: profile["name"].to_s.first(60).presence }
