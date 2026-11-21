@@ -32,6 +32,10 @@ class EventBlueprint < Blueprinter::Base
   association :owner, blueprint: UserBlueprint
   association :track, blueprint: TrackRefBlueprint
 
+  field :is_moderated do |event|
+    event.moderated_at.present?
+  end
+
   view :extended do
     field :can_manage_orders do |_event, options|
       !!options[:can_manage_orders]

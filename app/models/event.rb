@@ -89,8 +89,7 @@ class Event < ApplicationRecord
     # NULL-safe on purpose: `status` has a default but no NOT NULL constraint,
     # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
     # which would silently drop every legacy row that has none.
-    where("events.moderated_at IS NULL OR events.owner_id = :uid OR events.group_id IN (:managed) OR events.id IN (:attending) OR events.id IN (:team)",
-      uid: user&.id, managed: managed, attending: Participant.where(user_id: user&.id).select(:event_id), team: EventRole.linked_to(user).select(:event_id))
+    where("events.moderated_at IS NULL OR events.owner_id = :uid", uid: user&.id)
     .where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
       "(events.visibility IN ('normal', 'open_registration') AND events.status NOT IN ('draft', 'pending', 'archived')) " \
       "OR events.owner_id = :uid OR events.group_id IN (:managed) OR (events.status = 'published' AND events.id IN (:team))",

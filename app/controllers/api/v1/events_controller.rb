@@ -266,7 +266,9 @@ class Api::V1::EventsController < Api::BaseController
       @event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
     options[:can_edit] = options[:manage_participants]
     options[:can_register] = @event.registration_open? && (!current_user || EventPolicy.new(current_user, @event).join?)
-    options[:registration_unavailable_reason] = if !@event.registration_open?
+    options[:registration_unavailable_reason] = if @event.moderated_at.present?
+      "活动已下架"
+    elsif !@event.registration_open?
       {"draft" => "尚未发布", "pending" => "待审核", "closed" => "报名已截止", "archived" => "已归档", "cancelled" => "活动已取消"}[@event.status] || "报名已结束"
     elsif !options[:can_register]
       "当前账号不符合群组的报名条件"

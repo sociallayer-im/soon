@@ -32,7 +32,13 @@ class Api::V1::ContentReportsTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", order.reload.status
     assert_equal 100, order.amount
     assert_not Event.publicly_discoverable.exists?(id: @event.id)
-    assert EventPolicy.new(@reporter, @event).show?
+    assert EventPolicy.new(@owner, @event).show?
+    assert_not EventPolicy.new(@reporter, @event).show?
+    assert_not EventPolicy.new(@admin, @event).show?
+    assert_not Event.visible_to(@reporter).exists?(id: @event.id)
+    assert Event.visible_to(@owner).exists?(id: @event.id)
+    assert_equal 1, Activity.for_receiver(@owner).where(item: @event, action: "surf/event_reported").count
+    assert_equal 1, Activity.for_receiver(@owner).where(item: @event, action: "surf/event_taken_down").count
     assert_not EventPolicy.new(create_user, @event).show?
     post "/api/v1/admin/content_reports/#{report.id}/restore", params: {note: "复核通过"}, headers: auth_headers(@reporter)
     assert_response :forbidden

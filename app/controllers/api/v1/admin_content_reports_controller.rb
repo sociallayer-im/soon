@@ -27,6 +27,9 @@ class Api::V1::AdminContentReportsController < Api::BaseController
             target.flag!(by: current_user, reason: note)
           else
             target.update!(moderated_at: Time.current, moderation_reason: note, moderated_by_id: current_user.id)
+            SiteNotifications.emit(receiver: target.owner, item: target, action: "event_taken_down",
+              title: "活动已下架", body: "「#{target.title}」已下架，仅你可以查看。处理说明：#{note}",
+              key: "event_taken_down:#{report.id}")
           end
         end
       end
