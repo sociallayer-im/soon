@@ -235,6 +235,24 @@ class Api::V1::AuthController < Api::BaseController
     render_error(e.message)
   end
 
+  def soda_oauth_config
+    response.headers["Cache-Control"] = "no-store"
+    render json: { oauth: SodaOauthLogin.configuration }
+  end
+
+  def soda_oauth_signin
+    response.headers["Cache-Control"] = "no-store"
+    identity = SodaOauthLogin.identity(code: params[:code].to_s, verifier: params[:verifier].to_s,
+      redirect_uri: params[:redirect_uri].to_s)
+    user = SodaIdentity.resolve!(**identity)
+    return render_error("账号不可用", status: :forbidden) unless user.active?
+    render_token(user)
+  rescue SodaOauthLogin::InvalidCode
+    render_error("Soda 授权无效或已过期，请重新登录")
+  rescue SodaOauthLogin::Unavailable
+    render_error("Soda 登录暂不可用", status: :service_unavailable)
+  end
+
   # POST /api/v1/auth/trusted_signin
   # For the frontend's WeChat 网页授权 callback ONLY: the openid is proven by the
   # frontend server redeeming the code with the app secret, so that server (and

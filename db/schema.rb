@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_13_080100) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_21_094000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1434,6 +1434,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_080100) do
     t.index ["group_id"], name: "index_shops_on_group_id", unique: true
   end
 
+  create_table "soda_identities", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "issuer", null: false
+    t.string "subject", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["issuer", "subject"], name: "index_soda_identities_on_issuer_and_subject", unique: true
+    t.index ["user_id"], name: "index_soda_identities_on_user_id"
+  end
+
   create_table "stripe_events", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error"
@@ -1905,6 +1915,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_080100) do
   add_foreign_key "shipping_rates", "shops"
   add_foreign_key "shops", "groups"
   add_foreign_key "shops", "users", column: "opened_by_user_id"
+  add_foreign_key "soda_identities", "users", on_delete: :cascade
   add_foreign_key "team_memberships", "teams"
   add_foreign_key "team_memberships", "users"
   add_foreign_key "teams", "groups"

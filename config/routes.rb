@@ -41,6 +41,8 @@ Rails.application.routes.draw do
       post "auth/verify_google",  to: "auth#verify_google"
       post "auth/wechat_miniprogram_phone", to: "auth#wechat_miniprogram_phone"
       post "auth/wechat_miniprogram", to: "auth#wechat_miniprogram"
+      get "auth/soda_oauth", to: "auth#soda_oauth_config"
+      post "auth/soda_oauth", to: "auth#soda_oauth_signin"
       post "auth/trusted_signin", to: "auth#trusted_signin"
       post "auth/bind_email",     to: "auth#bind_email"
       # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.

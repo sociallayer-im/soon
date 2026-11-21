@@ -36,6 +36,7 @@ class User < ApplicationRecord
   # merge must not hand a third party access to the surviving account. The
   # applications the user *owns* are repointed instead (UserMerger), since a
   # developer's clients should follow the developer.
+  has_many :soda_identities, inverse_of: :user, dependent: :delete_all
   has_many :oauth_applications, foreign_key: "owner_id", dependent: :destroy
   has_many :oauth_grants, dependent: :destroy
   has_many :oauth_access_tokens, dependent: :destroy
@@ -92,7 +93,7 @@ class User < ApplicationRecord
   end
 
   private def has_login_identity
-    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?)
+    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?) || soda_identities.any?
 
     errors.add(:base, "must have an email, eth, sol, or wechat identity")
   end
