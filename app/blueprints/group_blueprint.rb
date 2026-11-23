@@ -26,6 +26,7 @@ class GroupBlueprint < Blueprinter::Base
            :poll_enabled, :can_create_poll,
            # And for hackathons (design/HACKATHON_MODULE.md).
            :hackathon_enabled, :can_create_hackathon,
+           :community_projects_enabled, :community_projects_intro,
            # The one event whose tickets grant group membership. At most one
            # per group; nil until a manager designates one.
            :group_ticket_event_id,

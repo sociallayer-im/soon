@@ -149,6 +149,17 @@ Rails.application.routes.draw do
           post :freeze
           post :send_email
         end
+        resources :community_projects, only: %i[index show create update] do
+          member do
+            post :hide
+            post :invite
+            post "members/:member_id/accept", action: :accept
+            delete "members/:member_id", action: :remove_member
+            get :comments
+            post :comments, action: :comment
+            delete "comments/:comment_id", action: :remove_comment
+          end
+        end
         resources :memberships, only: %i[index create update destroy]
         resources :group_invites, only: %i[index create destroy] do
           member do

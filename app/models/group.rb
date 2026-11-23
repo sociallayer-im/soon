@@ -33,6 +33,9 @@ class Group < ApplicationRecord
   has_many :topics, dependent: :restrict_with_error
   has_many :polls, dependent: :restrict_with_error
   has_many :hackathons, dependent: :restrict_with_error
+  has_many :community_projects, dependent: :restrict_with_error
+
+  validates :community_projects_intro, length: { maximum: 3000 }
   has_many :venues, dependent: :destroy
   # Removing a venue is a soft delete (VenuesController#destroy sets archived),
   # so `venues` still contains removed rows — it exists for dependent: :destroy
