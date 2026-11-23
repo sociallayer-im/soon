@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_24_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -205,6 +205,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["item_type", "item_id", "removed"], name: "index_comments_on_item_type_and_item_id_and_removed"
     t.index ["user_id", "comment_type"], name: "index_comments_on_user_id_and_comment_type"
     t.index ["user_id"], name: "index_comments_on_user_id"
+  end
+
+  create_table "community_project_comments", id: :string, force: :cascade do |t|
+    t.string "community_project_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["community_project_id"], name: "index_community_project_comments_on_community_project_id"
+    t.index ["user_id"], name: "index_community_project_comments_on_user_id"
+  end
+
+  create_table "community_project_members", id: :string, force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.string "community_project_id", null: false
+    t.datetime "created_at", null: false
+    t.string "role"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["community_project_id", "user_id"], name: "idx_on_community_project_id_user_id_8837269400", unique: true
+    t.index ["community_project_id"], name: "index_community_project_members_on_community_project_id"
+    t.index ["user_id"], name: "index_community_project_members_on_user_id"
+  end
+
+  create_table "community_projects", id: :string, force: :cascade do |t|
+    t.text "content"
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.jsonb "gallery", default: [], null: false
+    t.string "group_id", null: false
+    t.string "icon_url"
+    t.datetime "published_at"
+    t.string "status", default: "draft", null: false
+    t.string "tagline"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "website_url"
+    t.index ["group_id", "status", "published_at"], name: "idx_on_group_id_status_published_at_d92397943e"
+    t.index ["group_id"], name: "index_community_projects_on_group_id"
+    t.index ["user_id"], name: "index_community_projects_on_user_id"
   end
 
   create_table "coupon_redemptions", id: :string, force: :cascade do |t|
@@ -646,6 +687,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
+    t.boolean "community_projects_enabled", default: false, null: false
+    t.text "community_projects_intro"
     t.datetime "created_at", null: false
     t.string "custom_domain"
     t.string "custom_domain_pending"
@@ -1140,7 +1183,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "ticket_item_id"
     t.datetime "updated_at", null: false
     t.index ["refundable_type", "refundable_id"], name: "index_refunds_on_refundable_type_and_refundable_id"
-    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
     t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
@@ -1616,6 +1659,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "comments", "comments", column: "reply_parent_id"
   add_foreign_key "comments", "fed_actors", on_delete: :cascade
   add_foreign_key "comments", "users"
+  add_foreign_key "community_project_comments", "community_projects", on_delete: :cascade
+  add_foreign_key "community_project_comments", "users"
+  add_foreign_key "community_project_members", "community_projects", on_delete: :cascade
+  add_foreign_key "community_project_members", "users"
+  add_foreign_key "community_projects", "groups"
+  add_foreign_key "community_projects", "users"
   add_foreign_key "coupon_redemptions", "coupons"
   add_foreign_key "coupon_redemptions", "orders"
   add_foreign_key "coupon_redemptions", "users"
