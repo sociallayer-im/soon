@@ -1,0 +1,35 @@
+app/controllers/api/v1/group_invites_controller.rb
+  s_a4066d71f584a5::t_a6b5673a63a745 43-51,73-82,124-126,142-145,147,154-157,171-187,196,206,214-225
+app/mailers/application_mailer.rb
+  s_a4066d71f584a5::t_7a75e8ce9b980a 13-14,22-32
+app/mailers/group_mailer.rb
+  s_a4066d71f584a5::t_e552de47f32994 7
+app/models/group_invite.rb
+  s_a4066d71f584a5::t_356a4c43fb952b 19-30
+app/policies/group_invite_policy.rb
+  s_a4066d71f584a5::t_2d1710b68fc2ea 22
+app/views/layouts/mailer.html.erb
+  s_a4066d71f584a5::t_5ed36973e0bfa6 16-20
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_a4066d71f584a5::t_ab0060bbed27f1 32,41,59-77,138-157
+test/mailers/event_mailer_test.rb
+  s_a4066d71f584a5::t_53165f952908ed 33,39,65
+test/mailers/group_mailer_test.rb
+  s_a4066d71f584a5::t_a4fa233def4ae7 17-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2938e5549c324052d47a825dcf4af8e0e563140",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
