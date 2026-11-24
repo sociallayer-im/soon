@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_24_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1007,11 +1007,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_24_090000) do
     t.string "message"
     t.string "payment_status", comment: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!"
     t.datetime "registered_at"
-    t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
+    t.string "status", default: "attending", null: false, comment: "attending | pending | waitlisted | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.string "voucher_id"
+    t.datetime "waitlisted_at"
     t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
+    t.index ["event_id", "waitlisted_at", "id"], name: "index_participants_on_waitlist", where: "((status)::text = 'waitlisted'::text)"
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
     t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"

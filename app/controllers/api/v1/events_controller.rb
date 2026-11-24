@@ -80,6 +80,9 @@ class Api::V1::EventsController < Api::BaseController
     if @event.save
       apply_group_ticket_designation!(@event)
       notify_attendees_of_update if calendar_relevant_change?
+      if @event.saved_change_to_max_participant? || @event.saved_change_to_venue_id? || @event.saved_change_to_status?
+        @event.with_lock { @event.promote_waitlist! }
+      end
       render json: EventBlueprint.render(@event)
     else
       render_error(@event.errors.full_messages.join(", "))

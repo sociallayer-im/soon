@@ -10,20 +10,18 @@
 #                capacity checks, is_attending, and attendee mail.
 #   pending    — awaiting the organizer's approval (require_approval, an
 #                application form, or a need_approval ticket). Holds no seat.
+#   waitlisted — eligible for a seat once one becomes available. Holds no seat.
 #   declined   — the organizer rejected them. Terminal unless they re-apply.
 #   maybe      — soft RSVP intent. Holds no seat.
 #   cancelled  — SOFT DELETE: they withdrew. Holds no seat, hidden from every
 #                attendee list, but the row survives for history and so a
 #                later refund can still reach it. Re-joining reuses the row.
 #
-#   (new) ──rsvp/join──► attending ──withdraw──► cancelled ──re-join──► attending
-#     │                    │  ▲                                │
-#     │                    │  └────────approve─────────────┐   │
-#     └──needs approval──► pending ──reject──► declined     │   │
-#                            │                    │        │   │
-#                            └──withdraw──► cancelled ◄────┘   │
-#                                                              │
-#                          maybe ◄──update──► attending ───────┘
+# Direct RSVP with a seat becomes attending; otherwise eligible participants
+# join the waitlist. Applications start pending and approval routes them to
+# attending or waitlisted. Only a promotion assigns a seat from the waitlist.
+# An organizer may decline an application or waitlist entry; a participant can
+# withdraw either one, or reapply after a withdrawal or decline.
 #
 # `payment_status` is NOT independent: it is a derived summary of the person's
 # ticket_items for this event (see #refresh_payment_status!). Four different
@@ -36,7 +34,7 @@ class Participant < ApplicationRecord
   belongs_to :voucher, optional: true
   belongs_to :badge, optional: true
 
-  STATUSES = %w[attending pending declined maybe cancelled].freeze
+  STATUSES = %w[attending pending waitlisted declined maybe cancelled].freeze
 
   # Statuses that occupy a seat: participant_count, max_participant, venue
   # capacity, is_attending and attendee mail all key off exactly this.
@@ -46,11 +44,12 @@ class Participant < ApplicationRecord
   # bypass it, so prefer transition! for anything a user action triggers.
   TRANSITIONS = {
     "attending" => %w[maybe declined cancelled],
-    "pending"   => %w[attending declined cancelled],
-    "maybe"     => %w[attending declined cancelled],
-    "declined"  => %w[attending pending cancelled],
+    "pending"   => %w[attending waitlisted declined cancelled],
+    "waitlisted" => %w[attending declined cancelled],
+    "maybe"     => %w[attending waitlisted declined cancelled],
+    "declined"  => %w[attending pending waitlisted cancelled],
     # Re-joining a cancelled row is how withdraw/re-join works.
-    "cancelled" => %w[attending pending maybe]
+    "cancelled" => %w[attending pending waitlisted maybe]
   }.freeze
 
   class InvalidTransition < StandardError; end
@@ -69,6 +68,8 @@ class Participant < ApplicationRecord
     unless TRANSITIONS.fetch(status, []).include?(to)
       raise InvalidTransition, "participant #{id}: #{status} → #{to}"
     end
+    attrs[:waitlisted_at] = to == "waitlisted" ? Time.current : nil
+    attrs[:checked_in_at] = nil if to == "waitlisted"
     attrs[:cancelled_at] = to == "cancelled" ? Time.current : nil
     was_seated = seated?
     transaction do
