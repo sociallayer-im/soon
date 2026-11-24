@@ -1,0 +1,35 @@
+app/blueprints/event_blueprint.rb
+  s_a4066d71f584a5::t_ac0de50b134fd9 32-38
+app/controllers/api/v1/events_controller.rb
+  s_a4066d71f584a5::t_58d85c9c2b6304 83-85
+app/controllers/api/v1/participants_controller.rb
+  s_a4066d71f584a5::t_65e2bb9d17a853 22-34,40-41,43-51,55-57,59,61-100,130-131,138-140,142-150,152-173,190-207,238-240,242-256,266-268,270-274,287-288,329-334
+app/controllers/api/v1/tickets_controller.rb
+  s_a4066d71f584a5::t_1dfbc88ac5aac5 21-28
+app/models/event.rb
+  s_a4066d71f584a5::t_2486a61a24564c 36-67
+app/models/participant.rb
+  s_a4066d71f584a5::t_e5a52780da6a8d 13,20-24,37,47-50,52,71-72
+db/migrate/20261125090000_add_waitlisted_at_to_participants.rb
+  s_a4066d71f584a5::t_d4e23603f2477b 1-10
+db/schema.rb
+  s_a4066d71f584a5::t_36070f7813bb4a 13,1010,1014,1016
+test/controllers/api/v1/participants_controller_test.rb
+  s_a4066d71f584a5::t_9e52165b5de7a4 400-406,690,693-695,697-720,722-736,739,743-745,747-787,789-797
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "837fb6fe030a57ddbef076be882185f555035fcb",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
