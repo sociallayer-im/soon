@@ -442,9 +442,13 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     first_registered_at = participant.registered_at
     assert_equal 1, event.reload.participant_count
 
-    # Event is full for anyone else.
-    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(create_user)
-    assert_response :unprocessable_entity
+    # Waitlist entries hold no seat, and a withdrawal from the queue changes no capacity.
+    waiting = create_user
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(waiting)
+    assert_response :created
+    assert_equal "waitlisted", json_response["status"]
+    delete "/api/v1/events/#{event.id}/participants/#{json_response["id"]}", headers: auth_headers(waiting)
+    assert_response :no_content
 
     delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
     assert_response :no_content
@@ -728,29 +732,114 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
 
   # ---------------------------------------------------------------- capacity
 
-  test "create is rejected once max_participant is reached" do
+  test "full ticketless events enqueue once, keep the roster private, and promote FIFO" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, max_participant: 1)
-    create_participant(event: event, user: create_user, status: "attending")
-    event.increment!(:participant_count)
+    event = create_event(group: group, owner: owner, status: "published", max_participant: 1)
+    path = "/api/v1/events/#{event.id}/participants"
+    seated, first, second = Array.new(3) { create_user }
 
-    attendee = create_user
-    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    post path, headers: auth_headers(seated)
+    assert_response :created
+    seated_id = json_response["id"]
+    post path, headers: auth_headers(first)
+    assert_response :created
+    assert_equal "waitlisted", json_response["status"]
+    first_id = json_response["id"]
+    post path, headers: auth_headers(first)
+    assert_response :ok
+    assert_equal first_id, json_response["id"]
+
+    post path, headers: auth_headers(second)
+    assert_response :created
+    assert_equal "waitlisted", json_response["status"]
+    second_id = json_response["id"]
+    assert_equal 1, event.reload.participant_count
+
+    get path, params: {status: "waitlisted"}, headers: auth_headers(second)
+    assert_response :forbidden
+    get path, params: {status: "waitlisted"}, headers: auth_headers(owner)
+    assert_equal [first_id, second_id], json_response["data"].pluck("id")
+    get path
+    assert_equal [seated_id], json_response["data"].pluck("id")
+    patch "#{path}/#{first_id}", params: {participant: {status: "attending"}}, headers: auth_headers(first)
     assert_response :unprocessable_entity
-    assert_not event.participants.exists?(user: attendee)
+    post "#{path}/check_in", params: {user_id: first.id}, headers: auth_headers(owner)
+    assert_response :unprocessable_entity
+
+    assert_enqueued_emails 1 do
+      delete "#{path}/#{seated_id}", headers: auth_headers(seated)
+    end
+    assert_response :no_content
+    assert_equal "attending", Participant.find(first_id).status
+    assert_equal "waitlisted", Participant.find(second_id).status
+    assert_equal 1, event.reload.participant_count
+
+    delete "#{path}/#{second_id}", headers: auth_headers(second)
+    assert_response :no_content
+    assert_equal "cancelled", Participant.find(second_id).status
+    assert_equal 1, event.reload.participant_count
   end
 
-  test "create is rejected once the venue's capacity is reached" do
+  test "venue capacity waitlists a ticketless RSVP and rejects a ticketed direct RSVP" do
     owner = create_user
     group = create_group(owner: owner)
     venue = create_venue(group: group, owner: owner, capacity: 1)
-    event = create_event(group: group, owner: owner, venue: venue)
-    create_participant(event: event, user: create_user, status: "attending")
-    event.increment!(:participant_count)
+    event = create_event(group: group, owner: owner, venue: venue, participant_count: 1)
+    path = "/api/v1/events/#{event.id}/participants"
+    create_ticket(event: event)
 
+    post path, headers: auth_headers(create_user)
+    assert_response :unprocessable_entity
+    assert_equal "exceed venue capacity", json_response["error"]
+    assert_empty event.participants
+    event.tickets.destroy_all
+
+    post path, headers: auth_headers(create_user)
+    assert_response :created
+    assert_equal "waitlisted", json_response["status"]
+  end
+
+  test "approval queues an eligible application while full without sending seat confirmation" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, max_participant: 1, participant_count: 1, require_approval: true)
+    applicant = create_user
+    path = "/api/v1/events/#{event.id}/participants"
+    post path, headers: auth_headers(applicant)
+    assert_response :created
+    assert_equal "pending", json_response["status"]
+    id = json_response["id"]
+
+    patch "#{path}/#{id}", params: {participant: {status: "attending"}}, headers: auth_headers(applicant)
+    assert_response :unprocessable_entity
+    assert_no_enqueued_emails do
+      post "#{path}/#{id}/approve", headers: auth_headers(owner)
+    end
+    assert_response :success
+    assert_equal "waitlisted", json_response["status"]
+    assert_equal 1, event.reload.participant_count
+
+    post "#{path}/#{id}/reject", headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "declined", json_response["status"]
+    assert_equal 1, event.reload.participant_count
+  end
+
+  test "closing an event stops queue promotion and new registrations" do
+    owner = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, max_participant: 1, participant_count: 1)
     attendee = create_user
-    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
+    seated = create_participant(event: event, user: attendee)
+    queued = create_participant(event: event, user: create_user, status: "waitlisted", waitlisted_at: Time.current)
+    event.update!(status: "closed")
+
+    delete "/api/v1/events/#{event.id}/participants/#{seated.id}", headers: auth_headers(attendee)
+    assert_response :no_content
+    assert_equal "waitlisted", queued.reload.status
+    assert_equal 0, event.reload.participant_count
+    post "/api/v1/events/#{event.id}/participants", headers: auth_headers(create_user)
     assert_response :unprocessable_entity
   end
 

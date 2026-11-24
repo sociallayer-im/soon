@@ -125,6 +125,9 @@ class Api::V1::EventsController < Api::BaseController
         SiteNotifications.roles_changed(@event, prior_roles, actor: current_user)
       end
       apply_group_ticket_designation!(@event)
+      if @event.saved_change_to_max_participant? || @event.saved_change_to_venue_id? || @event.saved_change_to_status?
+        @event.with_lock { @event.promote_waitlist! }
+      end
       ReviewNotifications.submitted(@event, applicant: current_user)
     end
     notify_attendees_of_update if calendar_relevant_change?

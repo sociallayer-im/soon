@@ -9,6 +9,14 @@ class RegistrationReview
       participant.with_lock do
         raise Error, "participant is not pending" unless participant.status == "pending"
         raise Error, "活动已结束或停止报名" if !event.registration_open?
+        if event.waitlist_enabled?
+          event.promote_waitlist!
+          if capacity_full?(event)
+            participant.transition!(:waitlisted, reviewed_by: actor, reviewed_at: Time.current)
+            sync_form!(participant, "approved")
+            return
+          end
+        end
         raise Error, "event is full" if capacity_full?(event)
         items = participant.ticket_items.where(status: %w[pending succeeded]).order(:id).lock.to_a
         items.each do |item|
@@ -34,10 +42,11 @@ class RegistrationReview
 
   def self.reject!(participant, actor:, reason:)
     reason = reason.to_s.strip
-    raise Error, "请填写拒绝原因" if reason.blank? || reason.length > 500
+    raise Error, "请填写拒绝原因" if reason.length > 500
     participant.event.with_lock do
       participant.with_lock do
-        raise Error, "participant is not pending" unless participant.status == "pending"
+        raise Error, "participant is not pending" unless %w[pending waitlisted].include?(participant.status)
+        raise Error, "请填写拒绝原因" if reason.blank? && participant.status != "waitlisted"
         # Decide first; cancelling orders must not overwrite the decision.
         participant.transition!(:declined, reviewed_by: actor, reviewed_at: Time.current, review_reason: reason, payment_due_at: nil)
         participant.ticket_items.where(status: "pending").order(:id).each { |item| item.cancel(actor: actor) }

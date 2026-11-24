@@ -48,7 +48,7 @@ class Api::V1::HackathonsController < Api::BaseController
 
   def update
     authorize @hackathon, :update?
-    Hackathon.transaction do
+    @hackathon.with_lock do
       @hackathon.update!(hackathon_params.except(:group_id, :tracks))
       @hackathon.replace_tracks!(hackathon_params[:tracks]) if hackathon_params.key?(:tracks)
     end
@@ -60,7 +60,9 @@ class Api::V1::HackathonsController < Api::BaseController
   # PATCH /api/v1/hackathons/:id/tracks  { tracks: [{id?, title, description, color}] }
   def tracks
     authorize @hackathon, :update?
-    @hackathon.replace_tracks!(params.permit(tracks: [ :id, :title, :description, :color ])[:tracks])
+    @hackathon.with_lock do
+      @hackathon.replace_tracks!(params.permit(tracks: [ :id, :title, :description, :color ])[:tracks])
+    end
     render_detail(@hackathon.reload)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
@@ -126,7 +128,7 @@ class Api::V1::HackathonsController < Api::BaseController
       team.save!
       # A judge who is not yet a group member cannot be on a team; they show
       # up in `skipped` rather than raising.
-      member_ids = Membership.active.where(group_id: @hackathon.group_id, user_id: user_ids).pluck(:user_id)
+      member_ids = Membership.where(group_id: @hackathon.group_id, user_id: user_ids).pluck(:user_id)
       skipped += User.where(id: user_ids - member_ids).map { |u| u.nickname.presence || u.name }
       current = team.team_memberships.pluck(:user_id)
       (member_ids - current).each { |uid| team.team_memberships.create!(user_id: uid); added += 1 }
@@ -144,9 +146,9 @@ class Api::V1::HackathonsController < Api::BaseController
     csv = CSV.generate do |out|
       out << %w[title track status award owner members stars repo_url demo_url video_url submitted_at]
       @hackathon.hackathon_projects.includes(:user, hackathon_project_members: :user).order(:created_at).each do |p|
-        out << [ p.title, p.track&.dig("title"), p.status, p.award,
+        out << [ p.title, p.tracks.pluck("title").join("; "), p.status, p.award,
                  p.user.name, p.hackathon_project_members.map { |m| m.user.name }.join("; "),
-                 p.stars_count, p.repo_url, p.demo_url, p.video_url, p.submitted_at&.iso8601 ]
+                 p.stars_count, p.repo_links.join("\n"), p.demo_links.join("\n"), p.video_links.join("\n"), p.submitted_at&.iso8601 ]
       end
     end
     send_data csv, type: "text/csv; charset=utf-8", filename: "hackathon-#{@hackathon.id}-projects.csv"

@@ -57,6 +57,38 @@ class Event < ApplicationRecord
   validates :end_time, presence: true
   validates :status, inclusion: { in: STATUSES }, allow_nil: true
 
+  # Single policy point for a future per-event waitlist setting.
+  def waitlist_enabled?
+    tickets.loaded? ? tickets.empty? : !tickets.exists?
+  end
+
+  def registration_closed?
+    %w[closed cancelled archived].include?(status) || end_time <= Time.current
+  end
+
+  def participant_capacity_error
+    count = participant_count.to_i
+    return "event is full" if max_participant && count >= max_participant
+    return "exceed venue capacity" if venue&.capacity.to_i > 0 && count >= venue.capacity
+
+    nil
+  end
+
+  # Call while holding the event row lock. The same lock serializes seat
+  # assignment, withdrawal and ticket creation for ordinary RSVPs.
+  def promote_waitlist!
+    return unless waitlist_enabled? && !registration_closed?
+
+    until participant_capacity_error
+      participant = participants.where(status: "waitlisted").order(:waitlisted_at, :id).first
+      break unless participant
+
+      participant.event = self
+      participant.transition!(:attending)
+      EventMailer.participant_approved(participant_id: participant.id).deliver_later
+    end
+  end
+
   # Whether this is the group's membership-ticket event. Derived solely from
   # groups.group_ticket_event_id — the single source of truth. `kind` means the
   # event's CATEGORY (talk, workshop, …) and never carried this.

@@ -55,6 +55,13 @@ class EventBlueprint < Blueprinter::Base
     field :registration_unavailable_reason do |_event, options|
       options[:registration_unavailable_reason]
     end
+    field :waitlist_enabled do |event|
+      event.waitlist_enabled?
+    end
+    field :registration_full do |event|
+      event.participant_capacity_error.present?
+    end
+
     field :content
     # Confirmed-attendees-only image (group QR code). The controller decides
     # who qualifies (EventsController#reveal_image_note?); absent from the

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_26_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -257,6 +257,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.index ["item_type", "item_id", "removed"], name: "index_comments_on_item_type_and_item_id_and_removed"
     t.index ["user_id", "comment_type"], name: "index_comments_on_user_id_and_comment_type"
     t.index ["user_id"], name: "index_comments_on_user_id"
+  end
+
+  create_table "community_project_comments", id: :string, force: :cascade do |t|
+    t.string "community_project_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["community_project_id"], name: "index_community_project_comments_on_community_project_id"
+    t.index ["user_id"], name: "index_community_project_comments_on_user_id"
+  end
+
+  create_table "community_project_members", id: :string, force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.string "community_project_id", null: false
+    t.datetime "created_at", null: false
+    t.string "role"
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["community_project_id", "user_id"], name: "idx_on_community_project_id_user_id_8837269400", unique: true
+    t.index ["community_project_id"], name: "index_community_project_members_on_community_project_id"
+    t.index ["user_id"], name: "index_community_project_members_on_user_id"
+  end
+
+  create_table "community_projects", id: :string, force: :cascade do |t|
+    t.text "content"
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.jsonb "gallery", default: [], null: false
+    t.string "group_id", null: false
+    t.string "icon_url"
+    t.datetime "published_at"
+    t.string "status", default: "draft", null: false
+    t.string "tagline"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.string "website_url"
+    t.index ["group_id", "status", "published_at"], name: "idx_on_group_id_status_published_at_d92397943e"
+    t.index ["group_id"], name: "index_community_projects_on_group_id"
+    t.index ["user_id"], name: "index_community_projects_on_user_id"
   end
 
   create_table "content_reports", force: :cascade do |t|
@@ -787,6 +828,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
     t.string "city"
+    t.boolean "community_projects_enabled", default: false, null: false
+    t.text "community_projects_intro"
     t.datetime "created_at", null: false
     t.string "custom_domain"
     t.string "custom_domain_pending"
@@ -872,6 +915,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.text "content"
     t.string "cover_url"
     t.datetime "created_at", null: false
+    t.string "demo_links", default: [], null: false, array: true
     t.string "demo_url"
     t.string "flag_reason"
     t.datetime "flagged_at"
@@ -880,6 +924,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.integer "members_count", default: 0, null: false
     t.boolean "recruiting", default: false, null: false
     t.datetime "rejected_at"
+    t.string "repo_links", default: [], null: false, array: true
     t.string "repo_url"
     t.text "review_note"
     t.string "seeking", default: [], null: false, array: true
@@ -889,12 +934,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.string "tech", default: [], null: false, array: true
     t.string "title", null: false
     t.string "track_id"
+    t.string "track_ids", default: [], null: false, array: true
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
+    t.string "video_links", default: [], null: false, array: true
     t.string "video_url"
     t.index ["hackathon_id", "recruiting"], name: "index_hackathon_projects_on_hackathon_id_and_recruiting"
     t.index ["hackathon_id", "submitted_at"], name: "index_hackathon_projects_on_hackathon_id_and_submitted_at"
     t.index ["hackathon_id", "track_id"], name: "index_hackathon_projects_on_hackathon_id_and_track_id"
+    t.index ["track_ids"], name: "index_hackathon_projects_on_track_ids", using: :gin
     t.index ["user_id"], name: "index_hackathon_projects_on_user_id"
   end
 
@@ -1123,12 +1171,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
     t.text "review_reason"
     t.datetime "reviewed_at"
     t.string "reviewed_by_id"
-    t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
+    t.string "status", default: "attending", null: false, comment: "attending | pending | waitlisted | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.string "voucher_id"
+    t.datetime "waitlisted_at"
     t.index ["event_id", "payment_due_at"], name: "idx_participants_payment_holds", where: "((status)::text = 'awaiting_payment'::text)"
     t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
+    t.index ["event_id", "waitlisted_at", "id"], name: "index_participants_on_waitlist", where: "((status)::text = 'waitlisted'::text)"
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
     t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"
@@ -1823,6 +1873,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
   add_foreign_key "comments", "comments", column: "reply_parent_id"
   add_foreign_key "comments", "fed_actors", on_delete: :cascade
   add_foreign_key "comments", "users"
+  add_foreign_key "community_project_comments", "community_projects", on_delete: :cascade
+  add_foreign_key "community_project_comments", "users"
+  add_foreign_key "community_project_members", "community_projects", on_delete: :cascade
+  add_foreign_key "community_project_members", "users"
+  add_foreign_key "community_projects", "groups"
+  add_foreign_key "community_projects", "users"
   add_foreign_key "coupon_redemptions", "coupons"
   add_foreign_key "coupon_redemptions", "orders"
   add_foreign_key "coupon_redemptions", "users"

@@ -18,8 +18,14 @@ class Api::V1::TicketsController < Api::BaseController
     authorize @event, :update?
     return if stripe_setting_rejected?(@event)
     return if wechat_organizer_rejected?(@event)
-    ticket = @event.tickets.new(ticket_params)
-    if ticket.save
+    ticket = @event.with_lock do
+      if @event.participants.where(status: "waitlisted").exists?
+        return render_error("resolve the waitlist before adding tickets")
+      end
+
+      @event.tickets.create(ticket_params)
+    end
+    if ticket.persisted?
       render json: TicketBlueprint.render(ticket, view: :extended, ticket_occupied_counts: {}), status: :created
     else
       render_error(ticket.errors.full_messages.join(", "))

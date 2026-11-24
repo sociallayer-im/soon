@@ -26,6 +26,8 @@ class Api::V1::ParticipantsController < Api::BaseController
     scope = @event.participants.active
     scope = scope.where(status: "attending").where(payment_status: [nil, "succeeded"]) unless EventPolicy.new(current_user, @event).update?
     manager = EventPolicy.new(current_user, @event).update?
+    return head :forbidden if params[:status] == "waitlisted" && !manager
+    scope = scope.order(:waitlisted_at, :id) if params[:status] == "waitlisted"
     scope = scope.where(status: params[:status]) if manager && Participant::STATUSES.include?(params[:status])
     scope = scope.order(Arel.sql("CASE WHEN participants.status = 'pending' THEN 0 WHEN participants.status = 'awaiting_payment' THEN 1 ELSE 2 END"), registered_at: :desc, id: :desc)
     limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i.clamp(1, PAGY_MAX_LIMIT)
@@ -65,6 +67,7 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     @event.with_lock do
       return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
+      return render_error("请选择票种后报名") if @event.tickets.where(status: "normal").exists?
       is_manager = current_user.memberships.active.exists?(group: @event.group, role: %w[manager owner])
       status = "attending"
       status = "pending" if @event.require_approval && !is_manager
@@ -77,6 +80,7 @@ class Api::V1::ParticipantsController < Api::BaseController
       # transition table has allowed declined → pending/attending all along, it
       # was only this guard that made it unreachable. Anything else that already
       # exists is still a duplicate join and rejected as before.
+      return render json: ParticipantBlueprint.render(existing, own: true) if existing&.status == "waitlisted"
       if existing && !existing.status.in?(%w[cancelled declined maybe])
         return render_error("User can only participate once per event")
       end
@@ -93,10 +97,13 @@ class Api::V1::ParticipantsController < Api::BaseController
       # "only count confirmed attendees; pending waits until approval". A
       # cancelled row occupies nothing, so re-joining takes a seat like a first
       # join does.
+      @event.promote_waitlist! if status == "attending"
       if status == "attending" && (err = capacity_error)
-        return render_error(err)
+        return render_error(err) unless @event.waitlist_enabled?
+        status = "waitlisted"
       end
 
+      participant.waitlisted_at = status == "waitlisted" ? Time.current : nil
       participant.assign_attributes(status: status, registered_at: Time.current, checked_in_at: nil, cancelled_at: nil, reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
 
       ActiveRecord::Base.transaction do
@@ -195,7 +202,7 @@ class Api::V1::ParticipantsController < Api::BaseController
     authorize @event, :update?
     participant = @event.participants.find(params[:id])
     RegistrationReview.approve!(participant, actor: current_user)
-    EventMailer.participant_approved(participant_id: participant.id).deliver_later
+    EventMailer.participant_approved(participant_id: participant.id).deliver_later unless participant.status == "waitlisted"
     render json: ParticipantBlueprint.render(participant, own: true)
   rescue RegistrationReview::Error => e
     render_error(e.message)
@@ -298,6 +305,7 @@ class Api::V1::ParticipantsController < Api::BaseController
         if participant.status != status
           participant.transition!(status)
         end
+        @event.reload.promote_waitlist!
         RegistrationReview.sync_form!(participant, "cancelled")
       end
     end

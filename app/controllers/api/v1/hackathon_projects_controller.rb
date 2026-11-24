@@ -15,7 +15,7 @@ class Api::V1::HackathonProjectsController < Api::BaseController
     policy = HackathonPolicy.new(current_user, hackathon)
     scope = hackathon.hackathon_projects
     scope = visible_scope(scope, hackathon, manager: policy.manage?)
-    scope = scope.where(track_id: params[:track_id]) if params[:track_id].present?
+    scope = scope.where("track_ids @> ARRAY[?]::varchar[]", params[:track_id]) if params[:track_id].present?
     scope = scope.where(recruiting: true) if params[:recruiting] == "true"
     case params[:status]
     when "draft"     then scope = scope.drafts
@@ -43,7 +43,7 @@ class Api::V1::HackathonProjectsController < Api::BaseController
     project.user      = current_user
     authorize project, :create?
 
-    HackathonProject.transaction do
+    hackathon.with_lock do
       project.save!
       project.hackathon_project_members.create!(user: current_user, role: "owner")
     end
@@ -54,7 +54,9 @@ class Api::V1::HackathonProjectsController < Api::BaseController
 
   def update
     authorize @project, :update?
-    @project.update!(project_params.except(:hackathon_id))
+    @project.hackathon.with_lock do
+      @project.reload.update!(project_params.except(:hackathon_id))
+    end
     render_detail(@project)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
@@ -207,8 +209,13 @@ class Api::V1::HackathonProjectsController < Api::BaseController
   end
 
   def project_params
-    params.require(:hackathon_project).permit(:hackathon_id, :track_id, :title, :tagline, :content, :cover_url,
-                                              :repo_url, :demo_url, :video_url, :recruiting,
-                                              tech: [], seeking: [])
+    fields = params.require(:hackathon_project).permit(:hackathon_id, :track_id, :title, :tagline, :content, :cover_url,
+                                                      :repo_url, :demo_url, :video_url, :recruiting,
+                                                      tech: [], seeking: [], track_ids: [], repo_links: [],
+                                                      demo_links: [], video_links: [])
+    HackathonProject::LEGACY_FIELDS.each do |field, legacy|
+      fields.delete(legacy) if fields.key?(field)
+    end
+    fields
   end
 end
