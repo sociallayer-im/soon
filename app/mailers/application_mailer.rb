@@ -10,7 +10,8 @@ class ApplicationMailer < ActionMailer::Base
   # points at Google Workspace. Changing this without first verifying a new
   # sending domain in Resend makes every outbound mail fail SPF.
   FROM = ENV.fetch("MAIL_FROM", "Social Layer <send@app.sola.day>").freeze
-  LOGO_URL = ENV.fetch("MAIL_LOGO_URL", "https://ik.imagekit.io/soladata/g9orl7uo_Xf0S5pGU4").freeze
+  INLINE_LOGO_NAME = "sola-logo.png".freeze
+  INLINE_LOGO_PATH = Rails.root.join("app/mailers/assets", INLINE_LOGO_NAME).freeze
   # Where mail LINKS point. Canonical frontend host as of 2026-08-15; the old
   # app.sola.day 308s here anyway, so links already sent keep working.
   WEB_URL = ENV.fetch("WEB_URL", "https://sola.day").freeze
@@ -18,4 +19,15 @@ class ApplicationMailer < ActionMailer::Base
   default from: FROM
   layout "mailer"
   helper :mailer
+  before_action :attach_inline_logo
+
+  private
+
+  def attach_inline_logo
+    attachments.inline[INLINE_LOGO_NAME] = {
+      mime_type: "image/png",
+      content: File.binread(INLINE_LOGO_PATH)
+    }
+    @inline_logo_url = attachments[INLINE_LOGO_NAME].url
+  end
 end

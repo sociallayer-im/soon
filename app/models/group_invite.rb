@@ -16,7 +16,18 @@ class GroupInvite < ApplicationRecord
   # NULL expires_at means "never expires" (see #expired?), so it must pass here too —
   # ticket grants (see #grant_ticket!) are created with no expiry since the ticket was
   # already paid for and shouldn't lapse just because signup is delayed.
-  scope :pending_for_email, ->(email) { where(status: "sending", receiver_address_type: "email", receiver_address: email).where("expires_at IS NULL OR expires_at > ?", Time.current) }
+  scope :pending_for_email, ->(email) {
+    next none if email.blank?
+
+    where(status: "sending", receiver_address_type: "email")
+      .where("LOWER(BTRIM(receiver_address)) = ?", email.to_s.strip.downcase)
+      .where("expires_at IS NULL OR expires_at > ?", Time.current)
+  }
+
+  def email_recipient?(email)
+    receiver_address_type == "email" && email.present? &&
+      receiver_address.to_s.strip.casecmp?(email.strip)
+  end
   scope :pending_for_phone, ->(phone) { where(status: "sending", receiver_address_type: "phone", receiver_address: phone).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   def expired?

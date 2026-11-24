@@ -13,8 +13,11 @@
             <!-- Header -->
             <tr>
               <td align="center" style="padding-bottom: 20px;">
-                <img src="<%= MailerHelper::LOGO_URL %>" alt="<%= MailerHelper::BRAND_NAME %>"
-                     height="40" style="height: 40px; border: 0;">
+                <img src="<%= @inline_logo_url %>" alt="" width="40" height="40"
+                     style="display: block; width: 40px; height: 40px; margin: 0 auto; border: 0;">
+                <div style="padding-top: 6px; color: #4b5563; font-size: 13px; font-weight: 600;">
+                  <%= MailerHelper::BRAND_NAME %>
+                </div>
               </td>
             </tr>
             <!-- Card -->

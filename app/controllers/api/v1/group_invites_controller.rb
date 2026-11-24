@@ -40,7 +40,15 @@ class Api::V1::GroupInvitesController < Api::BaseController
     authorize @group, :update?, policy_class: GroupPolicy
 
     role = params[:role].presence || "member"
-    results = Array(params[:receivers]).map { |address| send_invite_to(address, role) }
+    if role == "owner" && !group_owner?
+      return render_error("only an owner can grant the owner role", status: :forbidden)
+    end
+    receivers = params[:receivers]
+    unless receivers.is_a?(Array) && receivers.present?
+      return render_error("provide at least one recipient")
+    end
+
+    results = receivers.map { |address| send_invite_to(address, role) }
     render json: { results: results }
   end
 
@@ -62,13 +70,17 @@ class Api::V1::GroupInvitesController < Api::BaseController
   #
   # Recipient accepts an email invite.
   def accept
-    unless @invite.status == "sending" && @invite.receiver_address == current_user.email
-      return render_error("invite is not for this user")
-    end
-    return render_error("invite expired") if @invite.expired?
+    @invite.with_lock do
+      unless @invite.accepted? && @invite.receiver_id == current_user.id
+        unless @invite.sending? && @invite.email_recipient?(current_user.email)
+          return render_error("invite is not for this user or is no longer available")
+        end
+        return render_error("invite expired") if @invite.expired?
 
-    @invite.accept!(current_user)
-    render json: GroupInviteBlueprint.render(@invite)
+        @invite.accept!(current_user)
+      end
+      render json: GroupInviteBlueprint.render(@invite)
+    end
   end
 
   # POST /api/v1/groups/:group_id/group_invites/:id/accept_request
@@ -109,6 +121,9 @@ class Api::V1::GroupInvitesController < Api::BaseController
     authorize @group, :update?, policy_class: GroupPolicy
 
     role = params[:role].presence || "member"
+    if role == "owner" && !group_owner?
+      return render_error("only an owner can grant the owner role", status: :forbidden)
+    end
     code = SecureRandom.alphanumeric(8).upcase
     invite = GroupInvite.create(
       group: @group, sender: current_user, role: role,
@@ -124,15 +139,21 @@ class Api::V1::GroupInvitesController < Api::BaseController
     return render_error("invalid code") unless invite
     return render_error("code expired") if invite.expired?
 
-    existing = @group.memberships.exists?(user_id: current_user.id)
+    if @group.memberships.exists?(user_id: current_user.id)
+      return render_error("membership exists")
+    end
+
     @group.add_member(current_user.id, invite.role)
-    action = existing ? "group_invite/update_role" : "group_invite/add_member"
-    Activity.create(item: invite, initiator: current_user, action: action,
+    Activity.create(item: invite, initiator: current_user, action: "group_invite/add_member",
       payload: { group_name: @group.name, group_display_name: @group.display_name })
     render json: GroupInviteBlueprint.render(invite)
   end
 
   private
+
+  def group_owner?
+    current_user.memberships.exists?(group: @group, role: "owner")
+  end
 
   def set_group
     @group = Group.find(params[:group_id])
@@ -147,6 +168,23 @@ class Api::V1::GroupInvitesController < Api::BaseController
   end
 
   def send_invite_to(address, role)
+    unless address.is_a?(String) && address.strip.present?
+      return { address: address, result: "error", message: "invalid receiver" }
+    end
+
+    original_address = address
+    address = address.strip
+    if address.include?("@")
+      address = address.downcase
+      local, domain = address.split("@", 2)
+      valid_email = address.bytesize <= 254 && local.bytesize <= 64 &&
+        !local.start_with?(".") && !local.end_with?(".") && !local.include?("..") &&
+        address.match?(URI::MailTo::EMAIL_REGEXP) && domain.include?(".") &&
+        domain.split(".").all? { |label| label.bytesize <= 63 }
+      unless valid_email
+        return { address: original_address, result: "error", message: "invalid email address" }
+      end
+    end
     # Normalized with the SAME rules sign-in uses (PhoneNumber ⊂ AuthController)
     # — the invite has to match users.phone verbatim for auto-join to find it.
     phone = PhoneNumber.normalize(address)
@@ -155,6 +193,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
     # meant for whoever owns that number.
     user = User.find_by(phone: phone) if phone
     user ||= User.find_by(name: address) || User.find_by(email: address) || User.find_by(eth: address)
+    user ||= User.find_by(id: address)
 
     if user
       membership = @group.memberships.find_by(user_id: user.id)
@@ -164,7 +203,7 @@ class Api::V1::GroupInvitesController < Api::BaseController
           payload: { message: params[:message], group_name: @group.name, group_display_name: @group.display_name })
         return { address: address, result: "role_updated" }
       elsif membership
-        return { address: address, result: "error", message: "membership exists" }
+        return { address: address, result: "already_member" }
       else
         membership = @group.add_member(user.id, role)
         Activity.create(item: membership, initiator: current_user, action: "group_invite/send", receiver: user,
@@ -172,13 +211,18 @@ class Api::V1::GroupInvitesController < Api::BaseController
         return { address: address, result: "added" }
       end
     elsif address.to_s.include?("@")
-      invite = GroupInvite.create!(
-        group: @group, sender: current_user, role: role,
-        receiver_address_type: "email", receiver_address: address,
-        status: "sending", expires_at: INVITE_TTL.from_now,
-        message: params[:message]
-      )
-      GroupMailer.invite(invite_id: invite.id).deliver_later
+      @group.with_lock do
+        existing = @group.group_invites.pending_for_email(address).where(ticket_id: nil, badge_id: nil, badge_class_id: nil).first
+        return { address: address, result: "already_invited", role: existing.role } if existing
+
+        invite = @group.group_invites.create!(
+          sender: current_user, role: role,
+          receiver_address_type: "email", receiver_address: address,
+          status: "sending", expires_at: INVITE_TTL.from_now,
+          message: params[:message]
+        )
+        GroupMailer.invite(invite_id: invite.id).deliver_later
+      end
       return { address: address, result: "invited" }
     elsif phone
       # Re-importing a list that overlaps the last one is the normal case —

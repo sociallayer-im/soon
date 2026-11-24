@@ -29,7 +29,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "manager", group.memberships.find_by(user: target).role
   end
 
-  test "create errors when the known user is already a member at an equal/higher role" do
+  test "create skips users already at an equal or higher role" do
     owner = create_user
     target = create_user
     group = create_group(owner: owner)
@@ -38,8 +38,7 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/groups/#{group.id}/group_invites",
       params: { receivers: [target.name], role: "member" }, headers: auth_headers(owner)
     result = json_response["results"].first
-    assert_equal "error", result["result"]
-    assert_match "membership exists", result["message"]
+    assert_equal "already_member", result["result"]
   end
 
   test "create makes a real GroupInvite for an unmatched email" do
@@ -55,6 +54,25 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "sending", invite.status
     assert_equal "email", invite.receiver_address_type
     assert_equal "nobody@test.com", invite.receiver_address
+  end
+
+  test "email batches normalize new addresses, reject malformed addresses and skip duplicate invites" do
+    owner = create_user
+    group = create_group(owner: owner)
+    path = "/api/v1/groups/#{group.id}/group_invites"
+
+    assert_enqueued_emails 1 do
+      post path, params: { receivers: [" New@Test.COM ", "new@test.com", "bad@", ".bad@test.com", "first@test.com,second@test.com"] },
+        headers: auth_headers(owner), as: :json
+    end
+    assert_response :ok
+    assert_equal %w[invited already_invited error error error], json_response["results"].pluck("result")
+    assert_equal ["new@test.com"], group.group_invites.pluck(:receiver_address)
+
+    assert_no_enqueued_emails do
+      post path, params: { receivers: ["NEW@test.com"] }, headers: auth_headers(owner), as: :json
+    end
+    assert_equal "already_invited", json_response["results"].first["result"]
   end
 
   test "create errors on an unmatched non-email handle" do
@@ -115,6 +133,26 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "accepted", invite.reload.status
     assert group.memberships.exists?(user: invitee)
+  end
+
+  test "legacy email casing and whitespace allow preview and repeat acceptance by the recipient" do
+    owner = create_user
+    recipient = create_user(email: "invitee@test.com")
+    group = create_group(owner: owner)
+    invite = create_group_invite(group: group, sender: owner, receiver_address_type: "email",
+      receiver_address: " Invitee@Test.com ", expires_at: 1.day.from_now)
+
+    get "/api/v1/group_invites/pending", headers: auth_headers(recipient)
+    assert_includes JSON.parse(response.body).pluck("id"), invite.id
+    get "/api/v1/group_invites/#{invite.id}", headers: auth_headers(recipient)
+    assert_response :ok
+
+    assert_difference -> { group.memberships.count }, 1 do
+      2.times do
+        post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(recipient)
+        assert_response :ok
+      end
+    end
   end
 
   test "accept rejects a mismatched email" do

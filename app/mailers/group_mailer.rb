@@ -4,7 +4,7 @@ class GroupMailer < ApplicationMailer
   def invite(invite_id:)
     @invite = GroupInvite.find(invite_id)
     @group  = @invite.group
-    @accept_url = "#{WEB_URL}/group/join/#{@group.name}?invite=#{@invite.id}"
+    @accept_url = "#{WEB_URL}/invite/#{@invite.id}"
     mail(to: @invite.receiver_address, subject: "You're invited to join #{@group.display_name}")
   end
 

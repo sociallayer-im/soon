@@ -30,13 +30,13 @@ class EventMailerTest < ActionMailer::TestCase
     assert_match "14:00", mail.html_part.body.to_s
   end
 
-  test "participant_rejected emails the attendee without an attachment" do
+  test "participant_rejected emails the attendee without a calendar invitation" do
     participant = create_participant(event: @event, user: @attendee, status: "declined")
     mail = EventMailer.participant_rejected(participant_id: participant.id)
 
     assert_equal [@attendee.email], mail.to
     assert_equal "Update on your application — Launch Party", mail.subject
-    assert_empty mail.attachments
+    assert_nil mail.attachments["invite.ics"]
   end
 
   test "cancelled emails the recipient with a CANCELLED calendar update" do
@@ -62,7 +62,7 @@ class EventMailerTest < ActionMailer::TestCase
     assert_match @group.display_name, mail.html_part.body.to_s
     # The recipient is being asked to look at the event, not to attend it — an
     # .ics here would put someone else's event on a reviewer's calendar.
-    assert_empty mail.attachments
+    assert_nil mail.attachments["invite.ics"]
   end
 
   test "submitted says review is needed when the event is pending" do

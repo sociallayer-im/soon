@@ -14,6 +14,20 @@ class GroupMailerTest < ActionMailer::TestCase
     assert_match "The Guild", mail.html_part.body.to_s
     assert_match "host-user", mail.html_part.body.to_s
     assert_match "join us", mail.html_part.body.to_s
+    assert_includes mail.html_part.body.to_s, "/invite/#{invite.id}"
+    assert_includes mail.text_part.body.to_s, "/invite/#{invite.id}"
+    logo = mail.attachments["sola-logo.png"]
+    assert logo.inline?
+    assert_equal "image/png", logo.mime_type
+    assert_operator logo.body.decoded.bytesize, :<, 1024
+    assert_includes mail.html_part.body.to_s, %(src="#{logo.url}")
+    payload = Resend::Mailer.allocate.build_resend_params(mail)
+    image = payload.fetch(:attachments).find { |attachment| attachment[:filename] == "sola-logo.png" }
+    assert_equal logo.cid, image[:content_id]
+    assert_equal logo.body.decoded.bytes, image[:content]
+    assert_includes payload.fetch(:html), %(src="#{logo.url}")
+    assert_includes mail.html_part.body.to_s, 'width="40" height="40"'
+    assert_includes mail.html_part.body.to_s, ApplicationMailer::BRAND_NAME
   end
 
   test "ticket_purchased goes to the given recipient and names the group" do

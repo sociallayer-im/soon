@@ -1,7 +1,6 @@
 # Shared building blocks for email templates so each template stays content-only.
 module MailerHelper
   BRAND_NAME = ApplicationMailer::BRAND_NAME
-  LOGO_URL   = ApplicationMailer::LOGO_URL
   WEB_URL    = ApplicationMailer::WEB_URL
 
   # A centered call-to-action button. Table-based + inline styles for email-client
