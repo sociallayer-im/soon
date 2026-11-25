@@ -10,6 +10,10 @@ class UserBlueprint < Blueprinter::Base
     fields :bio, :eth, :social_links
   end
 
+  view :roster_contact do
+    field :email
+  end
+
   # Private fields, only rendered for the user viewing their own record.
   view :self do
     include_view :profile

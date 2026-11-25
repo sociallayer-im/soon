@@ -137,7 +137,9 @@ Rails.application.routes.draw do
             delete "comments/:comment_id", action: :remove_comment
           end
         end
-        resources :memberships, only: %i[index create update destroy]
+        resources :memberships, only: %i[index create update destroy] do
+          post :lookup_emails, on: :collection
+        end
         resources :group_invites, only: %i[index create destroy] do
           member do
             post :accept

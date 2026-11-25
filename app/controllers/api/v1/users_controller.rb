@@ -28,7 +28,8 @@ class Api::V1::UsersController < Api::BaseController
     return render_error("email is required") if email.blank?
 
     user = User.find_by(email: email)
-    return render_error("User not found", status: :not_found) unless user
+    response.headers["Cache-Control"] = "private, no-store"
+    return render json: "null" unless user
 
     render json: UserBlueprint.render(user, view: :profile)
   end

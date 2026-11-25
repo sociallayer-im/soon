@@ -20,6 +20,9 @@ class Api::V1::ParticipantsController < Api::BaseController
     # the list to the same visibility rule as the event that owns it.
     authorize @event, :show?
     roster_manager = roster_manager?
+    include_email = params[:include_email] == "true"
+    return render_error("Forbidden", status: :forbidden) if include_email && !roster_manager
+
     status = params[:status].presence
     scope = if status
       return render_error("Forbidden", status: :forbidden) unless roster_manager
@@ -31,7 +34,8 @@ class Api::V1::ParticipantsController < Api::BaseController
     else
       @event.participants.active.where.not(status: "waitlisted")
     end
-    render_collection scope.includes(:user), blueprint: ParticipantBlueprint
+    opts = include_email ? { view: :roster_export } : {}
+    render_collection scope.includes(:user), blueprint: ParticipantBlueprint, **opts
   end
 
   # POST /api/v1/events/:event_id/participants

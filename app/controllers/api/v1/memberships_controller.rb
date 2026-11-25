@@ -11,6 +11,27 @@ class Api::V1::MembershipsController < Api::BaseController
                       blueprint: MembershipBlueprint, member_group_ids: member_group_ids
   end
 
+  # POST /api/v1/groups/:group_id/memberships/lookup_emails
+  def lookup_emails
+    authorize @group, :manage?
+
+    ids = params.fetch(:user_ids, [])
+    names = params.fetch(:usernames, [])
+    unless [ids, names].all? { |values| values.is_a?(Array) && values.all? { |value| value.is_a?(String) && value.strip.present? && value.length <= 255 } }
+      return render_error("user_ids and usernames must be arrays of non-empty strings (up to 255 characters each)")
+    end
+    unless (ids.length + names.length).between?(1, 100)
+      return render_error("provide between 1 and 100 user IDs and usernames combined")
+    end
+
+    members = User.where(id: @group.memberships.select(:user_id))
+    matches = members.where(id: ids.map(&:strip)).or(members.where(name: names.map(&:strip)))
+    response.headers["Cache-Control"] = "private, no-store"
+    render json: { data: matches.order(:id).pluck(:id, :name, :email).map { |id, name, email|
+      { id: id, username: name, email: email }
+    } }
+  end
+
   # POST /api/v1/groups/:group_id/memberships
   #
   # Admin-only direct add — membership can otherwise only be gained via GroupInvite
