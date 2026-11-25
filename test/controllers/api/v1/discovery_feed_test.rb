@@ -229,7 +229,7 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     get "/api/v1/cities"
     assert_response :ok
     catalogue = json_response["data"]
-    assert_equal %w[上海 杭州 深圳 成都], catalogue
+    assert_equal %w[上海 深圳 杭州 大理 成都 西安 海外 线上], catalogue
     assert_equal 1, catalogue.count("上海")
     assert_not_includes catalogue, "上海市"
     assert_not_includes catalogue, "shanghai"
