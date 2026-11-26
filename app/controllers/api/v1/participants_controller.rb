@@ -109,12 +109,18 @@ class Api::V1::ParticipantsController < Api::BaseController
 
   # PATCH /api/v1/events/:event_id/participants/:id
   def update
+    return destroy if params.dig(:participant, :status) == "cancelled"
+
     participant = @event.participants.find(params[:id])
     unless participant.user_id == current_user.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
 
     new_status = params.dig(:participant, :status)
+    if participant.seated? && new_status != "attending" && participant.ticket_items.any? { |order| refundable_charge?(order) }
+      return render_error("refund required before cancel")
+    end
+
     was_seated = participant.seated?
     will_be_seated = Participant::SEATED.include?(new_status)
     if will_be_seated && !was_seated && (err = capacity_error)
@@ -141,13 +147,18 @@ class Api::V1::ParticipantsController < Api::BaseController
   # a later refund still reach the participant.
   def destroy
     participant = @event.participants.find(params[:id])
-    unless participant.user_id == current_user.id
+    unless participant.user_id == current_user.id || EventPolicy.new(current_user, @event).update?
       return render json: { error: "Forbidden" }, status: :forbidden
     end
     return head :no_content if participant.status == "cancelled" # idempotent
 
     ActiveRecord::Base.transaction do
-      release_orders!(participant)
+      orders = participant.ticket_items.order(:id).lock.to_a
+      if participant.user_id == current_user.id && orders.any? { |order| refundable_charge?(order) }
+        return render_error("refund required before cancel")
+      end
+
+      release_orders!(orders)
       # Cancelling the last live order already withdraws the participant
       # (TicketItem#settle_participant!), so only transition if it didn't.
       # Either way the seat is given back exactly once, by whichever
@@ -233,8 +244,12 @@ class Api::V1::ParticipantsController < Api::BaseController
   # attendee withdrawing is not a refund, and the event owner must still be
   # able to refund it afterwards from the order list — which is why the
   # participant link is left intact too.
-  def release_orders!(participant)
-    TicketItem.where(event_id: @event.id, participant_id: participant.id).each do |item|
+  def refundable_charge?(order)
+    order.amount.to_i.positive? && order.status.in?(%w[succeeded partially_refunded disputed])
+  end
+
+  def release_orders!(orders)
+    orders.each do |item|
       case item.status
       when "pending"
         item.cancel # marks cancelled and releases the hold

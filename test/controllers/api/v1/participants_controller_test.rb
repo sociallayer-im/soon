@@ -342,7 +342,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, event.reload.participant_count
   end
 
-  test "withdrawing keeps a PAID order refundable by the organizer" do
+  test "paid attendees need a refund to self-cancel but the organizer can remove them" do
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
@@ -356,11 +356,21 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     participant = Participant.find(json_response["participant"]["id"])
     item.confirm_payment!(txhash: "pi_paid")
 
-    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
-    assert_response :no_content
+    path = "/api/v1/events/#{event.id}/participants/#{participant.id}"
+    delete path, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_equal "refund required before cancel", json_response["error"]
 
-    # The money is still with the organizer, so the order stays succeeded and
-    # refundable — withdrawing is not a refund.
+    patch path, params: { participant: { status: "cancelled" } }, headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_equal "attending", participant.reload.status
+
+    delete path, headers: auth_headers(create_user)
+    assert_response :forbidden
+
+    delete path, headers: auth_headers(owner)
+    assert_response :no_content
+    assert_equal "cancelled", participant.reload.status
     assert_equal "succeeded", item.reload.status
     assert_equal participant.id, item.participant_id, "the refund path still needs the participant"
     assert_equal 5, ticket.reload.quantity, "the seat is freed even though the order stands"
