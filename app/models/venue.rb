@@ -24,8 +24,12 @@ class Venue < ApplicationRecord
   #   - a venue with no Availability records at all is open 7×24
   def check_availability(event_start, event_end, timezone = nil, event_id = nil)
     tz = timezone.presence || group&.timezone.presence || "UTC"
-    start_time = event_start.in_time_zone(tz)
-    end_time   = event_end.in_time_zone(tz)
+    tz = "Asia/Hong_Kong" if tz == "Hongkong"
+    zone = Time.find_zone(tz)
+    return [false, "invalid timezone"] unless zone
+
+    start_time = event_start.in_time_zone(zone)
+    end_time   = event_end.in_time_zone(zone)
 
     if start_date && start_time.to_date < start_date
       return [false, "venue is not available before #{start_date}"]

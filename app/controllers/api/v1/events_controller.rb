@@ -412,10 +412,11 @@ class Api::V1::EventsController < Api::BaseController
   # the event was created.
   def normalize_times!(attrs, group:, current_tz: nil)
     tzid = attrs[:timezone].presence || current_tz.presence || group&.timezone.presence
-    zone = tzid && ActiveSupport::TimeZone[tzid]
+    tzid = "Asia/Hong_Kong" if tzid == "Hongkong"
+    zone = Time.find_zone(tzid)
     return unless zone
 
-    attrs[:timezone] = zone.name if attrs[:timezone].blank?
+    attrs[:timezone] = zone.name if attrs[:timezone].blank? || attrs[:timezone] == "Hongkong"
 
     %i[start_time end_time].each do |key|
       next if attrs[key].blank?
