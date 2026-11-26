@@ -6,7 +6,7 @@ class Api::V1::ParticipantsController < Api::BaseController
   # who could see it before.
   skip_before_action :authenticate!, only: %i[index]
   before_action :authenticate_optional!, only: %i[index]
-  before_action :set_event
+  before_action :set_event, except: %i[mine registration]
 
   # GET /api/v1/events/:event_id/participants
   #
@@ -20,6 +20,24 @@ class Api::V1::ParticipantsController < Api::BaseController
     # the list to the same visibility rule as the event that owns it.
     authorize @event, :show?
     render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
+  end
+
+  # GET /api/v1/registrations — the signed-in user's registrations.
+  def mine
+    scope = current_user.participants.where.not(status: "cancelled")
+                         .includes(event: [ :group, :place, :venue, :owner, :track, { tickets: :payment_methods } ])
+                         .order(Arel.sql("registered_at DESC NULLS LAST"), id: :desc)
+    limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i
+    limit = PAGY_DEFAULT_LIMIT if limit <= 0
+    pagy = Pagy::Offset.new(count: scope.count, page: params.fetch(:page, 1).to_i, limit: [ limit, PAGY_MAX_LIMIT ].min)
+    data = pagy.records(scope).map { |participant| registration_payload(participant) }
+    render json: { data: data, meta: pagy_metadata(pagy) }
+  end
+
+  # GET /api/v1/registrations/:id
+  def registration
+    participant = current_user.participants.includes(event: [ :group, :place, :venue, :owner, :track, { tickets: :payment_methods } ]).find(params[:id])
+    render json: registration_payload(participant, detail: true)
   end
 
   # POST /api/v1/events/:event_id/participants
@@ -260,6 +278,29 @@ class Api::V1::ParticipantsController < Api::BaseController
         item.release_resources!
       end
     end
+  end
+
+  def registration_payload(participant, detail: false)
+    event = participant.event
+    rendered = if detail
+      EventBlueprint.render_as_hash(
+        event,
+        view: :extended,
+        include_participants: false,
+        current_participant: participant,
+        reveal_image_note: participant.status == "attending" || EventPolicy.new(current_user, event).update?
+      )
+    else
+      EventBlueprint.render_as_hash(event)
+    end
+    payload = {
+      "participant" => ParticipantBlueprint.render_as_hash(participant),
+      "event" => rendered
+    }
+    if detail
+      payload["pending_ticket_item_id"] = TicketItem.where(participant_id: participant.id, status: "pending").order(created_at: :desc).pick(:id)
+    end
+    payload
   end
 
   def set_event

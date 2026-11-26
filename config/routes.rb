@@ -107,6 +107,9 @@ Rails.application.routes.draw do
       get "users/by_email", to: "users#by_email"
 
       # Resources
+      get "registrations", to: "participants#mine"
+      get "registrations/:id", to: "participants#registration"
+
       resources :users, only: %i[show update] do
         member do
           get :groups
