@@ -1,0 +1,19 @@
+Dockerfile
+  s_a4066d71f584a5::t_21da1c101be26e 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0909450c3fe65384d2ad0792d62e54249d608178",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
