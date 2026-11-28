@@ -1,0 +1,51 @@
+app/blueprints/hackathon_project_blueprint.rb
+  s_ae1b3622fa26f6::t_997e604072609d 7,18-19
+app/controllers/api/v1/hackathon_projects_controller.rb
+  s_ae1b3622fa26f6::t_0ce413b2d1edc7 18,46,57-59,212-219
+app/controllers/api/v1/hackathons_controller.rb
+  s_ae1b3622fa26f6::t_c5014ee3e5eac8 51,63-65,149,151
+app/controllers/api/v1/oauth_admin_applications_controller.rb
+  s_ae1b3622fa26f6::t_cce34abdd30620 14,44
+app/controllers/api/v1/oauth_applications_controller.rb
+  s_ae1b3622fa26f6::t_eb73fdf50aefb7 9,60
+app/controllers/api/v1/oauth_controller.rb
+  s_ae1b3622fa26f6::t_d9938210cdd64a 279,332
+app/controllers/api/v1/oauth_grants_controller.rb
+  s_ae1b3622fa26f6::t_5b315b427e9de9 6,13
+app/models/hackathon.rb
+  s_ae1b3622fa26f6::t_7eca2fb87d5f21 88
+app/models/hackathon_project.rb
+  s_ae1b3622fa26f6::t_28de1a1992c21f 16-18,30-31,53-54,100-115,117-127
+app/models/oauth_application.rb
+  s_ae1b3622fa26f6::t_24e16e202d07ac 2
+app/services/oauth_config.rb
+  s_ae1b3622fa26f6::t_37aa9b7d3d497a 12-24
+bin/docker-entrypoint
+  s_ae1b3622fa26f6::t_dce3fcc13cf7f8 5-7
+config/initializers/good_job.rb
+  s_ae1b3622fa26f6::t_71f4fca7f66f5e 18-19,36
+config/initializers/oauth_deployment.rb
+  s_ae1b3622fa26f6::t_522273b0d08222 1-4
+db/migrate/20261126090000_add_multiple_tracks_and_links_to_hackathon_projects.rb
+  s_ae1b3622fa26f6::t_caf9679173de35 1-25
+db/migrate/20261129085000_partition_oauth_clients.rb
+  s_ae1b3622fa26f6::t_e2a5e8af3a440a 1-10
+db/schema.rb
+  s_ae1b3622fa26f6::t_f0c7b5f196992e 13,765,774,784,787,792,887
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79e326a2028ce640bf7167f8b2ef0660b1141f7e",
+  "prompts": {},
+  "sessions": {
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
