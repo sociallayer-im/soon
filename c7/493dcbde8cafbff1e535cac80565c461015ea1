@@ -1,0 +1,53 @@
+app/controllers/api/v1/events_controller.rb
+  s_a4066d71f584a5::t_0c4ad9e19c8676 72-88,96-98
+app/controllers/api/v1/group_invites_controller.rb
+  s_a4066d71f584a5::t_1cc57a47d41fea 19-20,22-28,59,66,74-85,98-102,146-152
+app/controllers/api/v1/groups_controller.rb
+  s_a4066d71f584a5::t_6c7bc1f7955cf3 98-107
+app/controllers/api/v1/memberships_controller.rb
+  s_a4066d71f584a5::t_81a3baabda685b 77-82
+app/controllers/api/v1/participants_controller.rb
+  s_a4066d71f584a5::t_6e374b28aa4c45 157-160,172,175-176,207-218,263-268,273,277
+app/controllers/api/v1/recurring_controller.rb
+  s_a4066d71f584a5::t_1bb4440274090a 2-3,125,127-131,141-142,152,154-159
+app/controllers/api/v1/tickets_controller.rb
+  s_a4066d71f584a5::t_2ff5b15237becc 76-80,142,159,174-175,212-213,276,287-290,299,338,356
+app/jobs/stripe_webhook_job.rb
+  s_a4066d71f584a5::t_4972c7af44a9cc 36
+app/jobs/ticketing_sweeper_job.rb
+  s_a4066d71f584a5::t_aee2ba50d53884 9-23,32-44,65,106-107
+app/jobs/wechat_pay_webhook_job.rb
+  s_a4066d71f584a5::t_8b9553cdc05231 41
+app/models/event.rb
+  s_a4066d71f584a5::t_cf25887b3ae409 18,87-120
+app/models/group.rb
+  s_a4066d71f584a5::t_1dee6fb425aba0 122
+app/models/group_invite.rb
+  s_a4066d71f584a5::t_1d7d147163f795 37-51,54
+app/models/ticket_item.rb
+  s_a4066d71f584a5::t_1e44d0dce1592b 101-115,131-157,170-176,195-197
+app/policies/event_policy.rb
+  s_a4066d71f584a5::t_d0e1b10f4446bb 21-22
+app/services/stripe_gateway.rb
+  s_a4066d71f584a5::t_5148286d75ebdf 116-121
+app/services/ticketing/payment_closure.rb
+  s_a4066d71f584a5::t_705e3b43e79ebe 1-63
+app/services/wechat_pay_gateway.rb
+  s_a4066d71f584a5::t_dce2b5e46ce9d9 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7493dcbde8cafbff1e535cac80565c461015ea1",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
