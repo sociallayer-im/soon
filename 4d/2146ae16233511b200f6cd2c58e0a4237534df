@@ -4,18 +4,22 @@ app/controllers/api/v1/events_controller.rb
   s_a4066d71f584a5::t_58d85c9c2b6304 128-130
 app/controllers/api/v1/participants_controller.rb
   s_a4066d71f584a5::t_65e2bb9d17a853 45,46,75-82,85-99,104-105,140,148,153,159
+  s_ae1b3622fa26f6::t_e80804ee2460bd 29-30,70,83,100,102-103,106,205,308
 app/controllers/api/v1/tickets_controller.rb
   s_a4066d71f584a5::t_1dfbc88ac5aac5 21-28
 app/models/event.rb
   s_a4066d71f584a5::t_2486a61a24564c 60-91
 app/models/participant.rb
   s_a4066d71f584a5::t_e5a52780da6a8d 21-25,52-53,75-76
+  s_ae1b3622fa26f6::t_e80804ee2460bd 40,50,54,56
 db/migrate/20261125090000_add_waitlisted_at_to_participants.rb
   s_a4066d71f584a5::t_d4e23603f2477b 1-10
 db/schema.rb
   s_a4066d71f584a5::t_36070f7813bb4a 1174,1178,1181
 test/controllers/api/v1/participants_controller_test.rb
   s_a4066d71f584a5::t_9e52165b5de7a4 445-451,735,738-740,742-765,767-781,784,788-790,792-832,834-842
+app/services/registration_review.rb
+  s_ae1b3622fa26f6::t_e80804ee2460bd 12-19,45,48-49
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -28,6 +32,14 @@ test/controllers/api/v1/participants_controller_test.rb
         "tool": "codex",
         "id": "01a20931-091c-72e3-a378-56e730c09435",
         "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    },
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-astra"
       },
       "human_author": "jiangplus <jiang.plus.times@gmail.com>"
     }
