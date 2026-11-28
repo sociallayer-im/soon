@@ -1,0 +1,493 @@
+app/controllers/api/v1/participants_controller.rb
+  s_ae1b3622fa26f6::t_cbdbc8915e973e 2-5,26-45,51-52,66-82,84-98,100-115,117-127,132-133,148-151,153-157,178,180-181,197,199-201,212,214-216,229-238,240-271,276-293,295-302,340
+  s_ae1b3622fa26f6::t_45afc9f601f293 303,314-315
+test/controllers/api/v1/participants_controller_test.rb
+  s_ae1b3622fa26f6::t_cbdbc8915e973e 8,19,31,38,42,48,55,70,89,100,104,122,125,131,151,155,162,173,194,267,285,299,326,345,349,359,361-362,364,367,376-381,388,397,405
+  s_ae1b3622fa26f6::t_54af71e0cb0042 382-387,389-396,398-404,406-409,418,478,492,511,523,559,585,610,632,635,655,672,685,699,712,723,773,783,814
+.atlasignore
+  s_ae1b3622fa26f6::t_58485451755bbb 1-27
+.dockerignore
+  s_ae1b3622fa26f6::t_d543edf1d51671 48-65
+.env.example
+  s_ae1b3622fa26f6::t_4159f14c57f51e 58-62
+.gitignore
+  s_ae1b3622fa26f6::t_81fefab1e6c439 47-51
+ATLAS_DEPLOYMENT.md
+  s_ae1b3622fa26f6::t_44403d4aaf4559 1-18
+Dockerfile
+  s_ae1b3622fa26f6::t_2e1b5f7b8dcba2 5-7,9-11,14-18,20,22-26,28-48,50,52-61,63-66,68,71-73
+Gemfile
+  s_ae1b3622fa26f6::t_9dc36e04f46ec4 97-98
+Gemfile.lock
+  s_ae1b3622fa26f6::t_f6cfa53601bd94 218-219,483,582
+app/blueprints/activity_blueprint.rb
+  s_ae1b3622fa26f6::t_7ff9fde27197e2 6-15
+app/blueprints/campaign_blueprint.rb
+  s_ae1b3622fa26f6::t_363223fd83b2b6 1-35
+app/blueprints/event_blueprint.rb
+  s_ae1b3622fa26f6::t_25ddad665b636f 11,18-20,31,35-38,40-57,62,74-75
+app/blueprints/event_role_blueprint.rb
+  s_ae1b3622fa26f6::t_459f1d0138ad4c 4-5
+app/blueprints/follow_blueprint.rb
+  s_ae1b3622fa26f6::t_ad26f271ea1afe 1-21
+app/blueprints/group_blueprint.rb
+  s_ae1b3622fa26f6::t_1adf13e4f10d16 5,13,40-42,48-60
+app/blueprints/participant_blueprint.rb
+  s_ae1b3622fa26f6::t_133b9de2e344f8 7-22
+app/blueprints/refund_request_blueprint.rb
+  s_ae1b3622fa26f6::t_bd823863b51142 1-7
+app/blueprints/registration_blueprint.rb
+  s_ae1b3622fa26f6::t_935b30e11f9a8d 1-3
+app/blueprints/ticket_blueprint.rb
+  s_ae1b3622fa26f6::t_c01ad08b9ea486 9-15
+app/blueprints/ticket_item_blueprint.rb
+  s_ae1b3622fa26f6::t_ec5318fb88fb8c 10,26-43,45-48
+app/blueprints/topic_blueprint.rb
+  s_ae1b3622fa26f6::t_b0923d0aa9178e 4-5,8-15
+app/blueprints/user_blueprint.rb
+  s_ae1b3622fa26f6::t_e1106211fc3968 8-15,19-20
+app/blueprints/user_suggestion_blueprint.rb
+  s_ae1b3622fa26f6::t_10d6afc91cb3b9 1-8
+app/controllers/api/base_controller.rb
+  s_ae1b3622fa26f6::t_93948fc9965519 5-9,45-46,119,121,129-156
+app/controllers/api/v1/activities_controller.rb
+  s_ae1b3622fa26f6::t_a36f07516a5373 4-34,39-42
+app/controllers/api/v1/admin_content_reports_controller.rb
+  s_ae1b3622fa26f6::t_8e4cd17e46fc40 1-73
+app/controllers/api/v1/admin_withdrawals_controller.rb
+  s_ae1b3622fa26f6::t_ffd40b4db7adf0 8,17-21,27-40,42,45,56
+app/controllers/api/v1/auth_controller.rb
+  s_ae1b3622fa26f6::t_e10e3a88bec04d 4,203-255,309-312,320-321,379,558,561,563
+app/controllers/api/v1/campaign_reviews_controller.rb
+  s_ae1b3622fa26f6::t_f1d15d8858bec4 1-34
+app/controllers/api/v1/campaigns_controller.rb
+  s_ae1b3622fa26f6::t_18373b0db00e37 1-107
+app/controllers/api/v1/cities_controller.rb
+  s_ae1b3622fa26f6::t_4d030c24653c8f 1-7
+app/controllers/api/v1/comments_controller.rb
+  s_ae1b3622fa26f6::t_2e7947badedbf8 2,9,50-51
+app/controllers/api/v1/content_reports_controller.rb
+  s_ae1b3622fa26f6::t_3ffe6ac8f3a80b 1-23
+app/controllers/api/v1/discover_controller.rb
+  s_ae1b3622fa26f6::t_21ea473b1b01a2 23,57,60,62,65
+app/controllers/api/v1/discovery_controller.rb
+  s_ae1b3622fa26f6::t_35c8c16ea613ce 1-21
+app/controllers/api/v1/event_discussions_controller.rb
+  s_ae1b3622fa26f6::t_6e3db523b3c53a 1-57
+app/controllers/api/v1/event_roles_controller.rb
+  s_ae1b3622fa26f6::t_fa3f531e597f09 6,17-20,30-33,44,59-68
+app/controllers/api/v1/events_controller.rb
+  s_ae1b3622fa26f6::t_fa2700904127ca 2-3,10-11,23,28-52,60-64,73,75-76,91,93,104,112-113,119-126,128,130-135,150-151,159-162,177,180,199-203,206-209,215,227-228,238,263-276,278,289,298,301-302,320
+app/controllers/api/v1/follows_controller.rb
+  s_ae1b3622fa26f6::t_b4cef5ef26dc50 1-108
+app/controllers/api/v1/forms_controller.rb
+  s_ae1b3622fa26f6::t_cf257d749c34b3 146
+app/controllers/api/v1/group_invites_controller.rb
+  s_ae1b3622fa26f6::t_894b3ff6340bf4 19-22,38-55,64-67,74-77,92-99,110-114,122,156,159-163,192-207,212,226-230,240-242
+app/controllers/api/v1/group_reviews_controller.rb
+  s_ae1b3622fa26f6::t_13556e0d33ef6a 1-31
+app/controllers/api/v1/groups_controller.rb
+  s_ae1b3622fa26f6::t_420ea0b7b78816 2,5,8-10,24-43,55-58,60,92,94,97-100,103-110,121-132,147,172
+app/controllers/api/v1/hackathons_controller.rb
+  s_ae1b3622fa26f6::t_70be9f6d651247 129
+app/controllers/api/v1/memberships_controller.rb
+  s_ae1b3622fa26f6::t_f939124259fefd 7,57-59,77,87-90,140
+app/controllers/api/v1/oauth_controller.rb
+  s_ae1b3622fa26f6::t_8d334cc0ba7794 15,63-64,120-138,297-300
+app/controllers/api/v1/places_controller.rb
+  s_ae1b3622fa26f6::t_e408575aaf9457 2,18
+app/controllers/api/v1/recurring_controller.rb
+  s_ae1b3622fa26f6::t_89204c15d2e0dd 19
+app/controllers/api/v1/refund_requests_controller.rb
+  s_ae1b3622fa26f6::t_f2d55dff17de6a 1-33
+app/controllers/api/v1/registrations_controller.rb
+  s_ae1b3622fa26f6::t_20a7d786ab6dd6 1-10
+app/controllers/api/v1/replies_controller.rb
+  s_ae1b3622fa26f6::t_8765df8d44d645 2,20-21,29,34-38,55
+app/controllers/api/v1/tickets_controller.rb
+  s_ae1b3622fa26f6::t_c6558fb99ac364 23,36-59,81-82,97,99-104,119-122,124-205,208-209,223,233,252-253,284,302-304,335,374,394,426-461,606-608,625-633,713,759,762,864,870-875,955
+app/controllers/api/v1/topics_controller.rb
+  s_ae1b3622fa26f6::t_981f6145003be7 2-3,8-9,18-25,30,49,77
+app/controllers/api/v1/uploads_controller.rb
+  s_ae1b3622fa26f6::t_9ef702d6723b21 3,42,44-49,66-74,79-84
+app/controllers/api/v1/users_controller.rb
+  s_ae1b3622fa26f6::t_2170bfedaca57f 3-47,53,59,83-89,97-102,112-114,116-119,151
+app/controllers/api/v1/venues_controller.rb
+  s_ae1b3622fa26f6::t_530dbb2f4d561f 2,12-13,17-25,81-88
+app/controllers/api/v1/withdrawals_controller.rb
+  s_ae1b3622fa26f6::t_6273397abf4d09 57-59
+app/controllers/concerns/content_safety_gate.rb
+  s_ae1b3622fa26f6::t_3d17396b0cddc4 1-21
+app/controllers/concerns/idempotent_creation.rb
+  s_ae1b3622fa26f6::t_35f032e040b4e0 1-32
+app/controllers/web_controller.rb
+  s_ae1b3622fa26f6::t_2228c8bf96b179 1-8
+app/jobs/site_notification_reminder_job.rb
+  s_ae1b3622fa26f6::t_8961a0901cb9fa 1-18
+app/mailers/application_mailer.rb
+  s_ae1b3622fa26f6::t_ce430099bd5c6d 6,12
+app/mailers/event_mailer.rb
+  s_ae1b3622fa26f6::t_b37d69c579b811 10,23,66
+app/models/campaign.rb
+  s_ae1b3622fa26f6::t_7681c6ad3db07a 1-43
+app/models/campaign_event.rb
+  s_ae1b3622fa26f6::t_0cebcd9a188ce8 1-8
+app/models/campaign_review_log.rb
+  s_ae1b3622fa26f6::t_b89b1b7c85b9e9 1-5
+app/models/category.rb
+  s_ae1b3622fa26f6::t_912d23787aeac2 10-11
+app/models/comment.rb
+  s_ae1b3622fa26f6::t_b4a03e2f3a5479 2
+app/models/concerns/site_notifiable.rb
+  s_ae1b3622fa26f6::t_e702f4c53a618d 1-13
+app/models/content_report.rb
+  s_ae1b3622fa26f6::t_bfec93f3705a22 1-7
+app/models/content_safety_image.rb
+  s_ae1b3622fa26f6::t_4f02b4f6d6d869 1-4
+app/models/creation_receipt.rb
+  s_ae1b3622fa26f6::t_ec65efc8d1334f 1-3
+app/models/event.rb
+  s_ae1b3622fa26f6::t_ef55abb68f98db 2-18,26-27,37-41,88,92-93,95-96
+app/models/event_role.rb
+  s_ae1b3622fa26f6::t_bb30e60fbf15a0 12-19
+app/models/event_team_check_in.rb
+  s_ae1b3622fa26f6::t_fa78a89cf1e643 1-5
+app/models/follow.rb
+  s_ae1b3622fa26f6::t_dd960d13400b6b 1-20
+app/models/group.rb
+  s_ae1b3622fa26f6::t_2125bba70e4064 2-14,23-25,30-31,47,81-100,135,145,161
+app/models/group_invite.rb
+  s_ae1b3622fa26f6::t_e005e1acedc155 2
+app/models/group_review_log.rb
+  s_ae1b3622fa26f6::t_31bb61ad01ffdd 1-5
+app/models/membership.rb
+  s_ae1b3622fa26f6::t_6574a3900fa4d5 2,14
+app/models/notification_context.rb
+  s_ae1b3622fa26f6::t_fc86ed43a9a7ff 1-4
+app/models/participant.rb
+  s_ae1b3622fa26f6::t_f78d9465a3c577 9-11,13-14,36-37,43,53-54,56,58
+app/models/refund.rb
+  s_ae1b3622fa26f6::t_7e0e3857641794 7-8
+app/models/refund_request.rb
+  s_ae1b3622fa26f6::t_2793bf9345a22e 1-22
+app/models/reply.rb
+  s_ae1b3622fa26f6::t_57401814860eda 4
+app/models/soda_identity.rb
+  s_ae1b3622fa26f6::t_7d237e44081f27 1-19
+app/models/ticket_item.rb
+  s_ae1b3622fa26f6::t_e110d61c720214 2,11,115-122,148-151,161,166,176-185,192,197-198,248
+app/models/topic.rb
+  s_ae1b3622fa26f6::t_e4fe3e90ee7a19 13-18,23-33,43,57,111-126,130-133
+app/models/user.rb
+  s_ae1b3622fa26f6::t_83248c74851d61 2-7,9-10,39,96
+app/models/withdrawal.rb
+  s_ae1b3622fa26f6::t_88e8d81cd0b1d3 16,39,43,65
+app/policies/application_policy.rb
+  s_ae1b3622fa26f6::t_039309f54d8f4d 27,31
+app/policies/campaign_policy.rb
+  s_ae1b3622fa26f6::t_a1df05576437ad 1-6
+app/policies/event_policy.rb
+  s_ae1b3622fa26f6::t_bde7b9cd7faa8f 11-12,37
+app/policies/group_policy.rb
+  s_ae1b3622fa26f6::t_b26e951726252f 11
+app/policies/poll_policy.rb
+  s_ae1b3622fa26f6::t_c2f4491a968f02 42
+app/policies/ticket_item_policy.rb
+  s_ae1b3622fa26f6::t_a416616d1e4a82 15
+app/policies/topic_policy.rb
+  s_ae1b3622fa26f6::t_deae43cedc026d 7,18
+app/services/content_image_references.rb
+  s_ae1b3622fa26f6::t_ec4631ae076ce1 1-28
+app/services/discovery_city.rb
+  s_ae1b3622fa26f6::t_0b0d255c0e5310 1-15
+app/services/discovery_feed.rb
+  s_ae1b3622fa26f6::t_d4f22e6570e4c4 1-257
+app/services/discovery_signals.rb
+  s_ae1b3622fa26f6::t_8384856abd7393 1-14
+app/services/oauth_claims.rb
+  s_ae1b3622fa26f6::t_531e69c7e304eb 94
+app/services/oauth_identity.rb
+  s_ae1b3622fa26f6::t_1e8d30ec576b71 1-32
+app/services/pending_payment_closure.rb
+  s_ae1b3622fa26f6::t_a21f166d4f01d8 1-27
+app/services/registration_review.rb
+  s_ae1b3622fa26f6::t_c42db45ecbc994 1-60
+app/services/review_notifications.rb
+  s_ae1b3622fa26f6::t_916bd61c6e9f0a 1-142
+app/services/safe_image_upload.rb
+  s_ae1b3622fa26f6::t_b07e8aebe43a8a 1-31
+app/services/site_notification_tasks.rb
+  s_ae1b3622fa26f6::t_76295e68920491 1-62
+app/services/site_notifications.rb
+  s_ae1b3622fa26f6::t_50953f29ea15fd 1-250
+app/services/soda_oauth_login.rb
+  s_ae1b3622fa26f6::t_fd35ca821a76ab 1-47
+app/services/stripe_gateway.rb
+  s_ae1b3622fa26f6::t_856d26e8a20b15 83-86,112
+app/services/user_merger.rb
+  s_ae1b3622fa26f6::t_ab7e233b979b6c 32,61-62,84-90,104-106,147-165
+app/services/verified_phone_account_linker.rb
+  s_ae1b3622fa26f6::t_7b8f75a45335f1 1-33
+app/services/wechat_content_safety.rb
+  s_ae1b3622fa26f6::t_6b5a2b46a53632 1-85
+app/services/wechat_miniprogram_auth.rb
+  s_ae1b3622fa26f6::t_1ecd3eded7486c 1-24
+app/services/wechat_miniprogram_phone.rb
+  s_ae1b3622fa26f6::t_75906e39dc5cd6 1-43
+app/services/wechat_pay_gateway.rb
+  s_ae1b3622fa26f6::t_d3a1db8f4a47f5 15,73,164-165,169-170,179,269,275,278,289-300
+app/views/event_mailer/participant_approved.html.erb
+  s_ae1b3622fa26f6::t_b311fef5e78101 1-3,5
+app/views/event_mailer/participant_approved.text.erb
+  s_ae1b3622fa26f6::t_e054d561c6942e 1,3-5,7-9
+app/views/event_mailer/participant_rejected.html.erb
+  s_ae1b3622fa26f6::t_10bffbccda6448 1
+app/views/event_mailer/participant_rejected.text.erb
+  s_ae1b3622fa26f6::t_839e4fea579196 1,3-4,6-7
+atlas.generic.json
+  s_ae1b3622fa26f6::t_900ae53cf89a99 1-22
+atlas.json
+  s_ae1b3622fa26f6::t_2c57934e4ec0df 1-22
+config/initializers/filter_parameter_logging.rb
+  s_ae1b3622fa26f6::t_dd1d8f944c0df3 7
+config/initializers/good_job.rb
+  s_ae1b3622fa26f6::t_9af4ea7220c813 42-46
+config/routes.rb
+  s_ae1b3622fa26f6::t_6667209eda41a3 42-45,62,72-82,118-120,126-129,160,168-174,178,190,353,393-394,397-398,414-423
+db/migrate/20261029010000_create_campaigns_and_group_city.rb
+  s_ae1b3622fa26f6::t_2545c7e3e70f7f 1-26
+db/migrate/20261029020000_create_follows.rb
+  s_ae1b3622fa26f6::t_9b4f29540fdcc6 1-20
+db/migrate/20261030120000_link_topics_to_events.rb
+  s_ae1b3622fa26f6::t_0c0e82e4f51827 1-6
+db/migrate/20261030123000_open_group_discussions_by_default.rb
+  s_ae1b3622fa26f6::t_61143e209c7200 1-14
+db/migrate/20261030230000_add_group_review.rb
+  s_ae1b3622fa26f6::t_6a80751db2c68e 1-10
+db/migrate/20261030231000_add_creation_receipts.rb
+  s_ae1b3622fa26f6::t_a99dbcf435d0e5 1-13
+db/migrate/20261030232000_create_group_review_logs.rb
+  s_ae1b3622fa26f6::t_227cd9441be3db 1-20
+db/migrate/20261030235000_add_notification_key_to_activities.rb
+  s_ae1b3622fa26f6::t_6e43f16e8694f8 1-6
+db/migrate/20261031001000_add_discovery_signals.rb
+  s_ae1b3622fa26f6::t_cb54c0cb63f4d1 1-27
+db/migrate/20261031002000_add_discovery_query_indexes.rb
+  s_ae1b3622fa26f6::t_3311db561bb4d7 1-18
+db/migrate/20261031003000_add_discovery_contribution_index.rb
+  s_ae1b3622fa26f6::t_02e8769d217686 1-8
+db/migrate/20261031004000_add_registration_review_details.rb
+  s_ae1b3622fa26f6::t_ea227c3533f752 1-12
+db/migrate/20261031005000_align_existing_registration_states.rb
+  s_ae1b3622fa26f6::t_cbcfc1921c94aa 1-31
+db/migrate/20261031006000_create_event_team_check_ins.rb
+  s_ae1b3622fa26f6::t_aa51bb09b25153 1-11
+db/migrate/20261031007000_add_ticket_owner_notification_marker.rb
+  s_ae1b3622fa26f6::t_64f5124ffb9b41 1-14
+db/migrate/20261031083000_add_campaign_review.rb
+  s_ae1b3622fa26f6::t_af802da1c9bdc0 1-19
+db/migrate/20261031085000_create_refund_requests.rb
+  s_ae1b3622fa26f6::t_bf63f1866c82c0 1-17
+db/migrate/20261031093000_add_positions_to_campaigns.rb
+  s_ae1b3622fa26f6::t_4e3e43fc774446 1-16
+db/migrate/20261031110000_index_notification_task_queries.rb
+  s_ae1b3622fa26f6::t_457a42b88a646d 1-9
+db/migrate/20261104100000_create_content_reports.rb
+  s_ae1b3622fa26f6::t_9abb07a2e9bbd4 1-24
+db/migrate/20261105090000_create_content_safety_images.rb
+  s_ae1b3622fa26f6::t_2a3bfc1d972a75 1-10
+db/migrate/20261113080000_add_group_coordinates.rb
+  s_ae1b3622fa26f6::t_93744cc0588dad 1-6
+db/migrate/20261113080100_add_event_browse_indexes.rb
+  s_ae1b3622fa26f6::t_fc8d94937e506a 1-9
+db/migrate/20261121094000_create_soda_identities.rb
+  s_ae1b3622fa26f6::t_caf781f779d8c5 1-11
+db/migrate/20261121104400_repair_soda_identity_sequence.rb
+  s_ae1b3622fa26f6::t_08bb5f974985f8 1-10
+db/schema.rb
+  s_ae1b3622fa26f6::t_d2520c7240f268 13,24,31-33,147-193,256,262-288,328-339,360,363-374,390-392,416,418-419,421,425-426,577-590,759,765-775,782,786,789,796-797,813,816,828-831,838-839,844-846,961,1112,1120,1123-1125,1130,1135-1136,1289-1307,1324,1437-1446,1510-1511,1597,1610,1616,1618-1619,1621,1789,1807-1813,1830,1832-1833,1844,1856-1858,1892,1903-1906,1918,1933
+design/CHANGELOG.md
+  s_ae1b3622fa26f6::t_9aee911459c799 2299-2335
+design/SURF_DEMO_DATA.md
+  s_ae1b3622fa26f6::t_399d1cb3237214 1-35
+design/SURF_GROUP_INVITATION_REVIEW.md
+  s_ae1b3622fa26f6::t_a0f7edf3ff7e73 1-38
+design/SURF_SEARCH_ACCEPTANCE.md
+  s_ae1b3622fa26f6::t_86a1fbe2cc9981 1-9
+design/SURF_UPLOAD_ACCEPTANCE.md
+  s_ae1b3622fa26f6::t_990ee5c8b00048 1-24
+design/WECHAT_MINIPROGRAM_LOGIN_ACCEPTANCE.md
+  s_ae1b3622fa26f6::t_c02fc24007f833 1-42
+docs/2026-11-05-week-content.md
+  s_ae1b3622fa26f6::t_41a56d8d2a337f 1-17
+docs/campaigns-and-cities.md
+  s_ae1b3622fa26f6::t_e70de6615dcebf 1-85
+docs/development-log.md
+  s_ae1b3622fa26f6::t_addc449f7d911e 1-283
+docs/docker-build-benchmark.json
+  s_ae1b3622fa26f6::t_5de5f8803ee16c 1-43
+docs/docker-build-cache.md
+  s_ae1b3622fa26f6::t_411da18f79884b 1-63
+docs/event-check-in.md
+  s_ae1b3622fa26f6::t_f139a2fb600110 1-11
+docs/event-discovery-inventory-map.md
+  s_ae1b3622fa26f6::t_e9edb0e9a93502 1-8
+docs/follows.md
+  s_ae1b3622fa26f6::t_a09d5177f96dc6 1-9
+docs/frontend-api-alignment-20261116.md
+  s_ae1b3622fa26f6::t_d6e2641d1b8275 1-16
+docs/homepod-migration.md
+  s_ae1b3622fa26f6::t_cffd1c854cb97b 1-42
+docs/reviews/2026-11-05-mini-review-remediation.md
+  s_ae1b3622fa26f6::t_97d61894801a2c 1-38
+docs/surf-object-storage.md
+  s_ae1b3622fa26f6::t_54e3bd864fcbeb 1-9
+docs/user-suggestions.md
+  s_ae1b3622fa26f6::t_cb83612c5a9c69 1-9
+docs/wechat-pay-integration.md
+  s_ae1b3622fa26f6::t_8a238fa39d2812 1-44
+docs/wiconnect-identity-api.md
+  s_ae1b3622fa26f6::t_1bd33edd59739e 1-60
+script/refresh_surf_week.rb
+  s_ae1b3622fa26f6::t_34193ab22d1724 1-80
+script/seed_surf_campaigns.rb
+  s_ae1b3622fa26f6::t_2a157596a0d040 1-35
+script/seed_surf_demo.rb
+  s_ae1b3622fa26f6::t_ffee6d4814a969 1-64
+test/controllers/api/v1/admin_withdrawals_controller_test.rb
+  s_ae1b3622fa26f6::t_4ed2f86d400da7 10-11,100-151
+test/controllers/api/v1/calendars_controller_test.rb
+  s_ae1b3622fa26f6::t_25fe00982ec932 53,55
+test/controllers/api/v1/campaign_reviews_test.rb
+  s_ae1b3622fa26f6::t_b46cddc1d4d113 1-101
+test/controllers/api/v1/campaigns_controller_test.rb
+  s_ae1b3622fa26f6::t_b767fea6f84fe2 1-166
+test/controllers/api/v1/comments_controller_test.rb
+  s_ae1b3622fa26f6::t_79f3453661989a 4
+test/controllers/api/v1/content_reports_test.rb
+  s_ae1b3622fa26f6::t_88461aaf6f6bfb 1-75
+test/controllers/api/v1/content_safety_gate_test.rb
+  s_ae1b3622fa26f6::t_bbda9a44eea6ca 1-35
+test/controllers/api/v1/creation_concurrency_test.rb
+  s_ae1b3622fa26f6::t_42d71c7c8280c8 1-35
+test/controllers/api/v1/creation_receipts_test.rb
+  s_ae1b3622fa26f6::t_6cbb9f84c167a7 1-58
+test/controllers/api/v1/discover_test.rb
+  s_ae1b3622fa26f6::t_5d3732a85d0456 124-136,153-154,173-190
+test/controllers/api/v1/discovery_feed_test.rb
+  s_ae1b3622fa26f6::t_2fc5c090f7d691 1-244
+test/controllers/api/v1/discussion_controller_test.rb
+  s_ae1b3622fa26f6::t_328d38c2ba745d 6,24-54,74
+test/controllers/api/v1/event_discussions_controller_test.rb
+  s_ae1b3622fa26f6::t_35fde482443321 1-90
+test/controllers/api/v1/event_integration_improvements_test.rb
+  s_ae1b3622fa26f6::t_e49e73695ae284 1-93
+test/controllers/api/v1/event_team_agenda_test.rb
+  s_ae1b3622fa26f6::t_2c58a03f387059 1-63
+test/controllers/api/v1/event_ticket_pass_test.rb
+  s_ae1b3622fa26f6::t_b280f7de730826 1-68
+test/controllers/api/v1/events_controller_test.rb
+  s_ae1b3622fa26f6::t_295d6e871bc75c 4,709,711,720,729,1170-1197
+test/controllers/api/v1/follows_controller_test.rb
+  s_ae1b3622fa26f6::t_d85794de897def 1-171
+test/controllers/api/v1/forms_controller_test.rb
+  s_ae1b3622fa26f6::t_6438ff2c511988 26,32,106,131,158,300
+test/controllers/api/v1/global_review_regressions_test.rb
+  s_ae1b3622fa26f6::t_8fd029473f9815 1-136
+test/controllers/api/v1/group_creation_managers_test.rb
+  s_ae1b3622fa26f6::t_47df8a43173e19 1-45
+test/controllers/api/v1/group_invites_controller_test.rb
+  s_ae1b3622fa26f6::t_40967750882dae 499-577
+test/controllers/api/v1/group_reviews_test.rb
+  s_ae1b3622fa26f6::t_addc65fbb0e9c8 1-101
+test/controllers/api/v1/miniprogram_review_contracts_test.rb
+  s_ae1b3622fa26f6::t_6d6a0be9d59ce1 1-150
+test/controllers/api/v1/oauth_controller_test.rb
+  s_ae1b3622fa26f6::t_6ffbbcfa77e467 50,101-109
+test/controllers/api/v1/oauth_identity_test.rb
+  s_ae1b3622fa26f6::t_5c5069f648a89f 1-142
+test/controllers/api/v1/phone_auth_test.rb
+  s_ae1b3622fa26f6::t_ee57d6ed794339 319-320,322-324,410-448
+test/controllers/api/v1/places_controller_test.rb
+  s_ae1b3622fa26f6::t_3f1c2861c68729 41,48,52-55
+test/controllers/api/v1/refund_requests_test.rb
+  s_ae1b3622fa26f6::t_1a7f0ee46f4ac0 1-141
+test/controllers/api/v1/registration_entry_points_test.rb
+  s_ae1b3622fa26f6::t_c3ccd78a0ed3b4 1-146
+test/controllers/api/v1/registration_review_flow_test.rb
+  s_ae1b3622fa26f6::t_3afeb7adfdc5bc 1-244
+test/controllers/api/v1/review_receipts_test.rb
+  s_ae1b3622fa26f6::t_d2d60825a8c8a3 1-170
+test/controllers/api/v1/site_notifications_test.rb
+  s_ae1b3622fa26f6::t_63d96899911bdb 1-210
+test/controllers/api/v1/tickets_controller_test.rb
+  s_ae1b3622fa26f6::t_14410f221ae1ac 416,428,665,1169
+test/controllers/api/v1/tickets_wechat_flow_test.rb
+  s_ae1b3622fa26f6::t_12aae7a0c38f74 346-408
+test/controllers/api/v1/uploads_controller_test.rb
+  s_ae1b3622fa26f6::t_039c09c90de582 4,28
+test/controllers/api/v1/user_suggestions_test.rb
+  s_ae1b3622fa26f6::t_eba8f8deea5867 1-72
+test/controllers/api/v1/users_controller_test.rb
+  s_ae1b3622fa26f6::t_e9e21ed7a8bc14 4-15,286-303
+test/controllers/api/v1/wechat_miniprogram_auth_test.rb
+  s_ae1b3622fa26f6::t_ea4699e4fbab00 1-57
+test/controllers/api/v1/wechat_miniprogram_phone_test.rb
+  s_ae1b3622fa26f6::t_411030df7c83f0 1-50
+test/controllers/api/v1/withdrawals_controller_test.rb
+  s_ae1b3622fa26f6::t_f9a8f8d3ef142e 23-40
+test/integration/email_notifications_test.rb
+  s_ae1b3622fa26f6::t_d09a5f7ca07114 23,46,60,65,118-131
+test/jobs/stripe_webhook_job_test.rb
+  s_ae1b3622fa26f6::t_c969fd4b18bf56 2,65-67
+test/mailers/auth_mailer_test.rb
+  s_ae1b3622fa26f6::t_6fb2470ebd9d98 8
+test/models/discussion_test.rb
+  s_ae1b3622fa26f6::t_6675654beb6acb 129
+test/models/follow_test.rb
+  s_ae1b3622fa26f6::t_fed8caf7e6103c 1-28
+test/models/frontend_contract_test.rb
+  s_ae1b3622fa26f6::t_4aeb8d6c1cf76d 1-52
+test/models/group_test.rb
+  s_ae1b3622fa26f6::t_bd2e570b22d597 74-90
+test/models/soda_identity_test.rb
+  s_ae1b3622fa26f6::t_5b3c2b5fd7418e 1-16
+test/models/withdrawal_test.rb
+  s_ae1b3622fa26f6::t_e8d59b21830e0e 42,46
+test/services/content_image_references_test.rb
+  s_ae1b3622fa26f6::t_2cf4825bb803b9 1-33
+test/services/discovery_performance_test.rb
+  s_ae1b3622fa26f6::t_55c230b71f6374 1-42
+test/services/safe_image_upload_test.rb
+  s_ae1b3622fa26f6::t_028ecd7eef7c70 1-44
+test/services/user_merger_team_test.rb
+  s_ae1b3622fa26f6::t_9205796baeaa5f 53-74
+test/services/wechat_content_safety_test.rb
+  s_ae1b3622fa26f6::t_dea49ac09b4e4d 1-87
+test/services/wechat_miniprogram_auth_test.rb
+  s_ae1b3622fa26f6::t_cea3c979bf1c06 1-39
+test/services/wechat_miniprogram_phone_test.rb
+  s_ae1b3622fa26f6::t_6a0a25f87da3f8 1-46
+test/services/wechat_pay_gateway_test.rb
+  s_ae1b3622fa26f6::t_d9bb831d682c2c 214,258,260,280-309
+test/support/content_safety_test_gateway.rb
+  s_ae1b3622fa26f6::t_acec4a323f78c6 1-15
+test/support/factory_helpers.rb
+  s_ae1b3622fa26f6::t_49bbedf5701a85 110,217-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42e1bb9a323bd965a5b742dd9bd3d8588f5f18cf",
+  "prompts": {},
+  "sessions": {
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
