@@ -4,7 +4,7 @@
 class HackathonProjectBlueprint < Blueprinter::Base
   identifier :id
 
-  fields :hackathon_id, :track_id, :title, :tagline, :cover_url,
+  fields :hackathon_id, :track_id, :track_ids, :title, :tagline, :cover_url,
          :tech, :seeking, :recruiting, :submitted_at, :award,
          :stars_count, :members_count, :created_at, :updated_at
 
@@ -15,7 +15,8 @@ class HackathonProjectBlueprint < Blueprinter::Base
   association :user, blueprint: UserBlueprint
 
   view :detail do
-    fields :content, :repo_url, :demo_url, :video_url, :approved_at, :rejected_at
+    fields :content, :repo_url, :demo_url, :video_url, :repo_links, :demo_links, :video_links, :approved_at, :rejected_at
+    field(:tracks) { |p| p.tracks }
 
     # The rejection reason is for the author, not the wall.
     field :review_note, if: ->(_name, p, options) {

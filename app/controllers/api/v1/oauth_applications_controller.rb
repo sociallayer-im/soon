@@ -6,7 +6,7 @@ class Api::V1::OauthApplicationsController < Api::BaseController
   before_action :set_application, only: %i[show update destroy rotate_secret]
 
   def index
-    apps = OauthApplication.where(owner: current_user).includes(:group, :owner).order(created_at: :desc)
+    apps = OauthApplication.for_provider.where(owner: current_user).includes(:group, :owner).order(created_at: :desc)
     render json: OauthApplicationBlueprint.render_as_hash(apps)
   end
 
@@ -57,7 +57,7 @@ class Api::V1::OauthApplicationsController < Api::BaseController
   private
 
   def set_application
-    @application = OauthApplication.find_by!(id: params[:id], owner_id: current_user.id)
+    @application = OauthApplication.for_provider.find_by!(id: params[:id], owner_id: current_user.id)
   end
 
   # A closed allowlist, like every other permit list in soon. `trusted` is

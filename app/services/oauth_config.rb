@@ -9,6 +9,19 @@
 module OauthConfig
   Error = Class.new(StandardError)
 
+  def self.provider
+    ENV.fetch("OAUTH_PROVIDER") { Rails.env.production? ? raise(Error, "OAUTH_PROVIDER required") : "main" }
+  end
+
+  def self.validate_deployment!
+    issuers = {
+      "surf" => %w[https://surf.soda.fan],
+      "main" => %w[https://api.sola.day https://api.juluo.xyz https://api.soda.fan]
+    }
+    raise Error, "OAuth provider and issuer do not match" unless provider == "main" && issuers.fetch(provider, []).include?(ENV["OAUTH_ISSUER"])
+    raise Error, "OAuth signing key must contain a private key" unless private_key!.private?
+  end
+
   # https://api.sola.day — the issuer identifier third parties pin. It is the
   # API origin, not the web origin: that is where the discovery document and
   # the token endpoint actually live.

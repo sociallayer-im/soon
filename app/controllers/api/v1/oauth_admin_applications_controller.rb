@@ -11,7 +11,7 @@ class Api::V1::OauthAdminApplicationsController < Api::BaseController
   before_action :require_platform_admin!
 
   def index
-    apps = OauthApplication.includes(:owner, :group).order(created_at: :desc)
+    apps = OauthApplication.for_provider.includes(:owner, :group).order(created_at: :desc)
     apps = apps.where(status: params[:status]) if params[:status].present?
     if params[:q].present?
       q = "%#{params[:q]}%"
@@ -41,7 +41,7 @@ class Api::V1::OauthAdminApplicationsController < Api::BaseController
   private
 
   def application
-    @application ||= OauthApplication.find(params[:id])
+    @application ||= OauthApplication.for_provider.find(params[:id])
   end
 
   def require_platform_admin!

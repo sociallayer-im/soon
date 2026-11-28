@@ -13,6 +13,9 @@ class HackathonProject < ApplicationRecord
 
   MAX_CONTENT = 64.kilobytes
   MAX_TAGS    = 20
+  LEGACY_FIELDS = { track_ids: :track_id, repo_links: :repo_url, demo_links: :demo_url, video_links: :video_url }.freeze
+
+  before_validation :sync_legacy_fields
 
   belongs_to :hackathon
   belongs_to :user
@@ -24,7 +27,8 @@ class HackathonProject < ApplicationRecord
   validates :tagline, length: { maximum: 300 }, allow_blank: true
   validates :content, length: { maximum: MAX_CONTENT }, allow_blank: true
   validates :award, length: { maximum: 100 }, allow_blank: true
-  validate  :track_exists
+  validate  :tracks_exist
+  validate  :links_are_http
   validate  :tags_are_short
 
   scope :alive,     -> { not_flagged }
@@ -46,7 +50,8 @@ class HackathonProject < ApplicationRecord
 
   def owner?(u)  = !!(u && user_id == u.id)
   def member?(u) = !!(u && hackathon_project_members.exists?(user_id: u.id))
-  def track      = hackathon.track(track_id)
+  def track      = tracks.first
+  def tracks     = track_ids.filter_map { |id| hackathon.track(id) }
 
   def submit!
     update!(submitted_at: Time.current, recruiting: false)
@@ -92,11 +97,34 @@ class HackathonProject < ApplicationRecord
 
   private
 
-  def track_exists
-    return if track_id.blank?
-    return if hackathon&.track(track_id)
+  def sync_legacy_fields
+    LEGACY_FIELDS.each do |field, legacy|
+      if will_save_change_to_attribute?(legacy) && !will_save_change_to_attribute?(field)
+        value = self[legacy].to_s.strip.presence
+        self[field] = value ? [value, *self[field].drop(1)] : []
+      end
+      self[field] = self[field].map { |value| value.to_s.strip }.reject(&:empty?).uniq
+      self[legacy] = self[field].first
+    end
+  end
 
-    errors.add(:track_id, "is not a track of this hackathon")
+  def tracks_exist
+    if track_ids.any? { |id| !hackathon&.track(id) }
+      errors.add(:track_ids, "must belong to this hackathon")
+    end
+  end
+
+  def links_are_http
+    %i[repo_links demo_links video_links].each do |field|
+      next unless will_save_change_to_attribute?(field)
+
+      (self[field] - attribute_in_database(field)).each do |link|
+        uri = URI.parse(link)
+        errors.add(field, "must contain HTTP or HTTPS URLs") unless uri.is_a?(URI::HTTP) && uri.host.present?
+      rescue URI::InvalidURIError
+        errors.add(field, "must contain HTTP or HTTPS URLs")
+      end
+    end
   end
 
   def tags_are_short

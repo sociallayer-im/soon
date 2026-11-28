@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_29_085000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -762,6 +762,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
     t.text "content"
     t.string "cover_url"
     t.datetime "created_at", null: false
+    t.string "demo_links", default: [], null: false, array: true
     t.string "demo_url"
     t.string "flag_reason"
     t.datetime "flagged_at"
@@ -770,6 +771,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
     t.integer "members_count", default: 0, null: false
     t.boolean "recruiting", default: false, null: false
     t.datetime "rejected_at"
+    t.string "repo_links", default: [], null: false, array: true
     t.string "repo_url"
     t.text "review_note"
     t.string "seeking", default: [], null: false, array: true
@@ -779,12 +781,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
     t.string "tech", default: [], null: false, array: true
     t.string "title", null: false
     t.string "track_id"
+    t.string "track_ids", default: [], null: false, array: true
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
+    t.string "video_links", default: [], null: false, array: true
     t.string "video_url"
     t.index ["hackathon_id", "recruiting"], name: "index_hackathon_projects_on_hackathon_id_and_recruiting"
     t.index ["hackathon_id", "submitted_at"], name: "index_hackathon_projects_on_hackathon_id_and_submitted_at"
     t.index ["hackathon_id", "track_id"], name: "index_hackathon_projects_on_hackathon_id_and_track_id"
+    t.index ["track_ids"], name: "index_hackathon_projects_on_track_ids", using: :gin
     t.index ["user_id"], name: "index_hackathon_projects_on_user_id"
   end
 
@@ -879,6 +884,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
     t.string "logo_url"
     t.string "name", null: false
     t.string "owner_id", null: false
+    t.string "provider", default: "main", null: false
     t.string "redirect_uris", default: [], null: false, array: true
     t.datetime "reviewed_at"
     t.string "status", default: "draft", null: false

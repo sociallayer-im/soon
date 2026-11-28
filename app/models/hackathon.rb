@@ -85,7 +85,7 @@ class Hackathon < ApplicationRecord
     keep     = rows.map { |r| r["id"] }.compact
     removed  = existing - keep
     if removed.any?
-      n = hackathon_projects.where(track_id: removed).count
+      n = hackathon_projects.where("track_ids && ARRAY[?]::varchar[]", removed).count
       if n.positive?
         raise ActiveRecord::RecordInvalid, tap { |h|
           h.errors.add(:tracks, "#{n} project(s) still use a removed track")
