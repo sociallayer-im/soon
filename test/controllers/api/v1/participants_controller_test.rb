@@ -791,7 +791,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
 
     post path, headers: auth_headers(create_user)
     assert_response :unprocessable_entity
-    assert_equal "exceed venue capacity", json_response["error"]
+    assert_equal "请选择票种后报名", json_response["error"]
     assert_empty event.participants
     event.tickets.destroy_all
 

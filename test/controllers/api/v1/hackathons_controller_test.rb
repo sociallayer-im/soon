@@ -269,6 +269,57 @@ class Api::V1::HackathonsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "projects support multiple tracks and URLs while preserving legacy fields" do
+    with_hackathons do
+      h = create_hackathon(group: @group, user: @owner)
+      h.replace_tracks!([{ title: "Software" }, { title: "Hardware" }])
+      track_ids = h.tracks.pluck("id")
+      repo_links = %w[https://example.com/repo https://example.com/extra]
+      demo_links = %w[https://example.com/demo https://example.com/slides]
+      video_links = %w[https://example.com/video https://example.com/recording]
+      headers = auth_headers(@member)
+
+      post "/api/v1/hackathon_projects", headers: headers, as: :json, params: {
+        hackathon_project: { hackathon_id: h.id, title: "Project", track_ids: track_ids,
+                             repo_links: repo_links, demo_links: demo_links, video_links: video_links }
+      }
+      assert_response :created
+      path = "/api/v1/hackathon_projects/#{body.fetch("id")}"
+      assert_equal track_ids, body["track_ids"]
+      assert_equal track_ids, body["tracks"].pluck("id")
+      assert_equal track_ids.first, body["track_id"]
+      assert_equal repo_links, body["repo_links"]
+      assert_equal demo_links, body["demo_links"]
+      assert_equal video_links, body["video_links"]
+      assert_equal repo_links.first, body["repo_url"]
+      assert_equal demo_links.first, body["demo_url"]
+      assert_equal video_links.first, body["video_url"]
+
+      get "/api/v1/hackathon_projects", params: { hackathon_id: h.id, track_id: track_ids.last }, headers: headers
+      assert_response :ok
+      assert_equal [path.split("/").last], body["data"].pluck("id")
+
+      patch "/api/v1/hackathons/#{h.id}/tracks", as: :json, headers: auth_headers(@owner),
+            params: { tracks: [h.tracks.first] }
+      assert_response :unprocessable_entity
+
+      patch path, headers: headers, as: :json, params: {
+        hackathon_project: { repo_url: "https://example.com/new", demo_links: [], video_links: ["javascript:alert(1)"] }
+      }
+      assert_response :unprocessable_entity
+
+      patch path, headers: headers, as: :json, params: {
+        hackathon_project: { repo_url: "https://example.com/new", demo_links: [], track_ids: [] }
+      }
+      assert_response :ok
+      assert_equal ["https://example.com/new", repo_links.last], body["repo_links"]
+      assert_empty body["demo_links"]
+      assert_nil body["demo_url"]
+      assert_empty body["track_ids"]
+      assert_nil body["track_id"]
+    end
+  end
+
   test "stars, transfer and member management" do
     with_hackathons do
       h = create_hackathon(group: @group, user: @owner)
