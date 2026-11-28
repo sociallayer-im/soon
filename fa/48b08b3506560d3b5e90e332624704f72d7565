@@ -1,0 +1,21 @@
+test/controllers/api/v1/hackathons_controller_test.rb
+  s_ae1b3622fa26f6::t_c0c79c8ce76523 272-322
+test/controllers/api/v1/participants_controller_test.rb
+  s_ae1b3622fa26f6::t_0e05dd6e25be3b 794
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa48b08b3506560d3b5e90e332624704f72d7565",
+  "prompts": {},
+  "sessions": {
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
