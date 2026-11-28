@@ -26,7 +26,7 @@ class Surf706Import
         unless u["name"] == name && u["wechat_openid"].present? && u["wechat_unionid"].present? && user.active? && user.wechat_unionid == u["wechat_unionid"]
           raise "Account verification failed for #{name}"
         end
-        ensure_record(WechatMiniprogramIdentity, {appid: APPID, openid: u.fetch("wechat_openid")}, {user_id: target})
+        ensure_record(WechatMiniprogramIdentity, {appid: APPID, openid: u.fetch("wechat_openid")}, {user_id: target, legacy_subject: id})
         row = one("SELECT * FROM memberships WHERE user_id=$1 AND group_id=$2", id, GROUP)
         attrs = Membership.instantiate(row).attributes
         raise "Unexpected membership for #{name}" unless attrs["role"] == role && attrs["active"]
@@ -39,7 +39,7 @@ class Surf706Import
       unless attrs["owner_id"] == owner && attrs["name"] == "WiConnect" && attrs["status"] == "active" && attrs["redirect_uris"].sort == callbacks.sort
         raise "Unexpected WiConnect configuration"
       end
-      ensure_record(OauthApplication, {id: APP}, attrs.except("id").merge("owner_id" => MEMBERS.fetch(owner)[1]))
+      ensure_record(OauthApplication, {id: APP}, attrs.except("id").merge("owner_id" => MEMBERS.fetch(owner)[1], "provider" => "surf"))
       count = Membership.where(group_id: GROUP).count
       group.update_columns(memberships_count: count) if group.reload.memberships_count != count
       puts "#{apply ? 'Apply' : 'Preview'}: #{@inserted} new records"
@@ -64,6 +64,8 @@ class Surf706Import
       record.skip_site_notification = true if record.is_a?(Membership)
       record.save!
       @inserted += 1
+    elsif record.is_a?(WechatMiniprogramIdentity) && record.legacy_subject.nil? && record.user_id == attributes.fetch(:user_id)
+      record.update!(legacy_subject: attributes.fetch(:legacy_subject))
     elsif attributes.except("created_at", "updated_at").any? { |field, value| record[field] != value }
       raise "Existing #{model.name} conflicts with the source"
     end

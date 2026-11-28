@@ -29,3 +29,19 @@ class SurfGroupVisibilityTest < ActionDispatch::IntegrationTest
     previous ? ENV["SURF_GROUP_IDS"] = previous : ENV.delete("SURF_GROUP_IDS")
   end
 end
+
+class SurfGroupCreationTest < ActionDispatch::IntegrationTest
+  test "a Surf application gets a public board and stays hidden until allowlisted" do
+    user = create_user
+    host! "surf.soda.fan"
+    post "/api/v1/groups", params: {group: {nickname: "测试群组"}}, headers: auth_headers(user)
+    assert_response :created
+    group = Group.find(json_response.fetch("id"))
+    assert_equal "pending", group.review_status
+    assert group.discussion_enabled?
+    assert_equal "everyone", group.can_post_topic
+    assert group.categories.listed.exists?(visibility: "public")
+    get "/api/v1/groups/#{group.id}", headers: auth_headers(user)
+    assert_response :not_found
+  end
+end

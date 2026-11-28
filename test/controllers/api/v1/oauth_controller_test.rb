@@ -40,6 +40,18 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
 
   # --- authorize (info) ---------------------------------------------------
 
+  test "a shared database keeps the two issuers' clients separate" do
+    @client.update!(provider: "surf")
+    OauthConfig.stub(:provider, "main") do
+      get "/api/v1/oauth/authorize", params: authorize_params
+      assert_response :unauthorized
+    end
+    OauthConfig.stub(:provider, "surf") do
+      get "/api/v1/oauth/authorize", params: authorize_params
+      assert_response :success
+    end
+  end
+
   test "authorize_info returns consent details without requiring a session" do
     get "/api/v1/oauth/authorize", params: authorize_params
     assert_response :success

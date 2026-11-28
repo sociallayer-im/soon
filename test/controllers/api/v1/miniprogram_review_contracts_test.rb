@@ -78,6 +78,7 @@ class Api::V1::MiniprogramReviewContractsTest < ActionDispatch::IntegrationTest
   end
 
   test "profile posts use category and group visibility and expose pagination" do
+      @group.update!(discussion_enabled: true)
       category=create_category(group:@group,visibility:"public")
       visible=create_topic(category:category,user:@owner)
       private_category=create_category(group:@group,visibility:"manager")

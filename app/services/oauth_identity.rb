@@ -9,7 +9,7 @@ class OauthIdentity
     user = @token.user
     result = {
       issuer: OauthConfig.issuer,
-      subject: user.id,
+      subject: OauthConfig.subject_for(user),
       expires_at: @token.expires_at.to_i,
       scope: @token.scopes.join(" ")
     }

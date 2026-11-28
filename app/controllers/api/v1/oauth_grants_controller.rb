@@ -3,14 +3,14 @@
 # third-party relationships and is nobody else's business.
 class Api::V1::OauthGrantsController < Api::BaseController
   def index
-    grants = OauthGrant.where(user: current_user)
+    grants = OauthGrant.where(application_id: OauthApplication.for_provider.select(:id), user: current_user)
                        .includes(oauth_application: %i[owner group])
                        .order(created_at: :desc)
     render json: OauthGrantBlueprint.render_as_hash(grants)
   end
 
   def destroy
-    grant = OauthGrant.find_by!(id: params[:id], user_id: current_user.id)
+    grant = OauthGrant.where(application_id: OauthApplication.for_provider.select(:id)).find_by!(id: params[:id], user_id: current_user.id)
     # Also revokes the tokens the consent produced — see OauthGrant#revoke!.
     grant.revoke!
     render json: { result: "ok" }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_29_091000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -824,7 +824,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
     t.string "can_create_hackathon", default: "manager", comment: "manager | member | everyone"
     t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
-    t.string "can_post_topic", default: "everyone", comment: "manager | member | everyone"
+    t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
     t.string "city"
@@ -837,7 +837,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
     t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
     t.datetime "discovery_active_at"
-    t.boolean "discussion_enabled", default: true, null: false
+    t.boolean "discussion_enabled", default: false, null: false
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true
@@ -1038,6 +1038,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
     t.string "logo_url"
     t.string "name", null: false
     t.string "owner_id", null: false
+    t.string "provider", default: "main", null: false
     t.string "redirect_uris", default: [], null: false, array: true
     t.datetime "reviewed_at"
     t.string "status", default: "draft", null: false
@@ -1793,10 +1794,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
     t.string "appid", null: false
     t.datetime "created_at", null: false
     t.string "openid", null: false
+    t.string "legacy_subject"
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.index ["appid", "openid"], name: "index_wechat_miniprogram_identities_on_appid_and_openid", unique: true
     t.index ["appid", "user_id"], name: "index_wechat_miniprogram_identities_on_appid_and_user_id", unique: true
+    t.index ["legacy_subject"], name: "index_wechat_miniprogram_identities_on_legacy_subject", unique: true
     t.index ["user_id"], name: "index_wechat_miniprogram_identities_on_user_id"
   end
 

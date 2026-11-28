@@ -15,7 +15,8 @@
 Rails.application.configure do
   # In test the adapter is :test (config/environments/test.rb) and jobs are
   # asserted, never executed, so the executor must not spin up.
-  config.good_job.execution_mode = Rails.env.test? ? :external : :async
+  warmup = ENV["DEPLOYMENT_WARMUP"] == "true"
+  config.good_job.execution_mode = (Rails.env.test? || warmup) ? :external : :async
 
   config.good_job.max_threads = ENV.fetch("GOOD_JOB_MAX_THREADS", 5).to_i
   config.good_job.queues = "*"
@@ -32,7 +33,7 @@ Rails.application.configure do
   # payments trust (webhooks only make confirmation faster). Runs inside the
   # same single GoodJob thread as everything else; each sweep is a handful of
   # indexed queries when nothing is stale.
-  config.good_job.enable_cron = true
+  config.good_job.enable_cron = !warmup
   config.good_job.cron = {
     ticketing_sweeper: {
       cron: "*/5 * * * *",

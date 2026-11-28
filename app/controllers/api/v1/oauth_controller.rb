@@ -293,7 +293,7 @@ class Api::V1::OauthController < Api::BaseController
       response.headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
       raise OauthError.new("invalid_token", "Invalid or expired access token", :unauthorized)
     end
-    raise OauthError.new("invalid_token", "Application is disabled", :unauthorized) unless at.oauth_application.status == "active"
+    raise OauthError.new("invalid_token", "Application is disabled", :unauthorized) unless at.oauth_application&.status == "active" && at.oauth_application.provider == OauthConfig.provider
     unless at.user.active?
       response.headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
       raise OauthError.new("invalid_token", "Account is inactive", :unauthorized)
@@ -350,7 +350,7 @@ class Api::V1::OauthController < Api::BaseController
   def requested_scopes = params[:scope].to_s.split(/\s+/).reject(&:blank?).uniq
 
   def find_application!(client_id)
-    app = OauthApplication.find_by(client_id: client_id.to_s)
+    app = OauthApplication.for_provider.find_by(client_id: client_id.to_s)
     app || raise(OauthError.new("invalid_client", "Unknown client_id", :unauthorized))
   end
 

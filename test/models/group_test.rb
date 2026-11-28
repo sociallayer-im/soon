@@ -71,8 +71,11 @@ class GroupTest < ActiveSupport::TestCase
     group.update!(venue_union: [partner.id])
     assert_equal [group.id, partner.id].sort, group.venue_group_ids.sort
   end
-  test "new groups allow posting and provide a public default board" do
-    group = create_group
+  test "new groups preserve main posting defaults and can opt into a public board" do
+    original = create_group
+    assert_not original.discussion_enabled?
+    assert_equal "member", original.can_post_topic
+    group = create_group(discussion_enabled: true, can_post_topic: "everyone")
     assert group.discussion_enabled?
     assert_equal "everyone", group.can_post_topic
     assert_equal 1, group.categories.listed.where(visibility: "public").count

@@ -7,8 +7,8 @@ class Api::V1::DiscoveryFeedTest < ActionDispatch::IntegrationTest
     @owner = create_user
     @viewer = create_user
     @friend = create_user
-    @local = create_group(owner: @owner, city: "上海市")
-    @remote = create_group(owner: @owner, city: "杭州")
+    @local = create_group(owner: @owner, discussion_enabled: true, city: "上海市")
+    @remote = create_group(owner: @owner, discussion_enabled: true, city: "杭州")
     @now = Time.current
   end
   teardown { ENV["DISCUSSION_ENABLED"] = @old_discussion }

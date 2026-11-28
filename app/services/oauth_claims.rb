@@ -43,7 +43,7 @@ class OauthClaims
   end
 
   def to_h
-    claims = { sub: @user.id }
+    claims = { sub: OauthConfig.subject_for(@user) }
     claims.merge!(profile_claims) if scope?("profile")
     claims.merge!(email_claims)   if scope?("email")
     claims.merge!(phone_claims)   if scope?("phone")

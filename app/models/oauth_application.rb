@@ -1,6 +1,8 @@
 class OauthApplication < ApplicationRecord
   surf_visible_by(:group_id) { |ids| ids + [nil] }
 
+  scope :for_provider, -> { where(provider: OauthConfig.provider) }
+  attribute :provider, :string, default: -> { OauthConfig.provider }
   belongs_to :owner, class_name: "User", foreign_key: "owner_id"
   belongs_to :group, optional: true
   has_many :oauth_authorization_codes, foreign_key: "application_id", dependent: :destroy

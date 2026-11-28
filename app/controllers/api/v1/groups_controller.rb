@@ -89,8 +89,14 @@ class Api::V1::GroupsController < Api::BaseController
   end
 
   def create
-    return head :forbidden if SurfGroupVisibility.group_ids
-    group = Group.new(group_params.merge(review_status: "pending", active: false))
+    attrs = group_params.to_h
+    if SurfGroupVisibility.group_ids
+      id = Group.generate_tsid
+      # Scope this request to the new application too. Future requests still use the allowlist.
+      SurfGroupVisibility.group_ids = SurfGroupVisibility.group_ids + [id]
+      attrs = { discussion_enabled: true, can_post_topic: "everyone" }.with_indifferent_access.merge(attrs).merge(id: id)
+    end
+    group = Group.new(attrs.merge(review_status: "pending", active: false))
     authorize group
     group.name = "g#{SecureRandom.hex(9)}" if group.name.blank?
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group.parent_id)

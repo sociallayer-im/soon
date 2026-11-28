@@ -14,7 +14,7 @@ class OauthIdToken
     now = Time.current
     claims = {
       iss: OauthConfig.issuer,
-      sub: user.id,
+      sub: OauthConfig.subject_for(user),
       aud: application.client_id,
       iat: now.to_i,
       exp: (now + TTL).to_i,
