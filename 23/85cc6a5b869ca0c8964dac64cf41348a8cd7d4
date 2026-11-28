@@ -1,0 +1,67 @@
+.env.example
+  s_ae1b3622fa26f6::t_2aba836994c084 66-73
+app/controllers/api/v1/groups_controller.rb
+  s_ae1b3622fa26f6::t_ddef4f9d9336e3 92-99
+app/controllers/api/v1/oauth_admin_applications_controller.rb
+  s_ae1b3622fa26f6::t_54a7dc54f07419 14,44
+app/controllers/api/v1/oauth_applications_controller.rb
+  s_ae1b3622fa26f6::t_aebc274b8d915f 9,60
+app/controllers/api/v1/oauth_controller.rb
+  s_ae1b3622fa26f6::t_afa5ce65841949 296,353
+app/controllers/api/v1/oauth_grants_controller.rb
+  s_ae1b3622fa26f6::t_944db5746459ae 6,13
+app/models/oauth_application.rb
+  s_ae1b3622fa26f6::t_9a1efe0c4715e5 4-5
+app/services/oauth_claims.rb
+  s_ae1b3622fa26f6::t_d6e71bb606f9c4 46
+app/services/oauth_config.rb
+  s_ae1b3622fa26f6::t_10238732aed554 12-30
+app/services/oauth_id_token.rb
+  s_ae1b3622fa26f6::t_9781c07b1e9137 17
+app/services/oauth_identity.rb
+  s_ae1b3622fa26f6::t_b5081b40fea52d 12
+bin/docker-entrypoint
+  s_ae1b3622fa26f6::t_62000cb44c1654 5-7
+config/initializers/good_job.rb
+  s_ae1b3622fa26f6::t_006296d7358268 18-19,36
+config/initializers/oauth_deployment.rb
+  s_ae1b3622fa26f6::t_1d7124d590f156 1-4
+db/migrate/20261030123000_open_group_discussions_by_default.rb
+  s_ae1b3622fa26f6::t_af41e1fada569d 2-4
+db/migrate/20261129085000_partition_oauth_clients.rb
+  s_ae1b3622fa26f6::t_40fe36cf0ed08f 1-10
+db/migrate/20261129091000_preserve_group_defaults_and_partition_oauth_clients.rb
+  s_ae1b3622fa26f6::t_8f23764417ad2d 1-12
+db/schema.rb
+  s_ae1b3622fa26f6::t_27e3b32db3e827 13,827,840,1041,1797,1802
+design/SURF_SHARED_DB_ROLLOUT.md
+  s_ae1b3622fa26f6::t_30f39d4c62c99e 1-6
+script/import_surf_706.rb
+  s_ae1b3622fa26f6::t_e0703ef68e99b7 29,42,67-68
+test/controllers/api/v1/discovery_feed_test.rb
+  s_ae1b3622fa26f6::t_013f2b9b1d2ab4 10-11
+test/controllers/api/v1/miniprogram_review_contracts_test.rb
+  s_ae1b3622fa26f6::t_a3fed32e5936d3 81
+test/controllers/api/v1/oauth_controller_test.rb
+  s_ae1b3622fa26f6::t_01c7cbe6be9175 43-54
+test/integration/surf_group_visibility_test.rb
+  s_ae1b3622fa26f6::t_db4a78905a3fd6 32-47
+test/models/group_test.rb
+  s_ae1b3622fa26f6::t_6e8c178ad7c392 74-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2385cc6a5b869ca0c8964dac64cf41348a8cd7d4",
+  "prompts": {},
+  "sessions": {
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
