@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_29_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -1789,6 +1789,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_090000) do
     t.index ["sender_id"], name: "index_vouchers_on_sender_id"
   end
 
+  create_table "wechat_miniprogram_identities", force: :cascade do |t|
+    t.string "appid", null: false
+    t.datetime "created_at", null: false
+    t.string "openid", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["appid", "openid"], name: "index_wechat_miniprogram_identities_on_appid_and_openid", unique: true
+    t.index ["appid", "user_id"], name: "index_wechat_miniprogram_identities_on_appid_and_user_id", unique: true
+    t.index ["user_id"], name: "index_wechat_miniprogram_identities_on_user_id"
+  end
+
   create_table "wechat_pay_events", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error"
@@ -1998,6 +2009,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_090000) do
   add_foreign_key "vouchers", "badge_classes"
   add_foreign_key "vouchers", "users", column: "receiver_id"
   add_foreign_key "vouchers", "users", column: "sender_id"
+  add_foreign_key "wechat_miniprogram_identities", "users", on_delete: :cascade
   add_foreign_key "withdrawals", "groups"
   add_foreign_key "withdrawals", "users"
   add_foreign_key "withdrawals", "users", column: "processed_by_id"

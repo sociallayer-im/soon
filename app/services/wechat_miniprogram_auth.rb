@@ -17,7 +17,7 @@ class WechatMiniprogramAuth
     data = JSON.parse(response.body.to_s)
     raise InvalidCode unless data.is_a?(Hash) && data["errcode"].to_i.zero? && data["openid"].present?
 
-    { openid: data["openid"], unionid: data["unionid"] }
+    { appid: appid, openid: data["openid"], unionid: data["unionid"] }
   rescue JSON::ParserError
     raise Unavailable
   end

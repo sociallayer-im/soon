@@ -20,7 +20,7 @@ class WechatMiniprogramAuthTest < ActiveSupport::TestCase
       response
     end
     HTTPX.stub(:with, client) do
-      assert_equal({ openid: "verified", unionid: "union" }, WechatMiniprogramAuth.identity("once"))
+      assert_equal({ appid: "test-app", openid: "verified", unionid: "union" }, WechatMiniprogramAuth.identity("once"))
     end
   end
 

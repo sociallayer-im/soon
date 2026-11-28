@@ -205,11 +205,14 @@ class Api::V1::AuthController < Api::BaseController
     return render_error("js_code is required") if code.blank?
 
     identity = WechatMiniprogramAuth.identity(code)
-    user = wechat_user(openid: identity.fetch(:openid), unionid: identity[:unionid])
+    user = WechatMiniprogramIdentity.resolve!(**identity, profile: {
+      nickname: params[:wechat_nickname].presence, image_url: params[:wechat_avatar_url].presence
+    })
+    return render_error("账号不可用", status: :forbidden) unless user.active?
     render_token user, new_user: user.previously_new_record?
   rescue WechatMiniprogramAuth::Unavailable
     render json: { error: "WeChat sign-in is not configured or temporarily unavailable", code: "WECHAT_UNAVAILABLE" }, status: :service_unavailable
-  rescue WechatMiniprogramAuth::InvalidCode
+  rescue WechatMiniprogramAuth::InvalidCode, ActiveRecord::RecordNotUnique
     render json: { error: "WeChat login code expired or invalid. Please try again.", code: "WECHAT_INVALID_CODE" }, status: :unauthorized
   end
 
