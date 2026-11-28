@@ -156,6 +156,18 @@ class Api::V1::GroupInvitesController < Api::BaseController
 
   private
 
+  def record_invite_end!(status)
+    @invite.with_lock do
+      next if @invite.status == status
+
+      previous_status = @invite.status
+      @invite.update!(status: status)
+      Activity.create!(item: @invite, initiator: current_user, action: "group_invite/#{status}_recorded",
+        payload: { group_id: @invite.group_id, previous_status: previous_status, status: status })
+    end
+  end
+
+
   def set_group
     @group = Group.find(params[:group_id])
   rescue ActiveRecord::RecordNotFound

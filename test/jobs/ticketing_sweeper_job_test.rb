@@ -20,6 +20,58 @@ class TicketingSweeperJobTest < ActiveSupport::TestCase
       reserved_until: 5.minutes.ago }.merge(attrs))
   end
 
+  test "event cancellation expires an open Stripe session before finalizing" do
+    order = create_stale_order(reserved_until: 20.minutes.from_now)
+    assert_not @event.cancel_by!(@owner)
+    assert_equal "cancelling", @event.reload.status
+    open_session = OpenStruct.new(status: "open", payment_status: "unpaid")
+    expired_session = OpenStruct.new(status: "expired", payment_status: "unpaid")
+
+    StripeGateway.stub :retrieve_checkout_session, open_session do
+      StripeGateway.stub :expire_checkout_session, expired_session do
+        TicketingSweeperJob.perform_now(event_id: @event.id)
+      end
+    end
+
+    assert_equal "cancelled", order.reload.status
+    assert_equal "cancelled", @event.reload.status
+    assert Activity.exists?(item: @event, initiator: @owner, action: "event/cancellation_recorded")
+  end
+
+  test "a late Stripe payment is recorded once and does not reopen the event" do
+    order = create_stale_order
+    order.timeout
+    assert @event.cancel_by!(@owner)
+
+    2.times { order.confirm_payment!(txhash: "pi_late", source: "webhook") }
+    assert_equal "cancelled", @event.reload.status
+    assert_equal "succeeded", order.reload.status
+    assert_equal "pi_late", order.txhash
+    assert_equal 1, Activity.where(item: @event, action: "event/late_payment_requires_refund").count
+    assert_nil order.participant_id
+  end
+
+  test "a payment racing Stripe expiration waits for its refund" do
+    order = create_stale_order
+    assert_not @event.cancel_by!(@owner)
+    open_session = OpenStruct.new(status: "open", payment_status: "unpaid")
+    paid_session = OpenStruct.new(status: "complete", payment_status: "paid", payment_intent: "pi_race")
+    responses = [open_session, paid_session]
+
+    StripeGateway.stub :retrieve_checkout_session, ->(*) { responses.shift } do
+      StripeGateway.stub :expire_checkout_session, nil do
+        TicketingSweeperJob.perform_now(event_id: @event.id)
+      end
+    end
+
+    assert_equal "succeeded", order.reload.status
+    assert_equal "cancelling", @event.reload.status
+    refund = order.refunds.create!(requested_by: @owner, amount: 1000, currency: "usd", full_refund: true)
+    order.apply_refund_success!(refund)
+    TicketingSweeperJob.perform_now(event_id: @event.id)
+    assert_equal "cancelled", @event.reload.status
+  end
+
   test "a stale order whose session Stripe reports paid is confirmed, not expired" do
     item = create_stale_order
     session = OpenStruct.new(payment_status: "paid", status: "complete", payment_intent: "pi_swept")
@@ -78,6 +130,25 @@ class TicketingSweeperJobTest < ActiveSupport::TestCase
     TicketItem.create!({ ticket: @ticket, event: @event, user: @buyer, ticket_type: "event",
       status: "pending", amount: 100, currency: "cny", payment_provider: "wechat",
       wechat_pay_setting_id: @merchant.id, reserved_until: 5.minutes.ago }.merge(attrs))
+  end
+
+  test "a failed WeChat close keeps cancellation processing until the payment is known" do
+    item = create_stale_wechat_order
+    assert_not @event.cancel_by!(@owner)
+
+    WechatPayGateway.stub :query_order, { "trade_state" => "NOTPAY" } do
+      WechatPayGateway.stub :close_order, false do
+        TicketingSweeperJob.perform_now(event_id: @event.id)
+      end
+    end
+    assert_equal "pending", item.reload.status
+    assert_equal "cancelling", @event.reload.status
+
+    WechatPayGateway.stub :query_order, { "trade_state" => "CLOSED" } do
+      TicketingSweeperJob.perform_now(event_id: @event.id)
+    end
+    assert_equal "cancelled", item.reload.status
+    assert_equal "cancelled", @event.reload.status
   end
 
   test "a stale wechat order WeChat reports paid is confirmed, not expired" do

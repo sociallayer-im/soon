@@ -61,7 +61,7 @@ class StripeWebhookJobTest < ActiveSupport::TestCase
 
   test "a late success after cancellation is recorded as an error, never resurrects the order" do
     item = create_order(provider_ref: "cs_late")
-    item.cancel
+    item.cancel(provider_closed: true)
     quantity_after_release = @ticket.reload.quantity
 
     ev = record_event("checkout.session.completed",
