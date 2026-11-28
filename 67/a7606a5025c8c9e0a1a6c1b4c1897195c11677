@@ -1,0 +1,25 @@
+app/controllers/api/v1/group_invites_controller.rb
+  s_a4066d71f584a5::t_24d805f241077b 159-170
+app/models/group_invite.rb
+  s_a4066d71f584a5::t_72ba83892c5a00 19-30
+test/jobs/stripe_webhook_job_test.rb
+  s_a4066d71f584a5::t_d19e32ab9a000b 64
+test/jobs/ticketing_sweeper_job_test.rb
+  s_a4066d71f584a5::t_0c38359bd0365e 23-74,135-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67a7606a5025c8c9e0a1a6c1b4c1897195c11677",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
