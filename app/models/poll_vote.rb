@@ -2,6 +2,8 @@
 # number poll. Exclusivity for single-choice polls is enforced here, not by
 # the index — see the migration.
 class PollVote < ApplicationRecord
+  surf_visible_by(:poll_id) { Poll.select(:id) }
+
   belongs_to :poll
   belongs_to :user
   belongs_to :option, class_name: "PollOption", optional: true

@@ -1,4 +1,6 @@
 class Event < ApplicationRecord
+  surf_visible_by
+
   after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id status visibility group_id moderated_at]).any? }
   after_destroy :refresh_discovery_signal
   def refresh_discovery_signal

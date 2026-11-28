@@ -1,4 +1,6 @@
 class HackathonProjectStar < ApplicationRecord
+  surf_visible_by(:project_id) { HackathonProject.select(:id) }
+
   belongs_to :project, class_name: "HackathonProject", inverse_of: :hackathon_project_stars
   belongs_to :user
 

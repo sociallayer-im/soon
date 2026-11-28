@@ -1,4 +1,6 @@
 class Follow < ApplicationRecord
+  default_scope { where.not(target_type: "Group").or(where(target_id: SurfGroupVisibility.group_ids)) if SurfGroupVisibility.group_ids }
+
   TARGET_TYPES = %w[User Group].freeze
   STATUSES = %w[active pending declined].freeze
 

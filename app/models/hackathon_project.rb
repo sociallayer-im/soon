@@ -9,6 +9,8 @@
 # `user_id` is the owner and the only thing permissions read. The "owner"
 # role on the member row mirrors it for display and is kept in step here.
 class HackathonProject < ApplicationRecord
+  surf_visible_by(:hackathon_id) { Hackathon.select(:id) }
+
   include Flaggable
 
   MAX_CONTENT = 64.kilobytes

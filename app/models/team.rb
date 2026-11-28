@@ -6,6 +6,8 @@
 # is a discussion board that names it, and there the board is doing the
 # referring.
 class Team < ApplicationRecord
+  surf_visible_by
+
   belongs_to :group
   has_many :team_memberships, dependent: :destroy
   has_many :users, through: :team_memberships

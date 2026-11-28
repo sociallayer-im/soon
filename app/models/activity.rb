@@ -1,4 +1,6 @@
 class Activity < ApplicationRecord
+  surf_visible_polymorphic :item, *%w[Group Event Campaign Topic Reply Membership GroupInvite Participant Refund RefundRequest Withdrawal TicketItem ContentReport Comment Follow]
+
   belongs_to :item, polymorphic: true, optional: true
   belongs_to :initiator, class_name: "User"
   belongs_to :receiver, class_name: "User", optional: true

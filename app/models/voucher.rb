@@ -1,4 +1,6 @@
 class Voucher < ApplicationRecord
+  surf_visible_by(:badge_class_id) { BadgeClass.select(:id) }
+
   belongs_to :sender, class_name: "User"
   belongs_to :receiver, class_name: "User", optional: true
   belongs_to :badge_class

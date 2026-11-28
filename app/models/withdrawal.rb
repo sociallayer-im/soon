@@ -13,6 +13,8 @@
 # for that role). `user_id` still records who made each individual request,
 # for the audit trail — it is never part of the balance calculation.
 class Withdrawal < ApplicationRecord
+  surf_visible_by
+
   include SiteNotifiable
   belongs_to :user
   belongs_to :group

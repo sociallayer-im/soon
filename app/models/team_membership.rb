@@ -4,6 +4,8 @@
 # which is not copied here — a role inside a team would be a second answer to
 # "who may change this team", a question GroupPolicy#manage? already answers.
 class TeamMembership < ApplicationRecord
+  surf_visible_by(:team_id) { Team.select(:id) }
+
   belongs_to :team
   belongs_to :user
 

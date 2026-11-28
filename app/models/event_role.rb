@@ -1,4 +1,7 @@
 class EventRole < ApplicationRecord
+  surf_visible_by(:event_id) { Event.select(:id) }
+  default_scope { where.not(item_type: "Group").or(where(item_type: nil)).or(where(item_id: SurfGroupVisibility.group_ids)) if SurfGroupVisibility.group_ids }
+
   # The four values production actually holds (13k rows migrated from sails):
   # group_host  — the Group presented as host
   # custom_host — a hand-typed host (often no account)

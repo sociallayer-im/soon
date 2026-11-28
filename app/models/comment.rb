@@ -1,4 +1,6 @@
 class Comment < ApplicationRecord
+  surf_visible_polymorphic :item, *%w[Group Event BadgeClass Topic Reply]
+
   include SiteNotifiable
   belongs_to :user
   belongs_to :badge, optional: true

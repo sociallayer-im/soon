@@ -1,4 +1,6 @@
 class Membership < ApplicationRecord
+  surf_visible_by
+
   include SiteNotifiable
   belongs_to :user
   # counter_cache keeps groups.memberships_count correct on every create/destroy

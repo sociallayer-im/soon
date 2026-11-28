@@ -7,6 +7,8 @@
 #   flagged_at     — hidden from everyone but its author and managers
 #   deleted_at     — soft deleted
 class Poll < ApplicationRecord
+  surf_visible_by
+
   include SoftDelete
   include Flaggable
 

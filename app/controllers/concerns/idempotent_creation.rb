@@ -11,6 +11,7 @@ module IdempotentCreation
     return yield if key.blank? # Older clients remain compatible.
     return render_error("无效的请求标识") unless key.match?(/\A[a-zA-Z0-9_-]{12,100}\z/)
     fingerprint = Digest::SHA256.hexdigest([request.path, request.request_parameters.except("idempotency_key").to_json].join(":"))
+    fingerprint = Digest::SHA256.hexdigest([fingerprint, *SurfGroupVisibility.group_ids].join(":")) if SurfGroupVisibility.group_ids
     CreationReceipt.transaction do
       lock = Digest::SHA256.hexdigest("#{current_user.id}:#{key}")[0,15].to_i(16)
       CreationReceipt.connection.execute("SELECT pg_advisory_xact_lock(#{lock})")

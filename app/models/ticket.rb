@@ -1,4 +1,10 @@
 class Ticket < ApplicationRecord
+  default_scope do
+    if (ids = SurfGroupVisibility.group_ids)
+      where(event_id: Event.select(:id)).or(where(event_id: nil, group_id: ids))
+    end
+  end
+
   belongs_to :event
   belongs_to :group, optional: true
   has_many :ticket_items, dependent: :delete_all

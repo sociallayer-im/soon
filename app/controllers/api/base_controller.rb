@@ -1,6 +1,7 @@
 class Api::BaseController < ActionController::API
   include Pundit::Authorization
 
+  prepend_around_action :with_surf_group_visibility
   before_action :authenticate!
   around_action :with_notification_actor
 
@@ -26,6 +27,10 @@ class Api::BaseController < ActionController::API
   PAGY_MAX_LIMIT = 500
 
   private
+
+  def with_surf_group_visibility(&block)
+    SurfGroupVisibility.set(group_ids: SurfGroupVisibility.for_request(request), &block)
+  end
 
   # Deployment gate for the whole Stripe feature (design/PAYMENTS_PLAN.md
   # decision #13): SG sets STRIPE_ENABLED=true, CN leaves it unset. Gated

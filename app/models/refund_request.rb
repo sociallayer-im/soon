@@ -1,4 +1,6 @@
 class RefundRequest < ApplicationRecord
+  surf_visible_by(:ticket_item_id) { TicketItem.select(:id) }
+
   include SiteNotifiable
   belongs_to :ticket_item
   belongs_to :user

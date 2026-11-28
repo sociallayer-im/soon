@@ -1,4 +1,7 @@
 class CampaignEvent < ApplicationRecord
+  surf_visible_by(:event_id) { Event.select(:id) }
+  surf_visible_by(:campaign_id) { Campaign.select(:id) }
+
   belongs_to :campaign
   belongs_to :event
   after_destroy do

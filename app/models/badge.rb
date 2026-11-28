@@ -1,4 +1,6 @@
 class Badge < ApplicationRecord
+  surf_visible_by(:badge_class_id) { BadgeClass.select(:id) }
+
   belongs_to :badge_class
   belongs_to :owner, class_name: "User"
   belongs_to :creator, class_name: "User"

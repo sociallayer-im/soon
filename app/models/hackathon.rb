@@ -10,6 +10,8 @@
 # is the one thing a person decides (published or not); whether submissions
 # are open is computed from the window, never stored.
 class Hackathon < ApplicationRecord
+  surf_visible_by
+
   include SoftDelete
   include Flaggable
 

@@ -1,4 +1,6 @@
 class Coupon < ApplicationRecord
+  surf_visible_by(:event_id) { Event.select(:id) }
+
   belongs_to :event
 
   validates :selector_type, inclusion: { in: %w(code email badge) }

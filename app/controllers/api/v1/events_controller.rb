@@ -36,7 +36,7 @@ class Api::V1::EventsController < Api::BaseController
       .where("event_tag.value <> ''")
     # Cache candidates briefly, then re-check their visibility against live rows.
     # This avoids leaking a tag when the last public event becomes private.
-    key = "event-tag-suggestions:v1:all"
+    key = ["event-tag-suggestions:v1", SurfGroupVisibility.cache_key]
     candidates = Rails.cache.fetch(key, expires_in: 30.seconds, race_condition_ttl: 2.seconds) do
       rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).pluck(Arel.sql("event_tag.value"))
     end

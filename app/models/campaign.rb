@@ -1,4 +1,6 @@
 class Campaign < ApplicationRecord
+  surf_visible_by
+
   include SiteNotifiable
   has_many :campaign_review_logs, dependent: :destroy
   validates :review_status, inclusion: {in: %w[pending approved rejected]}

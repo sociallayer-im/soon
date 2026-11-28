@@ -1,4 +1,6 @@
 class CommunityProject < ApplicationRecord
+  surf_visible_by
+
   belongs_to :group
   belongs_to :user
   has_many :members, class_name: "CommunityProjectMember", dependent: :destroy

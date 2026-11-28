@@ -1,4 +1,6 @@
 class BadgeClass < ApplicationRecord
+  surf_visible_by(:group_id) { |ids| ids + [nil] }
+
   belongs_to :creator, class_name: "User"
   belongs_to :group, optional: true
 

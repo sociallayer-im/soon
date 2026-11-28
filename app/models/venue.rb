@@ -1,4 +1,6 @@
 class Venue < ApplicationRecord
+  surf_visible_by
+
   belongs_to :group
   belongs_to :owner, class_name: "User"
   belongs_to :place, optional: true

@@ -7,6 +7,8 @@
 #
 # Flat, with no parent_id — ordering is `sort`, exactly as homeland's nodes.
 class Category < ApplicationRecord
+  surf_visible_by
+
   after_save -> { DiscoverySignals.refresh_group!(group_id) }, if: -> { (saved_changes.keys & %w[visibility archived]).any? }
 
   VISIBILITIES = %w[public member manager team].freeze

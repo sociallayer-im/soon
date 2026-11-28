@@ -30,6 +30,8 @@
 # it describes — e.g. cancelling one pending order marked the whole
 # participant unpaid even when another order was already paid.
 class Participant < ApplicationRecord
+  surf_visible_by(:event_id) { Event.select(:id) }
+
   include SiteNotifiable
   belongs_to :reviewed_by, class_name: "User", optional: true
   belongs_to :user

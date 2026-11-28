@@ -1,6 +1,8 @@
 # One floor in a topic. Flat and time-ordered; `reply_to_id` is a weak pointer
 # used to render "in reply to @someone", never a tree.
 class Reply < ApplicationRecord
+  surf_visible_by(:topic_id) { Topic.select(:id) }
+
   include SiteNotifiable
   include SoftDelete
   include Flaggable

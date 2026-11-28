@@ -103,7 +103,7 @@ class DiscoveryFeed
   end
 
   def pools
-    @pools ||= Rails.cache.fetch(["discovery-pools-v1", @city, ENV["DISCUSSION_ENABLED"]], expires_in: 1.minute, race_condition_ttl: 5.seconds) do
+    @pools ||= Rails.cache.fetch(["discovery-pools-v1", SurfGroupVisibility.cache_key, @city, ENV["DISCUSSION_ENABLED"]], expires_in: 1.minute, race_condition_ttl: 5.seconds) do
       # Independent index-friendly queries: future events do not scan old rows first.
       future = public_events.where("start_time >= ?", @now).order(:start_time, :id).limit(POOL).pluck(:id)
       ongoing = public_events.where("start_time < ?", @now).order(:end_time, :id).limit(20).pluck(:id)

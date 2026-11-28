@@ -1,6 +1,28 @@
 class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
 
+  # Apply the host-specific filter to finds, joins, pagination and associations.
+  def self.surf_visible_by(column = :group_id, &allowed_values)
+    default_scope do
+      if (ids = SurfGroupVisibility.group_ids)
+        where(column => allowed_values ? allowed_values.call(ids) : ids)
+      end
+    end
+  end
+
+  def self.surf_visible_polymorphic(association, *types)
+    default_scope do
+      if SurfGroupVisibility.group_ids
+        type_column = "#{association}_type"
+        id_column = "#{association}_id"
+        others = where.not(type_column => types).or(where(type_column => nil))
+        types.reduce(others) do |relation, type|
+          relation.or(where(type_column => type, id_column => type.constantize.select(Arel.sql("id::text"))))
+        end
+      end
+    end
+  end
+
   before_create :set_tsid_primary_key
 
   # Finds by TSID, falling back to the integer primary key the legacy sails

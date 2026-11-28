@@ -2,6 +2,8 @@
 # project so the one-project-per-person-per-hackathon rule can live in a
 # unique index rather than a validation (design/HACKATHON_MODULE.md §1.4).
 class HackathonProjectMember < ApplicationRecord
+  surf_visible_by(:hackathon_id) { Hackathon.select(:id) }
+
   ROLES = %w[owner member].freeze
 
   belongs_to :project, class_name: "HackathonProject", inverse_of: :hackathon_project_members

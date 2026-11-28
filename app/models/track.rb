@@ -1,4 +1,6 @@
 class Track < ApplicationRecord
+  surf_visible_by
+
   belongs_to :group
   has_many :events, dependent: :nullify
   has_many :track_roles, dependent: :destroy

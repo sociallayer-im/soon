@@ -1,4 +1,10 @@
 class TicketItem < ApplicationRecord
+  default_scope do
+    if (ids = SurfGroupVisibility.group_ids)
+      where(event_id: Event.select(:id)).or(where(event_id: nil, group_id: ids))
+    end
+  end
+
   include SiteNotifiable
   belongs_to :user, optional: true
   belongs_to :ticket

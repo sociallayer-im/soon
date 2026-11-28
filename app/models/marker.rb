@@ -1,4 +1,6 @@
 class Marker < ApplicationRecord
+  surf_visible_by
+
   belongs_to :place
   belongs_to :group
   belongs_to :owner, class_name: "User", foreign_key: "owner_id"

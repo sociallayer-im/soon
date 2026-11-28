@@ -1,4 +1,6 @@
 class TrackRole < ApplicationRecord
+  surf_visible_by(:track_id) { Track.select(:id) }
+
   belongs_to :track
   belongs_to :user
 

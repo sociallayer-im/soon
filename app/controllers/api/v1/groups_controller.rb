@@ -89,6 +89,7 @@ class Api::V1::GroupsController < Api::BaseController
   end
 
   def create
+    return head :forbidden if SurfGroupVisibility.group_ids
     group = Group.new(group_params.merge(review_status: "pending", active: false))
     authorize group
     group.name = "g#{SecureRandom.hex(9)}" if group.name.blank?

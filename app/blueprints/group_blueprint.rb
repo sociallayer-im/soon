@@ -30,7 +30,10 @@ class GroupBlueprint < Blueprinter::Base
            # The one event whose tickets grant group membership. At most one
            # per group; nil until a manager designates one.
            :group_ticket_event_id,
-           :memberships_count, :events_count, :parent_id
+           :memberships_count, :events_count
+    field :parent_id do |group|
+      group.parent_id if !SurfGroupVisibility.group_ids || SurfGroupVisibility.group_ids.include?(group.parent_id)
+    end
   end
 
   # Full group-page payload: the card fields plus sub-resources. Only ever

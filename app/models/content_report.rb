@@ -1,4 +1,6 @@
 class ContentReport < ApplicationRecord
+  surf_visible_polymorphic :target, "Topic", "Event"
+
   belongs_to :reporter, class_name: "User"
   belongs_to :reviewer, class_name: "User", optional: true
   validates :target_type, inclusion: { in: %w[Topic Event] }
