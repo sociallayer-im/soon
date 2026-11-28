@@ -113,7 +113,7 @@ class WechatPayGateway
   rescue Error => e
     # No order was ever placed, so nothing was paid. Anything else (network,
     # 5xx, auth) is an absence of information rather than an answer.
-    return { "trade_state" => "NOTPAY", "out_trade_no" => out_trade_no } if ORDER_MISSING_CODES.include?(e.code)
+    return { "trade_state" => "NOTPAY", "out_trade_no" => out_trade_no, "order_missing" => true } if ORDER_MISSING_CODES.include?(e.code)
 
     Rails.logger.warn("[wechat_pay] query_order #{out_trade_no} failed: #{e.message}")
     nil

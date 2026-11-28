@@ -119,7 +119,7 @@ class Group < ApplicationRecord
   def add_member(user_id, role)
     membership = memberships.find_by(user_id: user_id)
     if membership
-      membership.update!(role: role, expires_at: nil)
+      membership.update!(role: role, expires_at: nil, active: true)
     else
       membership = memberships.create!(user_id: user_id, role: role, active: true)
     end

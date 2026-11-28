@@ -16,7 +16,16 @@ class Api::V1::GroupInvitesController < Api::BaseController
 
   # GET /api/v1/group_invites/pending
   def pending
+    roles = current_user.memberships.active.where(active: [true, nil]).pluck(:group_id, :role).to_h
+    seen_groups = Set.new
     invites = GroupInvite.pending_for_email(current_user.email).includes(:group, :sender)
+                         .sort_by { |invite| [-GroupInvite::ROLE_RANK.fetch(invite.role), -invite.created_at.to_f, invite.id] }
+                         .select do |invite|
+      next true unless invite.membership_only?
+
+      current_rank = GroupInvite::ROLE_RANK.fetch(roles[invite.group_id], -1)
+      GroupInvite::ROLE_RANK.fetch(invite.role) > current_rank && seen_groups.add?(invite.group_id)
+    end
     render json: GroupInviteBlueprint.render(invites)
   end
 
@@ -47,14 +56,14 @@ class Api::V1::GroupInvitesController < Api::BaseController
   # DELETE /api/v1/groups/:group_id/group_invites/:id
   def destroy
     authorize @invite, :cancel?
-    @invite.update(status: "cancelled")
+    record_invite_end!("cancelled")
     head :no_content
   end
 
   # POST /api/v1/groups/:group_id/group_invites/:id/revoke
   def revoke
     authorize @invite, :revoke?
-    @invite.update(status: "revoked")
+    record_invite_end!("revoked")
     render json: GroupInviteBlueprint.render(@invite)
   end
 
@@ -62,13 +71,19 @@ class Api::V1::GroupInvitesController < Api::BaseController
   #
   # Recipient accepts an email invite.
   def accept
-    unless @invite.status == "sending" && @invite.receiver_address == current_user.email
-      return render_error("invite is not for this user")
-    end
-    return render_error("invite expired") if @invite.expired?
+    @group.with_lock do
+      @invite.reload(lock: true)
+      unless @invite.accepted? && @invite.receiver_id == current_user.id
+        unless @invite.sending? && @invite.email_recipient?(current_user.email)
+          return render_error("invite is not for this user or is no longer available")
+        end
+        return render_error("invite expired") if @invite.expired?
 
-    @invite.accept!(current_user)
-    render json: GroupInviteBlueprint.render(@invite)
+        @invite.accept!(current_user)
+      end
+      GroupInvite.clear_redundant_membership_invites!(@group, current_user)
+      render json: GroupInviteBlueprint.render(@invite)
+    end
   end
 
   # POST /api/v1/groups/:group_id/group_invites/:id/accept_request
@@ -80,7 +95,11 @@ class Api::V1::GroupInvitesController < Api::BaseController
     return render_error("invite is not a pending request") unless @invite.status == "requesting"
     return render_error("request expired") if @invite.expired?
 
-    @invite.accept!(User.find(@invite.receiver_id))
+    @group.with_lock do
+      user = User.find(@invite.receiver_id)
+      @invite.accept!(user)
+      GroupInvite.clear_redundant_membership_invites!(@group, user)
+    end
     render json: GroupInviteBlueprint.render(@invite)
   end
 
@@ -124,10 +143,13 @@ class Api::V1::GroupInvitesController < Api::BaseController
     return render_error("invalid code") unless invite
     return render_error("code expired") if invite.expired?
 
-    existing = @group.memberships.exists?(user_id: current_user.id)
-    @group.add_member(current_user.id, invite.role)
-    action = existing ? "group_invite/update_role" : "group_invite/add_member"
-    Activity.create(item: invite, initiator: current_user, action: action,
+    @group.with_lock do
+      return render_error("membership exists") if @group.memberships.exists?(user_id: current_user.id)
+
+      @group.add_member(current_user.id, invite.role)
+      GroupInvite.clear_redundant_membership_invites!(@group, current_user)
+    end
+    Activity.create(item: invite, initiator: current_user, action: "group_invite/add_member",
       payload: { group_name: @group.name, group_display_name: @group.display_name })
     render json: GroupInviteBlueprint.render(invite)
   end

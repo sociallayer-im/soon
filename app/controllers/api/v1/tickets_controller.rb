@@ -73,7 +73,11 @@ class Api::V1::TicketsController < Api::BaseController
 
   # POST /api/v1/tickets/:event_id/:ticket_id/rsvp   (event_id = params[:event_id], ticket_id = params[:ticket_id])
   def rsvp
-    return render_error("event closed") if @event.status == "closed"
+    @event.with_lock { create_rsvp }
+  end
+
+  def create_rsvp
+    return render_error("event closed") if %w[closed cancelling cancelled].include?(@event.status)
     return render_error("event ended") if Rails.env.production? && @event.end_time && @event.end_time + 1.hour < Time.current
     if @event.venue&.capacity.to_i > 0 && @event.participant_count.to_i >= @event.venue.capacity
       return render_error("exceed venue capacity")
@@ -135,7 +139,7 @@ class Api::V1::TicketsController < Api::BaseController
     # a rollback undoes the participant, the count bump, and the coupon usage.
     # The ticket reservation is committed separately (reserve!), so it is the
     # only thing we must hand back on failure.
-    ActiveRecord::Base.transaction do
+    ActiveRecord::Base.transaction(requires_new: true) do
       participant.save!
       # Only a seated participant counts, and only once — buying a second
       # ticket for an event you already attend must not count twice, and a
@@ -152,6 +156,7 @@ class Api::V1::TicketsController < Api::BaseController
       # still awaiting payment needs the explicit call.
       if ticket_item.status == "succeeded"
         ticket_item.confirm_payment!
+        participant.reload
       else
         participant.refresh_payment_status!
       end
@@ -165,6 +170,8 @@ class Api::V1::TicketsController < Api::BaseController
     @ticket.release!
     render_error(e.record.errors.full_messages.join(", "))
   end
+
+  private :create_rsvp
 
   # POST /api/v1/tickets/verify_payment
   def verify_payment
@@ -202,6 +209,8 @@ class Api::V1::TicketsController < Api::BaseController
 
     ticket_item.cancel(actor: current_user)
     render json: { ticket_item: TicketItemBlueprint.render_as_hash(ticket_item) }
+  rescue TicketItem::PaymentStillOpen => e
+    render_error(e.message)
   end
 
   # POST /api/v1/tickets/set_payment_status  (webhook-style, shared-secret auth)
@@ -264,7 +273,7 @@ class Api::V1::TicketsController < Api::BaseController
     stale = false
     ticket_item.with_lock do
       # Re-check under the lock — the pre-lock check can go stale.
-      if ticket_item.status != "pending"
+      if ticket_item.status != "pending" || ticket_item.event.cancellation_started?
         stale = true
         next
       end
@@ -275,6 +284,10 @@ class Api::V1::TicketsController < Api::BaseController
           checkout = existing
           next
         end
+        unless existing&.status == "expired"
+          stale = true
+          next
+        end
       end
 
       session = StripeGateway.create_checkout_session(setting, ticket_item)
@@ -283,7 +296,7 @@ class Api::V1::TicketsController < Api::BaseController
       ticket_item.update!(provider_ref: session.id, reserved_until: Time.zone.at(session.expires_at) + 2.minutes)
       checkout = session
     end
-    return render_error("ticket_item is not pending") if stale
+    return render_error("ticket_item is no longer payable") if stale
 
     render json: { result: "ok", checkout_url: checkout.url, session_id: checkout.id }
   rescue Stripe::StripeError => e
@@ -322,7 +335,7 @@ class Api::V1::TicketsController < Api::BaseController
     prepay_id = nil
     stale = false
     ticket_item.with_lock do
-      if ticket_item.status != "pending"
+      if ticket_item.status != "pending" || ticket_item.event.cancellation_started?
         stale = true
         next
       end
@@ -340,7 +353,7 @@ class Api::V1::TicketsController < Api::BaseController
       ticket_item.update!(provider_ref: prepay_id,
         reserved_until: WechatPayGateway::ORDER_TTL.from_now + 2.minutes)
     end
-    return render_error("ticket_item is not pending") if stale
+    return render_error("ticket_item is no longer payable") if stale
 
     render json: { result: "ok", pay_params: WechatPayGateway.pay_params(setting, prepay_id) }
   rescue WechatPayGateway::Error => e

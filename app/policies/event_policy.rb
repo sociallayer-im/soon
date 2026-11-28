@@ -18,6 +18,8 @@ class EventPolicy < ApplicationPolicy
   # bypasses that restriction so a member-only group can still run one event
   # open to everyone.
   def join?
+    return false if record.cancellation_started?
+
     return true if owner?(record) || group_admin?(record.group)
     return true if record.visibility == "open_registration"
 

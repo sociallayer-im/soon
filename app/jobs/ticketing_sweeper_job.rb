@@ -6,8 +6,21 @@
 class TicketingSweeperJob < ApplicationJob
   queue_as :stripe
 
-  def perform
-    TicketItem.where(status: "pending").where("reserved_until < ?", Time.current).find_each do |item|
+  def perform(event_id: nil)
+    if event_id
+      event = Event.find_by(id: event_id, status: "cancelling")
+      reconcile_cancellation(event) if event
+      return
+    end
+
+    Event.where(status: "cancelling").find_each do |event|
+      reconcile_cancellation(event)
+    rescue => e
+      Rails.error.report(e, handled: true, context: { event_id: event.id })
+    end
+
+    TicketItem.where(status: "pending").where("reserved_until < ?", Time.current)
+              .where.not(event_id: Event.where(status: "cancelling").select(:id)).find_each do |item|
       sweep(item)
     rescue => e
       Rails.error.report(e, handled: true, context: { ticket_item_id: item.id })
@@ -15,6 +28,19 @@ class TicketingSweeperJob < ApplicationJob
   end
 
   private
+
+  def reconcile_cancellation(event)
+    event.ticket_items.where(status: "pending").find_each do |item|
+      item.with_lock do
+        next unless item.status == "pending" && item.event.cancellation_started?
+
+        result = Ticketing::PaymentClosure.check(item)
+        item.record_activity!("event_cancellation_payment_check", source: "sweeper", outcome: result.to_s)
+        item.cancel(source: "sweeper", provider_closed: true) if result == :closed
+      end
+    end
+    event.finish_cancellation!
+  end
 
   def sweep(item)
     return sweep_wechat(item) if item.payment_provider == "wechat"
@@ -36,7 +62,7 @@ class TicketingSweeperJob < ApplicationJob
       end
       # Still-open session (clock skew, extended session): give it one more
       # sweep interval rather than expiring a page someone may be paying on.
-      if session.status == "open"
+      if session.status != "expired"
         item.update!(reserved_until: 10.minutes.from_now)
         return
       end
@@ -77,8 +103,8 @@ class TicketingSweeperJob < ApplicationJob
       # NOTPAY / CLOSED / REVOKED / PAYERROR — close first so it cannot be
       # paid after the seat goes back, THEN expire. Order matters: the reverse
       # leaves a window where the order is free and still payable.
-      WechatPayGateway.close_order(setting, item.id)
-      item.timeout
+      item.timeout if order["order_missing"] || order["trade_state"] == "CLOSED" ||
+        WechatPayGateway.close_order(setting, item.id)
     end
   end
 end

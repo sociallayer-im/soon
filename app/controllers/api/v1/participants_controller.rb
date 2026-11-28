@@ -154,6 +154,10 @@ class Api::V1::ParticipantsController < Api::BaseController
 
     ActiveRecord::Base.transaction do
       orders = participant.ticket_items.order(:id).lock.to_a
+      participant.lock!
+      next if participant.cancelled?
+
+      previous_status = participant.status
       if participant.user_id == current_user.id && orders.any? { |order| refundable_charge?(order) }
         return render_error("refund required before cancel")
       end
@@ -165,8 +169,11 @@ class Api::V1::ParticipantsController < Api::BaseController
       # transition! actually ran.
       participant.reload
       participant.transition!(:cancelled) unless participant.cancelled?
+      record_withdrawal!(participant, previous_status)
     end
     head :no_content
+  rescue TicketItem::PaymentStillOpen => e
+    render_error(e.message)
   rescue Participant::InvalidTransition
     # Two withdrawals in flight at once — a double-click on the cancel button,
     # which is a thing people do to a button that reloads the page. The other
@@ -197,13 +204,18 @@ class Api::V1::ParticipantsController < Api::BaseController
   # Event owner or group admin/owner declines a pending applicant.
   def reject
     authorize @event, :update?
-    participant = @event.participants.find(params[:id])
-    return render_error("participant is not pending") unless participant.status == "pending"
+    @event.with_lock do
+      participant = @event.participants.find(params[:id])
+      return render_error("participant is not pending") unless %w[pending].include?(participant.status)
 
-    participant.transition!(:declined)
-    sync_form_submission!(participant, "rejected")
-    EventMailer.participant_rejected(participant_id: participant.id).deliver_later
-    render json: ParticipantBlueprint.render(participant)
+      previous_status = participant.status
+      participant.transition!(:declined)
+      Activity.create!(item: participant, initiator: current_user, action: "registration/rejection_recorded",
+        payload: { event_id: @event.id, user_id: participant.user_id, previous_status: previous_status, status: participant.status })
+      sync_form_submission!(participant, "rejected")
+      EventMailer.participant_rejected(participant_id: participant.id).deliver_later
+      render json: ParticipantBlueprint.render(participant)
+    end
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -248,15 +260,21 @@ class Api::V1::ParticipantsController < Api::BaseController
     order.amount.to_i.positive? && order.status.in?(%w[succeeded partially_refunded disputed])
   end
 
+  def record_withdrawal!(participant, previous_status)
+    action = participant.user_id == current_user.id ? "registration/withdrawal_recorded" : "registration/removal_recorded"
+    Activity.create!(item: participant, initiator: current_user, action: action,
+      payload: { event_id: @event.id, user_id: participant.user_id, previous_status: previous_status, status: participant.status })
+  end
+
   def release_orders!(orders)
     orders.each do |item|
       case item.status
       when "pending"
-        item.cancel # marks cancelled and releases the hold
+        item.cancel(actor: current_user) # marks cancelled and releases the hold
       when "succeeded"
         # Free/comped: nothing to refund, so retire the order outright. Paid:
         # leave it succeeded and refundable.
-        item.transition!(:cancelled) if item.amount.to_i.zero?
+        item.transition!(:cancelled, source: "api", actor: current_user) if item.amount.to_i.zero?
         item.release_resources!
       end
     end

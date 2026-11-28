@@ -98,8 +98,21 @@ class TicketItem < ApplicationRecord
     true
   end
 
-  def cancel(source: "api", actor: nil)
-    close!("cancelled", source: source, actor: actor)
+  PaymentStillOpen = Class.new(StandardError)
+
+  def cancel(source: "api", actor: nil, provider_closed: false)
+    with_lock do
+      next unless status == "pending"
+
+      if !provider_closed && %w[stripe wechat].include?(payment_provider) &&
+          (provider_ref.present? || payment_provider == "wechat")
+        outcome = Ticketing::PaymentClosure.check(self, record_payment: false)
+        unless outcome == :closed
+          raise PaymentStillOpen, "payment could not be closed; check the order status and retry"
+        end
+      end
+      close!("cancelled", source: source, actor: actor)
+    end
   end
 
   def timeout(source: "sweeper")
@@ -115,15 +128,33 @@ class TicketItem < ApplicationRecord
     attrs[:txhash] = txhash if txhash.present?
     attrs[:sender_address] = sender_address if sender_address.present?
 
-    newly_paid = participant && participant.payment_status != "succeeded"
-    # membership_card's grant EXTENDS on every call — unlike the "group"
-    # branch below, it has no exists?-based idempotency to fall back on — so
-    # it must only run on the transition that actually pays this order, not
-    # on a repeat webhook/callback for an order that was already succeeded
-    # (Stripe and friends deliver webhooks at-least-once; this method is
-    # explicitly written to tolerate repeat calls, see newly_paid above).
-    first_confirmation = status != "succeeded"
-    transaction do
+    with_lock do
+      if event&.cancellation_started?
+        return unless %w[pending cancelled timeout].include?(status)
+
+        previous = status
+        if previous == "pending"
+          transition!(:succeeded, source: source, actor: actor, **attrs)
+        else
+          # Confirmed funds can arrive after a local timeout or cancellation.
+          # Keep them refundable, even after the reservation has been released.
+          update!(attrs.merge(status: "succeeded"))
+        end
+        record_activity!("payment_received_after_event_cancellation", source: source, actor: actor,
+          previous_status: previous, transaction_id: txhash)
+        Activity.create!(item: event, initiator: actor || user || event.owner, receiver: event.owner,
+          action: "event/late_payment_requires_refund", payload: { ticket_item_id: id, event_id: event_id })
+        return
+      end
+
+      newly_paid = participant && participant.payment_status != "succeeded"
+      # membership_card's grant EXTENDS on every call — unlike the "group"
+      # branch below, it has no exists?-based idempotency to fall back on — so
+      # it must only run on the transition that actually pays this order, not
+      # on a repeat webhook/callback for an order that was already succeeded
+      # (Stripe and friends deliver webhooks at-least-once; this method is
+      # explicitly written to tolerate repeat calls, see newly_paid above).
+      first_confirmation = status != "succeeded"
       if status == "succeeded"
         # Already-paid items (free path creates them succeeded directly, and
         # this also runs for the confirm side effects) just take the attrs.
@@ -136,12 +167,14 @@ class TicketItem < ApplicationRecord
       elsif ticket_type == "membership_card" && group && first_confirmation
         group.grant_or_extend_membership(user_id, ticket.membership_duration_days.days)
       end
-      participant.refresh_payment_status! if participant
+      if participant
+        participant.refresh_payment_status!
+      end
+      # Only on the first confirmation — a repeat webhook/callback for an
+      # already-succeeded purchase shouldn't re-email the buyer.
+      EventMailer.ticket_purchased(participant_id: participant.id).deliver_later if newly_paid
+      notify_group_owner
     end
-    # Only on the first confirmation — a repeat webhook/callback for an
-    # already-succeeded purchase shouldn't re-email the buyer.
-    EventMailer.ticket_purchased(participant_id: participant.id).deliver_later if newly_paid
-    notify_group_owner
   end
 
   def notify_group_owner
@@ -159,7 +192,9 @@ class TicketItem < ApplicationRecord
   # refunds the coupon usage consumed at RSVP. The seat is NOT given back here
   # — that follows the participant's status, in Participant#sync_event_seat!.
   def close!(new_status, source: "system", actor: nil)
-    transaction do
+    with_lock do
+      next unless status == "pending"
+
       closing_participant = participant
       transition!(new_status, source: source, actor: actor, participant_id: nil)
       release_resources!

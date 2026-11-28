@@ -38,7 +38,7 @@ class WechatPayWebhookJob < ApplicationJob
     item = find_item(record, resource["out_trade_no"])
     return unless item
 
-    unless item.status == "pending"
+    unless item.status == "pending" || (item.event&.cancellation_started? && %w[cancelled timeout].include?(item.status))
       # Already settled. Only worth flagging when a DIFFERENT transaction paid
       # it — that is money taken twice for one seat.
       if resource["transaction_id"].present? && item.txhash.present? && resource["transaction_id"] != item.txhash

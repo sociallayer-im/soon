@@ -95,7 +95,16 @@ class Api::V1::GroupsController < Api::BaseController
 
   def destroy
     authorize @group
-    @group.destroy
+    @group.with_lock do
+      @group.events.order(:id).lock.load
+      if TicketItem.where(event_id: @group.events.select(:id)).or(TicketItem.where(group_id: @group.id)).exists?
+        return render_error("cannot delete a group with ticket orders")
+      end
+
+      Activity.create!(item: @group, initiator: current_user, action: "group/deletion_recorded",
+        payload: { group_id: @group.id, group_name: @group.name })
+      @group.destroy!
+    end
     head :no_content
   end
 

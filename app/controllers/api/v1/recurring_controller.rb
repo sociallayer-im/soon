@@ -1,4 +1,6 @@
 class Api::V1::RecurringController < Api::BaseController
+  EventCancellationInProgress = Class.new(StandardError)
+
   # A recurring series belongs to a public event page (the "Repeating Events"
   # list on event/detail), which anonymous visitors can read — and the frontend
   # fetches it with no token both server-side and from RecurringListBtn. Without
@@ -120,8 +122,13 @@ class Api::V1::RecurringController < Api::BaseController
     end
 
     attrs = event_attributes
+    return render_error("use the cancellation endpoint") if %w[cancelling cancelled].include?(attrs[:status]) || (attrs.key?(:status) && events.any?(&:cancellation_started?))
     ActiveRecord::Base.transaction do
-      events.each do |event|
+      events.sort_by(&:id).each do |event|
+        event.lock!
+        if attrs.key?(:status) && event.cancellation_started?
+          raise EventCancellationInProgress, "use the cancellation endpoint"
+        end
         changes = attrs.dup
         changes[:start_time] = event.start_time + start_diff.seconds if params.key?(:start_time_diff)
         changes[:end_time]   = event.end_time + end_diff.seconds if params.key?(:end_time_diff)
@@ -131,6 +138,8 @@ class Api::V1::RecurringController < Api::BaseController
     end
 
     render json: RecurringBlueprint.render(Recurring.find(params[:recurring_id]), view: :with_events)
+  rescue EventCancellationInProgress => e
+    render_error(e.message)
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -140,10 +149,14 @@ class Api::V1::RecurringController < Api::BaseController
   def cancel
     events = selected_events(params[:recurring_id], selector: params[:selector], pivot_id: params[:event_id])
     return if performed?
-    authorize events.first, :update?
+    events.each { |event| authorize event, :destroy? }
 
-    Event.where(id: events.map(&:id)).update_all(status: "cancelled", updated_at: Time.current)
-    render json: { result: "ok", cancelled: events.size }
+    Event.transaction do
+      events.sort_by(&:id).each { |event| event.cancel_by!(current_user) }
+    end
+    pending = events.count { |event| event.status == "cancelling" }
+    render json: { result: "ok", cancelled: events.count(&:cancelled?), cancelling: pending },
+      status: pending.positive? ? :accepted : :ok
   end
 
   private

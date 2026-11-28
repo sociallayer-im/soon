@@ -69,20 +69,23 @@ class Api::V1::EventsController < Api::BaseController
     # group_id is intentionally not updatable — moving an event into another
     # group would escape the authorization that was checked against its current
     # group. venue/track references are re-validated against the current group.
-    attrs = event_params.to_h.except("group_id")
-    gate_pinned!(attrs, @event.group)
-    gate_pending_status!(attrs, @event)
-    normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
-    @event.assign_attributes(attrs)
-    if (err = reference_error(@event))
-      return render_error(err)
-    end
-    if @event.save
-      apply_group_ticket_designation!(@event)
-      notify_attendees_of_update if calendar_relevant_change?
-      render json: EventBlueprint.render(@event)
-    else
-      render_error(@event.errors.full_messages.join(", "))
+    @event.with_lock do
+      attrs = event_params.to_h.except("group_id")
+      return render_error("use the cancellation endpoint") if %w[cancelling cancelled].include?(attrs["status"]) || (@event.cancellation_started? && attrs.key?("status"))
+      gate_pinned!(attrs, @event.group)
+      gate_pending_status!(attrs, @event)
+      normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
+      @event.assign_attributes(attrs)
+      if (err = reference_error(@event))
+        return render_error(err)
+      end
+      if @event.save
+        apply_group_ticket_designation!(@event)
+        notify_attendees_of_update if calendar_relevant_change?
+        render json: EventBlueprint.render(@event)
+      else
+        render_error(@event.errors.full_messages.join(", "))
+      end
     end
   end
 
@@ -90,8 +93,9 @@ class Api::V1::EventsController < Api::BaseController
   # participant/ticket/coupon) — it flips status to cancelled and keeps the record.
   def destroy
     authorize @event
-    @event.update(status: "cancelled")
-    notify_attendees_of_cancellation
+    @event.cancel_by!(current_user)
+    return render json: { status: @event.status }, status: :accepted if @event.status == "cancelling"
+
     head :no_content
   end
 

@@ -33,7 +33,7 @@ class StripeWebhookJob < ApplicationJob
         record.update!(error: "orphan payment: no matching pending order for session #{object['id']}") if record.error.blank?
         return
       end
-      unless item.status == "pending"
+      unless item.status == "pending" || (item.event&.cancellation_started? && %w[cancelled timeout].include?(item.status))
         if object["payment_intent"].present? && object["payment_intent"] != item.txhash
           record.update!(error: "orphan payment: session #{object['id']} paid but order #{item.id} already settled via #{item.txhash}")
         end

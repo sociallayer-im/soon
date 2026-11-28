@@ -15,7 +15,7 @@ class Event < ApplicationRecord
 
   accepts_nested_attributes_for :coupons, allow_destroy: true
 
-  STATUSES = %w(draft pending published archived closed cancelled).freeze
+  STATUSES = %w(draft pending published archived closed cancelling cancelled).freeze
   # normal            — default; publicly listed, joining follows the group's
   #                      can_join_event setting like any other event.
   # open_registration — publicly listed like normal, but bypasses the group's
@@ -83,6 +83,40 @@ class Event < ApplicationRecord
   # Wall-clock start/end in the event's own zone (for emails, .ics, display).
   def local_start = start_time&.in_time_zone(event_timezone)
   def local_end   = end_time&.in_time_zone(event_timezone)
+
+  def cancellation_started?
+    %w[cancelling cancelled].include?(status)
+  end
+
+  def cancel_by!(actor)
+    with_lock do
+      next false if cancelled?
+
+      unless status == "cancelling"
+        update!(status: "cancelling")
+        Activity.create!(item: self, initiator: actor, action: "event/cancellation_requested")
+        ActiveRecord.after_all_transactions_commit do
+          TicketingSweeperJob.perform_later(event_id: id) if reload.status == "cancelling"
+        end
+      end
+      finish_cancellation!(actor)
+    end
+  end
+
+  def finish_cancellation!(actor = nil)
+    with_lock do
+      next false unless status == "cancelling"
+      next false if ticket_items.where(status: %w[pending succeeded partially_refunded disputed]).where("amount > 0").exists?
+
+      actor ||= Activity.where(item: self, action: "event/cancellation_requested").order(created_at: :desc).first!.initiator
+      update!(status: "cancelled")
+      Activity.create!(item: self, initiator: actor, action: "event/cancellation_recorded")
+      ActiveRecord.after_all_transactions_commit do
+        EventAttendeeMailJob.perform_later(event_id: id, mailer_action: "cancelled")
+      end
+      true
+    end
+  end
 
   def cancelled? = status == "cancelled"
 

@@ -34,9 +34,24 @@ class GroupInvite < ApplicationRecord
   # role unconditionally. Keep whichever role ranks higher.
   ROLE_RANK = { "member" => 0, "manager" => 1, "owner" => 2 }.freeze
 
+  scope :membership_only, -> { where(ticket_id: nil, badge_id: nil, badge_class_id: nil) }
+
+  def membership_only?
+    ticket_id.nil? && badge_id.nil? && badge_class_id.nil?
+  end
+
+  def self.clear_redundant_membership_invites!(group, user)
+    membership = group.memberships.active.where(active: [true, nil]).find_by(user_id: user.id)
+    return unless membership
+
+    roles = ROLE_RANK.keys.select { |role| ROLE_RANK.fetch(role) <= ROLE_RANK.fetch(membership.role) }
+    group.group_invites.pending_for_email(user.email).membership_only.where(role: roles)
+         .update_all(status: "revoked", updated_at: Time.current)
+  end
+
   def accept!(user)
     transaction do
-      existing = group.memberships.find_by(user_id: user.id)
+      existing = group.memberships.active.where(active: [true, nil]).find_by(user_id: user.id)
       unless existing && ROLE_RANK.fetch(existing.role, 0) >= ROLE_RANK.fetch(role, 0)
         group.add_member(user.id, role)
       end

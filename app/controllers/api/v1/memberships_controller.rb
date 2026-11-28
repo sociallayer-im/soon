@@ -74,7 +74,12 @@ class Api::V1::MembershipsController < Api::BaseController
       return render_error("cannot remove the last owner of a group")
     end
 
-    membership.destroy # counter_cache decrements memberships_count
+    membership.with_lock do
+      Activity.create!(item: membership, initiator: current_user,
+        action: membership.user_id == current_user.id ? "membership/leave_recorded" : "membership/removal_recorded",
+        payload: { group_id: @group.id, user_id: membership.user_id, role: membership.role })
+      membership.destroy!
+    end
     head :no_content
   end
 

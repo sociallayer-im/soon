@@ -113,6 +113,12 @@ class StripeGateway
     )
   end
 
+  def self.expire_checkout_session(setting, session_id)
+    ::Stripe::Checkout::Session.expire(session_id, {}, { api_key: setting.secret_key })
+  rescue ::Stripe::StripeError
+    nil
+  end
+
   def self.retrieve_checkout_session(setting, session_id)
     ::Stripe::Checkout::Session.retrieve(session_id, { api_key: setting.secret_key })
   rescue ::Stripe::StripeError
