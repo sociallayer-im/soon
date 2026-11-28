@@ -1,0 +1,38 @@
+app/controllers/api/v1/auth_controller.rb
+  s_ae1b3622fa26f6::t_d94e4e1f491873 208-210
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 211,215
+app/services/wechat_miniprogram_auth.rb
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 20
+db/migrate/20261129090000_create_wechat_miniprogram_identities.rb
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 1-12
+app/models/wechat_miniprogram_identity.rb
+  s_ae1b3622fa26f6::t_d94e4e1f491873 4-36
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 1-3,37
+test/controllers/api/v1/wechat_miniprogram_auth_test.rb
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 10,31
+  s_ae1b3622fa26f6::t_64ad3528f39949 41-64
+script/import_surf_706.rb
+  s_ae1b3622fa26f6::t_f040f170f31a37 1-76
+test/services/wechat_miniprogram_auth_test.rb
+  s_ae1b3622fa26f6::t_94e2afe61c10b5 23
+app/models/user.rb
+  s_ae1b3622fa26f6::t_611ad29e2e343b 39,97
+db/schema.rb
+  s_ae1b3622fa26f6::t_50eff21a94da7c 13,1792-1802,2012
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00a31be0ef015070f63e840bfa7aaa7dbbf0126b",
+  "prompts": {},
+  "sessions": {
+    "s_ae1b3622fa26f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1913c-2175-7e80-bd56-a7d97d829826",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
