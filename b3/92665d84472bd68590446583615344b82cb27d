@@ -1,0 +1,39 @@
+app/blueprints/group_blueprint.rb
+  s_a4066d71f584a5::t_3525933909505c 29
+app/controllers/api/v1/community_projects_controller.rb
+  s_a4066d71f584a5::t_8d778b85722250 1-161
+app/controllers/api/v1/groups_controller.rb
+  s_a4066d71f584a5::t_9a51036195da1d 179
+app/models/community_project.rb
+  s_a4066d71f584a5::t_47c5fae19058a8 1-37
+app/models/community_project_comment.rb
+  s_a4066d71f584a5::t_b858f2604b9b62 1-5
+app/models/community_project_member.rb
+  s_a4066d71f584a5::t_1da1aea920c897 1-5
+app/models/group.rb
+  s_a4066d71f584a5::t_2e9e4198485ae6 36-38
+config/routes.rb
+  s_a4066d71f584a5::t_ef2941d4a3ab70 152-162
+db/migrate/20261124090000_create_community_projects.rb
+  s_a4066d71f584a5::t_46470cacfd6b3a 1-38
+db/schema.rb
+  s_a4066d71f584a5::t_c7eb4d723920d6 263,276,279-280,282,284,287-288,1324
+test/controllers/api/v1/community_projects_controller_test.rb
+  s_a4066d71f584a5::t_cc51b405f8a2cb 1-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b392665d84472bd68590446583615344b82cb27d",
+  "prompts": {},
+  "sessions": {
+    "s_a4066d71f584a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20931-091c-72e3-a378-56e730c09435",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "jiangplus <jiang.plus.times@gmail.com>"
+    }
+  }
+}
