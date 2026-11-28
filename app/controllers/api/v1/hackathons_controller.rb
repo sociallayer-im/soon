@@ -126,7 +126,7 @@ class Api::V1::HackathonsController < Api::BaseController
       team.save!
       # A judge who is not yet a group member cannot be on a team; they show
       # up in `skipped` rather than raising.
-      member_ids = Membership.where(group_id: @hackathon.group_id, user_id: user_ids).pluck(:user_id)
+      member_ids = Membership.active.where(group_id: @hackathon.group_id, user_id: user_ids).pluck(:user_id)
       skipped += User.where(id: user_ids - member_ids).map { |u| u.nickname.presence || u.name }
       current = team.team_memberships.pluck(:user_id)
       (member_ids - current).each { |uid| team.team_memberships.create!(user_id: uid); added += 1 }

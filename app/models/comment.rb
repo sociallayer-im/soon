@@ -1,4 +1,5 @@
 class Comment < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user
   belongs_to :badge, optional: true
   belongs_to :item, polymorphic: true, optional: true

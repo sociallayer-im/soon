@@ -11,10 +11,13 @@ class Api::V1::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "owner", group.memberships.find_by(user: user).role
   end
 
-  test "create requires a name" do
+  test "create generates a group handle from a display name" do
     user = create_user
-    post "/api/v1/groups", params: { group: { name: "" } }, headers: auth_headers(user)
-    assert_response :unprocessable_entity
+    post "/api/v1/groups", params: { group: { nickname: "My Group" } }, headers: auth_headers(user)
+    assert_response :created
+    group = Group.find(json_response["id"])
+    assert_equal "My Group", group.nickname
+    assert group.name.present?
   end
 
   test "index lists only the current user's groups" do

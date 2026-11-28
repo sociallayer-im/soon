@@ -91,7 +91,7 @@ class OauthClaims
   end
 
   def group_claims
-    @user.memberships.where(active: true).includes(:group).limit(LIST_LIMIT).filter_map do |m|
+    @user.memberships.active.where(active: true).includes(:group).limit(LIST_LIMIT).filter_map do |m|
       next if m.group.nil?
       # `name` is the handle on Group exactly as it is on User; `nickname` is
       # the display name.

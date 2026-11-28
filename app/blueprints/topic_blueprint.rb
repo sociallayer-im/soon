@@ -1,12 +1,17 @@
 class TopicBlueprint < Blueprinter::Base
   identifier :id
 
-  # `content` is deliberately absent from the default view: the list renders
-  # cards, and a page of full post bodies is the difference between a small
-  # response and a large one. Same reason EventBlueprint keeps content in
-  # :extended.
-  fields :group_id, :category_id, :title, :image_url, :tags,
+  # Lists keep bounded text; attachments are returned independently.
+  fields :event_id, :sync_to_community, :group_id, :category_id, :title, :image_url, :tags,
          :replies_count, :stars_count, :replied_at, :created_at, :updated_at
+
+  field(:excerpt) { |topic| topic.list_media[:text].first(600) }
+  field(:image_urls) { |topic| topic.list_media[:images] }
+  # Compatibility for older clients which extract trailing attachment Markdown.
+  field :content do |topic|
+    media = topic.list_media
+    ([media[:text].first(600)] + media[:images].reject { |url| url == topic.image_url }.map { |url| "![Surf 帖子附件](#{url})" }).join("\n\n")
+  end
 
   field :pinned do |topic|
     topic.pinned?

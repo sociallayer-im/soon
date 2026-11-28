@@ -1,4 +1,5 @@
 class TicketItem < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user, optional: true
   belongs_to :ticket
   belongs_to :event, optional: true
@@ -7,6 +8,7 @@ class TicketItem < ApplicationRecord
   belongs_to :group, optional: true
   belongs_to :coupon, optional: true
 
+  has_many :refund_requests, dependent: :destroy
   has_many :refunds, dependent: :destroy
   # dependent: nil — an order's history outlives the order. Cascading the
   # delete would erase exactly the record a chargeback needs.
@@ -110,7 +112,14 @@ class TicketItem < ApplicationRecord
   # set_payment_status, and stripe_callback all funnel through here) so the
   # succeed-side effects can't drift between paths. Verification of the payment
   # itself happens in the controller before this is called.
-  def confirm_payment!(txhash: nil, sender_address: nil, source: "system", actor: nil)
+  def confirm_payment!(**options)
+    (event || self).with_lock do
+      with_lock { confirm_payment_locked!(**options) }
+    end
+  end
+
+  private def confirm_payment_locked!(txhash: nil, sender_address: nil, source: "system", actor: nil)
+    raise InvalidTransition, "registration is awaiting approval" if participant&.status == "pending" || !inventory_reserved?
     attrs = { paid_at: Time.current }
     attrs[:txhash] = txhash if txhash.present?
     attrs[:sender_address] = sender_address if sender_address.present?
@@ -136,7 +145,10 @@ class TicketItem < ApplicationRecord
       elsif ticket_type == "membership_card" && group && first_confirmation
         group.grant_or_extend_membership(user_id, ticket.membership_duration_days.days)
       end
-      participant.refresh_payment_status! if participant
+      if participant
+        participant.refresh_payment_status!
+        participant.transition!(:attending, payment_due_at: nil) if participant.status == "awaiting_payment"
+      end
     end
     # Only on the first confirmation — a repeat webhook/callback for an
     # already-succeeded purchase shouldn't re-email the buyer.
@@ -146,10 +158,12 @@ class TicketItem < ApplicationRecord
 
   def notify_group_owner
     return unless ticket_type == "group" && group.present? && status == "succeeded"
+    return if group_owner_notified_at
 
     group_owner = group.users.joins(:memberships).where(memberships: { role: "owner" }).first
     return unless group_owner&.email.present?
 
+    update!(group_owner_notified_at: Time.current)
     GroupMailer.ticket_purchased(ticket_item_id: id, recipient: group_owner.email).deliver_later
   end
 
@@ -159,28 +173,29 @@ class TicketItem < ApplicationRecord
   # refunds the coupon usage consumed at RSVP. The seat is NOT given back here
   # — that follows the participant's status, in Participant#sync_event_seat!.
   def close!(new_status, source: "system", actor: nil)
-    transaction do
-      closing_participant = participant
-      transition!(new_status, source: source, actor: actor, participant_id: nil)
-      release_resources!
-      # Withdraw the person only when this was their LAST live order. They may
-      # hold several for one event (a second ticket type, a re-purchase after
-      # an abandoned checkout); cancelling one used to flip the participant to
-      # cancelled outright, dropping an attendance they had already paid for.
-      settle_participant!(closing_participant)
+    (event || self).with_lock do
+      with_lock do
+        return if status == new_status
+        PendingPaymentClosure.call(self) if status == "pending" && new_status == "cancelled"
+        closing_participant = participant
+        transition!(new_status, source: source, actor: actor, participant_id: nil)
+        release_resources!
+        # Another paid/live order retains the participant's registration.
+        settle_participant!(closing_participant, reason: new_status)
+      end
     end
   end
 
   # Keeps the participant's summary in step with its orders, and withdraws
   # them only if nothing live is left. Public because a lost dispute has the
   # same outcome as a full refund and settles from the webhook.
-  public def settle_participant!(target = participant)
+  public def settle_participant!(target = participant, reason: nil)
     return unless target
 
     live = TicketItem.where(participant_id: target.id, status: %w[pending succeeded partially_refunded disputed])
                      .where.not(id: id)
-    if live.none? && !target.cancelled?
-      target.transition!(:cancelled)
+    if live.none? && !target.cancelled? && target.status != "declined"
+      target.transition!(:cancelled, cancellation_reason: reason, payment_due_at: nil)
     else
       target.refresh_payment_status!
     end
@@ -230,7 +245,7 @@ class TicketItem < ApplicationRecord
       update!(released_at: Time.current)
       coupon&.decrement!(:order_usage_count) if coupon && coupon.order_usage_count.to_i > 0
     end
-    ticket.release!
+    ticket.release! if inventory_reserved?
     Ticketing::Activity.record!(self, "inventory_released", source: "system",
       coupon_id: coupon_id, ticket_id: ticket_id)
   end

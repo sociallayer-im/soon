@@ -5,7 +5,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
     assert_response :created
@@ -16,7 +16,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
     assert_response :created
@@ -28,31 +28,31 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     admin = create_user
     group = create_group(owner: owner)
     create_membership(user: admin, group: group, role: "manager")
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(admin)
     assert_response :created
     assert_equal "attending", json_response["status"]
   end
 
-  test "create is pending when the event has a form attached" do
+  test "a form alone does not require approval" do
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     form = create_form
     event.update_column(:form_id, form.id)
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
     assert_response :created
-    assert_equal "pending", json_response["status"]
+    assert_equal "attending", json_response["status"]
   end
 
   test "create rejects join when a required form field is missing" do
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     form = create_form
     event.update_column(:form_id, form.id)
     field = create_form_field(form: form, required: true, for_admin: false)
@@ -67,7 +67,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     form = create_form
     event.update_column(:form_id, form.id)
     field = create_form_field(form: form, required: true, for_admin: false)
@@ -86,7 +86,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     create_participant(event: event, user: attendee)
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(attendee)
@@ -97,11 +97,11 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     applicant = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
     participant = Participant.find(json_response["id"])
-    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", params: {reason: "不符合本场活动要求"}, headers: auth_headers(owner)
     assert_response :success
     assert_equal "declined", participant.reload.status
 
@@ -119,16 +119,16 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     applicant = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     form = create_form(created_by_id: owner.id)
     field = create_form_field(form: form)
-    event.update!(form_id: form.id)
+    event.update!(form_id: form.id, require_approval: true)
 
     post "/api/v1/events/#{event.id}/participants",
       params: { form_answers: [{ field_id: field.id, value: "first try" }] },
       headers: auth_headers(applicant), as: :json
     participant = Participant.find(json_response["id"])
-    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", params: {reason: "不符合本场活动要求"}, headers: auth_headers(owner)
     assert_equal "rejected", FormSubmission.find_by(form_id: form.id, user_id: applicant.id).status
 
     post "/api/v1/events/#{event.id}/participants",
@@ -148,18 +148,18 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     applicant = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     # No REQUIRED fields, so an application may legitimately carry no answers.
     form = create_form(created_by_id: owner.id)
     create_form_field(form: form, required: false)
-    event.update!(form_id: form.id)
+    event.update!(form_id: form.id, require_approval: true)
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant), as: :json
     participant = Participant.find(json_response["id"])
     assert_nil FormSubmission.find_by(form_id: form.id, user_id: applicant.id),
       "no answers means no response — an empty row is not a submission"
 
-    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(owner)
+    post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", params: {reason: "不符合本场活动要求"}, headers: auth_headers(owner)
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant), as: :json
     assert_response :created
     assert_equal "pending", participant.reload.status
@@ -170,7 +170,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     applicant = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(applicant)
     participant = Participant.find(json_response["id"])
@@ -191,7 +191,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     create_participant(event: event, user: attendee)
 
     get "/api/v1/events/#{event.id}/participants", headers: auth_headers(owner)
@@ -264,7 +264,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee)
 
     patch "/api/v1/events/#{event.id}/participants/#{participant.id}",
@@ -282,7 +282,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee)
 
     delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(outsider)
@@ -296,7 +296,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee, status: "attending")
     event.increment!(:participant_count)
 
@@ -323,7 +323,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     ticket = create_ticket(event: event, quantity: 5)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
 
@@ -342,11 +342,11 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, event.reload.participant_count
   end
 
-  test "paid attendees need a refund to self-cancel but the organizer can remove them" do
+  test "withdrawing keeps a PAID order refundable by the organizer" do
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     ticket = create_ticket(event: event, quantity: 5)
     pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
 
@@ -356,14 +356,15 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     participant = Participant.find(json_response["participant"]["id"])
     item.confirm_payment!(txhash: "pi_paid")
 
-    path = "/api/v1/events/#{event.id}/participants/#{participant.id}"
-    delete path, headers: auth_headers(buyer)
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
     assert_response :unprocessable_entity
-    assert_equal "refund required before cancel", json_response["error"]
+    assert_equal "PAID_REFUND_REQUIRED", json_response["code"]
+    assert_equal "attending", participant.reload.status
 
+    path = "/api/v1/events/#{event.id}/participants/#{participant.id}"
     patch path, params: { participant: { status: "cancelled" } }, headers: auth_headers(buyer)
     assert_response :unprocessable_entity
-    assert_equal "attending", participant.reload.status
+    assert_equal "PAID_REFUND_REQUIRED", json_response["code"]
 
     delete path, headers: auth_headers(create_user)
     assert_response :forbidden
@@ -371,6 +372,40 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     delete path, headers: auth_headers(owner)
     assert_response :no_content
     assert_equal "cancelled", participant.reload.status
+    assert_equal "succeeded", item.reload.status
+    assert_equal participant.id, item.participant_id
+    assert_equal 5, ticket.reload.quantity
+
+    delete path, headers: auth_headers(owner)
+    assert_response :no_content
+    assert_equal 5, ticket.reload.quantity
+  end
+
+  test "paid attendees can self-cancel after the event starts" do
+    owner = create_user
+    buyer = create_user
+    group = create_group(owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
+    ticket = create_ticket(event: event, quantity: 5)
+    pm = create_payment_method(item: ticket, chain: "stripe", price: 1000)
+
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp",
+      params: { payment_method_id: pm.id }, headers: auth_headers(buyer)
+    item = TicketItem.find(json_response["ticket_item"]["id"])
+    participant = Participant.find(json_response["participant"]["id"])
+    item.confirm_payment!(txhash: "pi_paid")
+
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :unprocessable_entity
+    assert_equal "PAID_REFUND_REQUIRED", json_response["code"]
+    assert_equal "attending", participant.reload.status
+
+    event.update!(start_time: 1.hour.ago, end_time: 1.hour.from_now)
+    delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(buyer)
+    assert_response :no_content
+    assert_equal "cancelled", participant.reload.status
+    # The money is still with the organizer, so the order stays succeeded and
+    # refundable — withdrawing is not a refund.
     assert_equal "succeeded", item.reload.status
     assert_equal participant.id, item.participant_id, "the refund path still needs the participant"
     assert_equal 5, ticket.reload.quantity, "the seat is freed even though the order stands"
@@ -380,7 +415,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     ticket = create_ticket(event: event, quantity: 5)
 
     post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
@@ -440,7 +475,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee, status: "attending")
     delete "/api/v1/events/#{event.id}/participants/#{participant.id}", headers: auth_headers(attendee)
 
@@ -454,7 +489,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
     ticket = create_ticket(event: event, quantity: 5)
 
     post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
@@ -473,7 +508,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     ticket = create_ticket(event: event, quantity: 5, need_approval: true)
 
     post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
@@ -485,7 +520,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     paid_ticket = create_ticket(event: event, quantity: 5)
     extra_ticket = create_ticket(event: event, quantity: 5)
     paid_pm = create_payment_method(item: paid_ticket, chain: "stripe", price: 1000)
@@ -521,7 +556,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     free = create_ticket(event: event, quantity: 5)
     paid = create_ticket(event: event, quantity: 5)
     pm = create_payment_method(item: paid, chain: "stripe", price: 1000)
@@ -547,7 +582,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     # Somebody else is genuinely seated, so a stray decrement has something to
     # steal — with an empty event the `> 0` floor hides the bug.
     create_participant(event: event, user: attendee, status: "attending")
@@ -572,7 +607,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     buyer = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     ticket = create_ticket(event: event, quantity: 5)
 
     post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
@@ -594,10 +629,10 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     applicant = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     form = create_form
     field = create_form_field(form: form, required: true, for_admin: false)
-    event.update!(form_id: form.id)
+    event.update!(form_id: form.id, require_approval: true)
 
     post "/api/v1/events/#{event.id}/participants",
       params: { form_answers: [{ field_id: field.id, value: "why me" }] }, headers: auth_headers(applicant)
@@ -617,7 +652,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     outsider = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(outsider)
@@ -634,7 +669,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     attendee = create_user
     group = create_group(owner: owner)
     create_membership(user: admin, group: group, role: "manager")
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(admin)
@@ -647,7 +682,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     cohost = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
     event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
     participant = create_participant(event: event, user: attendee, status: "pending")
 
@@ -661,7 +696,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     cohost = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     event.event_roles.create!(item_id: cohost.id, item_type: "User", role: "co_host")
     create_participant(event: event, user: attendee, status: "attending")
 
@@ -674,7 +709,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee, status: "attending")
 
     post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(owner)
@@ -685,7 +720,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
   test "approve 404s for an unknown participant" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
 
     post "/api/v1/events/#{event.id}/participants/does-not-exist/approve", headers: auth_headers(owner)
     assert_response :not_found
@@ -735,7 +770,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
   test "create increments participant_count only when attending" do
     owner = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
 
     post "/api/v1/events/#{event.id}/participants", headers: auth_headers(create_user)
     assert_equal 1, event.reload.participant_count
@@ -745,7 +780,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner)
+    event = create_event(group: group, owner: owner, status: "published")
     participant = create_participant(event: event, user: attendee, status: "attending")
     event.increment!(:participant_count)
 
@@ -776,7 +811,7 @@ class Api::V1::ParticipantsControllerTest < ActionDispatch::IntegrationTest
     owner = create_user
     attendee = create_user
     group = create_group(owner: owner)
-    event = create_event(group: group, owner: owner, require_approval: true)
+    event = create_event(group: group, owner: owner, require_approval: true, status: "published")
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     post "/api/v1/events/#{event.id}/participants/#{participant.id}/approve", headers: auth_headers(owner)

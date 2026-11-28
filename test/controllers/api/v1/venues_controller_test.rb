@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Api::V1::VenuesControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
+
   test "index lists venues" do
     user = create_user
     owner = create_user

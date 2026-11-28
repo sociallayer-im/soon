@@ -1,5 +1,13 @@
 class User < ApplicationRecord
+  scope :publicly_discoverable, -> { where(active: true).where("COALESCE(users.data->>'visibility', 'public') = 'public'") }
+  # Private notifications cannot retain foreign keys to a removed identity.
+  # Merging repoints both associations first; explicit account deletion removes them.
+  has_many :received_activities, class_name: "Activity", foreign_key: :receiver_id, dependent: :delete_all
+  has_many :initiated_activities, class_name: "Activity", foreign_key: :initiator_id, dependent: :delete_all
+  has_many :campaigns, foreign_key: :owner_id, dependent: :destroy
   has_many :memberships, dependent: :delete_all
+  has_many :follows, dependent: :destroy
+  has_many :incoming_follows, class_name: "Follow", as: :target, dependent: :destroy
   has_many :stripe_settings, dependent: :destroy
   has_many :withdrawals, dependent: :destroy
   has_many :groups, through: :memberships
@@ -28,6 +36,7 @@ class User < ApplicationRecord
   # merge must not hand a third party access to the surviving account. The
   # applications the user *owns* are repointed instead (UserMerger), since a
   # developer's clients should follow the developer.
+  has_many :soda_identities, inverse_of: :user, dependent: :delete_all
   has_many :oauth_applications, foreign_key: "owner_id", dependent: :destroy
   has_many :oauth_grants, dependent: :destroy
   has_many :oauth_access_tokens, dependent: :destroy
@@ -84,7 +93,7 @@ class User < ApplicationRecord
   end
 
   private def has_login_identity
-    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?)
+    return if [ email, phone, eth, sol, wechat_openid, wechat_unionid ].any?(&:present?) || soda_identities.any?
 
     errors.add(:base, "must have an email, eth, sol, or wechat identity")
   end

@@ -16,7 +16,7 @@ class Api::V1::RecurringController < Api::BaseController
     # Passed in explicitly because the blueprint's association would otherwise
     # render the unfiltered `recurring.events`.
     events = recurring.events.visible_to(current_user).order(:start_time)
-    render json: RecurringBlueprint.render(recurring, view: :with_events, visible_events: events)
+    render json: RecurringBlueprint.render(recurring, view: :with_events, visible_events: events.includes(:event_roles))
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end

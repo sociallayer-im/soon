@@ -1,10 +1,13 @@
 class Api::V1::GroupsController < Api::BaseController
+  include IdempotentCreation
   # Group pages and the public directory are public.
   skip_before_action :authenticate!, only: %i[show directory]
-  before_action :set_group, only: %i[update destroy freeze send_email]
+  before_action :set_group, only: %i[update destroy freeze send_email resubmit]
 
   def index
-    render_collection current_user.groups, blueprint: GroupBlueprint
+    scope = current_user.groups
+    scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
+    render_collection scope, blueprint: GroupBlueprint
   end
 
   # GET /api/v1/groups/directory — every active group, paginated.
@@ -18,7 +21,26 @@ class Api::V1::GroupsController < Api::BaseController
   # :card, because the cards show member/event counts and the tag state the
   # admin controls read.
   def directory
-    render_collection Group.where(active: true).order(:created_at),
+    authenticate_optional!
+    scope = Group.where(active: true).order(:created_at)
+    scope = scope.where(city: params[:city].to_s.strip) if params[:city].present?
+    if params[:purpose].present?
+      return render_error("请先登录", status: :unauthorized) unless current_user
+      return render_error("invalid purpose") unless %w[event post campaign].include?(params[:purpose])
+      if params[:purpose] == "campaign"
+        scope = scope.where(id: current_user.memberships.active.where(role: %w[owner manager]).select(:group_id)) unless current_user.platform_admin?
+        return render_collection scope, blueprint: GroupBlueprint, view: :card
+      end
+      allowed = scope.select do |group|
+        if params[:purpose] == "event"
+          EventPolicy.new(current_user, Event.new(group: group)).create?
+        else
+          group.discussion_enabled? && Category.visible_to(current_user, group: group).listed.any? { |category| TopicPolicy.new(current_user, Topic.new(group: group, category: category)).create? }
+        end
+      end.map(&:id)
+      scope = scope.where(id: allowed)
+    end
+    render_collection scope,
       blueprint: GroupBlueprint, view: :card
   end
 
@@ -30,9 +52,12 @@ class Api::V1::GroupsController < Api::BaseController
     # soon as there is a current_user, so a signed-in response is never stored.
     authenticate_optional!
     cache_when_anonymous!(max_age: 30)
-    group = Group.with_detail_associations.resolve!(params[:id])
+    compact = ActiveModel::Type::Boolean.new.cast(params[:compact])
+    scope = compact ? Group.includes(:parent, :children, tracks: :group) : Group.with_detail_associations
+    group = scope.resolve!(params[:id])
+    return render_not_found unless group.review_status == "approved" || GroupPolicy.new(current_user, group).manage?
     render json: GroupBlueprint.render(group, view: :detail,
-                                       member_group_ids: member_group_ids)
+                                       compact: compact, viewer: current_user, member_group_ids: member_group_ids, review_history: GroupPolicy.new(current_user,group).manage?)
   end
 
   # POST /api/v1/groups/:id/freeze
@@ -64,13 +89,25 @@ class Api::V1::GroupsController < Api::BaseController
   end
 
   def create
-    group = Group.new(group_params)
+    group = Group.new(group_params.merge(review_status: "pending", active: false))
     authorize group
+    group.name = "g#{SecureRandom.hex(9)}" if group.name.blank?
     return render_error("you do not manage the parent group", status: :forbidden) unless parent_ok?(group.parent_id)
 
+    manager_ids = Array(params[:manager_ids]).map(&:to_s).reject(&:blank?).uniq - [current_user.id]
+    return render_error("最多指定10位管理员") if manager_ids.length > 10
+    managers = User.where(id: manager_ids, active: true).to_a
+    return render_error("请选择有效且可用的管理员账号") unless managers.length == manager_ids.length
     ActiveRecord::Base.transaction do
       group.save!
-      group.add_member(current_user.id, "owner") # counter_cache keeps memberships_count right
+      group.add_member(current_user.id, "owner") # creator remains owner, never demoted
+      managers.each do |manager|
+        group.add_member(manager.id, "manager")
+        SiteNotifications.emit(receiver: manager, item: group, action: "membership_role", title: "你已被设为群组管理员",
+          body: "你已成为「#{group.nickname.presence || group.name}」的管理员。群组目前等待平台审核。", actor: current_user,
+          key: "group-manager:#{group.id}:#{manager.id}")
+      end
+      ReviewNotifications.submitted(group, applicant: current_user, cycle: "created")
     end
     # Enqueued after the transaction commits, not inside it — a job picked up
     # before the commit lands would look up a group that isn't there yet.
@@ -79,6 +116,18 @@ class Api::V1::GroupsController < Api::BaseController
                                        member_group_ids: member_group_ids), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
+  end
+
+  def resubmit
+    authorize @group, :manage?
+    @group.with_lock do
+      return render_error("仅已拒绝的申请可重新提交", status: :conflict) unless @group.review_status == "rejected"
+      @group.group_review_logs.create!(reviewer: current_user, decision: "resubmitted", reason: @group.review_reason)
+      @group.update!(review_status: "pending", active: false, review_reason: nil, reviewed_at: nil, reviewed_by_id: nil)
+      ReviewNotifications.submitted(@group, applicant: current_user)
+    end
+    GroupRegisteredMailJob.perform_later(group_id: @group.id)
+    render json: GroupBlueprint.render(@group, view: :detail)
   end
 
   def update
@@ -95,7 +144,7 @@ class Api::V1::GroupsController < Api::BaseController
 
   def destroy
     authorize @group
-    @group.destroy
+    return render_error(@group.errors.full_messages.join(", ")) unless @group.destroy
     head :no_content
   end
 
@@ -120,7 +169,7 @@ class Api::V1::GroupsController < Api::BaseController
   PRIVILEGED_TAGS = %w[featured top pin].freeze
 
   def group_params
-    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location,
+    permitted = params.require(:group).permit(:name, :nickname, :timezone, :location, :city, :latitude, :longitude,
       :start_date, :end_date, :bio, :image_url, :logo_url, :parent_id,
       :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
       :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,

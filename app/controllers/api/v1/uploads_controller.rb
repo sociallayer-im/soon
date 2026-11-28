@@ -1,6 +1,6 @@
 class Api::V1::UploadsController < Api::BaseController
   MAX_BYTES = 10.megabytes
-  ALLOWED_TYPES = %w[image/png image/jpeg image/gif image/webp image/svg+xml].freeze
+  ALLOWED_TYPES = %w[image/png image/jpeg image/gif image/webp].freeze
 
   # Documents an application form may ask for. Deliberately an allow-list and
   # deliberately narrow: the bucket is served from datastore.sola.day, a domain
@@ -39,8 +39,14 @@ class Api::V1::UploadsController < Api::BaseController
     return render_error("file too large (max #{MAX_BYTES / 1.megabyte}MB)") if file.size > MAX_BYTES
     return render_error("unsupported file type") unless ALLOWED_TYPES.include?(file.content_type)
 
-    url = ObjectStore.upload(io: file.to_io, content_type: file.content_type)
+    url = SafeImageUpload.upload!(file)
     render json: { url: url }
+  rescue WechatContentSafety::Rejected
+    render_error("发布内容含违规信息，请修改后重试。")
+  rescue WechatContentSafety::Unavailable
+    render_error("内容安全检测暂不可用，请稍后重试。", status: :service_unavailable)
+  rescue SafeImageUpload::InvalidImage => e
+    render_error(e.message)
   rescue ObjectStore::Error => e
     render_error(e.message, status: :bad_gateway)
   end
@@ -57,15 +63,25 @@ class Api::V1::UploadsController < Api::BaseController
     return render_error("file too large (max #{MAX_FILE_BYTES / 1.megabyte}MB)") if upload.size > MAX_FILE_BYTES
     return render_error("unsupported file type") unless ALLOWED_FILE_TYPES.include?(upload.content_type)
 
-    url = ObjectStore.upload(
-      io: upload.to_io,
-      content_type: upload.content_type,
-      filename: upload.original_filename
-    )
+    if upload.content_type.start_with?("image/")
+      url = SafeImageUpload.upload!(upload)
+    else
+      url = ObjectStore.upload(
+        io: upload.to_io,
+        content_type: upload.content_type,
+        filename: upload.original_filename
+      )
+    end
     # The original name travels alongside the URL rather than inside it: the
     # key is a content hash, so the link alone cannot tell the organizer
     # whether they are about to open a CV or a floor plan.
     render json: { url: url, filename: upload.original_filename, size: upload.size }
+  rescue WechatContentSafety::Rejected
+    render_error("发布内容含违规信息，请修改后重试。")
+  rescue WechatContentSafety::Unavailable
+    render_error("内容安全检测暂不可用，请稍后重试。", status: :service_unavailable)
+  rescue SafeImageUpload::InvalidImage => e
+    render_error(e.message)
   rescue ObjectStore::Error => e
     render_error(e.message, status: :bad_gateway)
   end

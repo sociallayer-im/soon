@@ -316,19 +316,12 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     assert_equal "+8613800138008", target.reload.phone, "the verified number was dropped by the merge"
   end
 
-  # --- phone before username ----------------------------------------------
-
-  # Enforced server-side, not just by the frontend's redirect chain: /register
-  # is reachable by typing it, and a name set early closes the merge window for
-  # a bind step that cannot be skipped.
-  test "a WeChat account cannot take a username before binding a phone" do
+  # Phone completion is a frontend flow, not an API prerequisite.
+  test "a WeChat account may update its username without a backend phone gate" do
     wechat = User.create!(wechat_openid: "openid_#{unique_suffix}")
-
-    patch "/api/v1/users/#{wechat.id}",
-      params: { user: { name: "too-early" } }, headers: auth_headers(wechat)
-
-    assert_response :unprocessable_entity
-    assert_nil wechat.reload.name
+    patch "/api/v1/users/#{wechat.id}", params: {user: {name: "phone-optional"}}, headers: auth_headers(wechat)
+    assert_response :success
+    assert_equal "phone-optional", wechat.reload.name
   end
 
   test "the same account can take a username once the phone is bound" do
@@ -414,4 +407,43 @@ class Api::V1::PhoneAuthTest < ActionDispatch::IntegrationTest
     post "/api/v1/auth/verify_phone_code", params: { phone: "13000130001", code: AuthCode.last.code }
     assert_response :success
   end
+  test "verified email account links to existing phone user and retains content" do
+    source = create_user(email: "link-#{unique_suffix}@example.com", nickname: "邮箱用户")
+    target = create_user(phone: "+8613800138011", email: nil)
+    group = create_group(owner: source)
+    event = create_event(group: group, owner: source)
+    campaign = Campaign.create!(group: group, owner: source, title: "保留的专题", status: "draft")
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "123456"}, headers: auth_headers(source)
+    assert_response :success
+    assert json_response["merged"]
+    assert_equal target.id, json_response["user"]["id"]
+    assert_equal target.phone, json_response["user"]["phone"]
+    assert_not User.exists?(source.id)
+    assert_equal source.email, target.reload.email
+    assert_equal target.id, event.reload.owner_id
+    assert_equal target.id, campaign.reload.owner_id
+    assert Membership.exists?(user: target, group: group, role: "owner")
+  end
+
+  test "email phone linking requires a valid bind code" do
+    source = create_user(email: "link-#{unique_suffix}@example.com")
+    target = create_user(phone: "+8613800138012", email: nil)
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "654321"}, headers: auth_headers(source)
+    assert_response :unauthorized
+    assert User.exists?(source.id)
+    assert_nil target.reload.email
+  end
+
+  test "conflicting existing email identities are preserved instead of overwritten" do
+    source = create_user(email: "source-#{unique_suffix}@example.com")
+    target = create_user(phone: "+8613800138013", email: "target-#{unique_suffix}@example.com")
+    AuthCode.create!(recipient: target.phone, recipient_type: "phone", context: "bind_phone", code: "123456")
+    post "/api/v1/auth/bind_phone", params: {phone: target.phone, code: "123456"}, headers: auth_headers(source)
+    assert_response :unprocessable_entity
+    assert User.exists?(source.id)
+    assert_not_equal source.email, target.reload.email
+  end
+
 end

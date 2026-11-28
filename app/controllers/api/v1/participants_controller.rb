@@ -1,4 +1,8 @@
 class Api::V1::ParticipantsController < Api::BaseController
+  class PaidRefundRequired < StandardError; end
+  rescue_from PaidRefundRequired do
+    render json: {error: "请先提交退出与退款申请，退款成功后会自动退出活动", code: "PAID_REFUND_REQUIRED"}, status: :unprocessable_entity
+  end
   # Reading the attendee list is as public as reading the event: the same list
   # has always been embedded in GET /events/:id, which anonymous visitors may
   # call. Now that the detail page can ask for the event without it, that page
@@ -19,12 +23,33 @@ class Api::V1::ParticipantsController < Api::BaseController
     # the attendees of a draft or private one. Matching EventPolicy#show? ties
     # the list to the same visibility rule as the event that owns it.
     authorize @event, :show?
-    render_collection @event.participants.active.includes(:user), blueprint: ParticipantBlueprint
+    scope = @event.participants.active
+    scope = scope.where(status: "attending").where(payment_status: [nil, "succeeded"]) unless EventPolicy.new(current_user, @event).update?
+    manager = EventPolicy.new(current_user, @event).update?
+    scope = scope.where(status: params[:status]) if manager && Participant::STATUSES.include?(params[:status])
+    scope = scope.order(Arel.sql("CASE WHEN participants.status = 'pending' THEN 0 WHEN participants.status = 'awaiting_payment' THEN 1 ELSE 2 END"), registered_at: :desc, id: :desc)
+    limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i.clamp(1, PAGY_MAX_LIMIT)
+    page_users = scope.limit(limit).offset([params.fetch(:page, 1).to_i - 1, 0].max * limit).pluck(:user_id)
+    answers = {}
+    if manager && @event.form_id
+      FormSubmission.where(form_id: @event.form_id, user_id: page_users).includes(form_answers: :form_field).each do |submission|
+        answers[submission.user_id] = submission.form_answers.reject { |a| a.form_field.for_admin }.map { |a| {label: a.form_field.label, value: a.value} }
+      end
+    end
+    review_tickets = {}
+    if manager
+      TicketItem.where(event_id: @event.id, user_id: page_users).where.not(participant_id: nil).includes(:ticket).order(:created_at).each do |item|
+        (review_tickets[item.participant_id] ||= []) << {id: item.id, title: item.ticket.title, amount: item.amount.to_i, currency: item.currency, status: item.status}
+      end
+    end
+    render_collection scope.includes(:user), blueprint: ParticipantBlueprint, manager: manager, application_answers: answers, review_tickets: review_tickets
   end
 
   # POST /api/v1/events/:event_id/participants
   def create
     authorize @event, :join?
+    return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
+    return render_error("请选择票种后报名") if @event.tickets.where(status: "normal").exists?
 
     if @event.form_id
       required_field_ids = FormField.where(form_id: @event.form_id, required: true, for_admin: false).pluck(:id)
@@ -38,71 +63,74 @@ class Api::V1::ParticipantsController < Api::BaseController
       end
     end
 
-    is_manager = current_user.memberships.exists?(group: @event.group, role: %w[manager owner])
-    status = params.dig(:participant, :status) || "attending"
-    status = "pending" if (@event.require_approval || @event.form_id.present?) && !is_manager
+    @event.with_lock do
+      return render_error("活动尚未开放报名或报名已结束") unless @event.registration_open?
+      is_manager = current_user.memberships.active.exists?(group: @event.group, role: %w[manager owner])
+      status = "attending"
+      status = "pending" if @event.require_approval && !is_manager
 
-    existing = @event.participants.find_by(user_id: current_user.id)
-    # Re-joining after withdrawing REUSES the soft-deleted row — (user_id,
-    # event_id) is unique, so a second insert would fail. A rejected applicant
-    # may re-apply for the same reason a withdrawn one may re-join: neither
-    # holds a seat, and "declined" is not meant to be a permanent ban — the
-    # transition table has allowed declined → pending/attending all along, it
-    # was only this guard that made it unreachable. Anything else that already
-    # exists is still a duplicate join and rejected as before.
-    if existing && !existing.cancelled? && existing.status != "declined"
-      return render_error("User can only participate once per event")
-    end
+      existing = @event.participants.find_by(user_id: current_user.id)
+      # Re-joining after withdrawing REUSES the soft-deleted row — (user_id,
+      # event_id) is unique, so a second insert would fail. A rejected applicant
+      # may re-apply for the same reason a withdrawn one may re-join: neither
+      # holds a seat, and "declined" is not meant to be a permanent ban — the
+      # transition table has allowed declined → pending/attending all along, it
+      # was only this guard that made it unreachable. Anything else that already
+      # exists is still a duplicate join and rejected as before.
+      if existing && !existing.status.in?(%w[cancelled declined maybe])
+        return render_error("User can only participate once per event")
+      end
 
-    # registered_at is re-stamped on reuse: they signed up again, and the old
-    # value would misreport when. It is set on this path at all because the
-    # ticket flow always stamped it and the free/direct join never did,
-    # leaving the signup time blank for exactly the events that have no
-    # tickets.
-    participant = existing || @event.participants.new(user: current_user)
+      # registered_at is re-stamped on reuse: they signed up again, and the old
+      # value would misreport when. It is set on this path at all because the
+      # ticket flow always stamped it and the free/direct join never did,
+      # leaving the signup time blank for exactly the events that have no
+      # tickets.
+      participant = existing || @event.participants.new(user: current_user)
 
-    # Only a status that counts toward capacity needs the check — a "pending"
-    # join (awaiting approval) doesn't occupy a seat yet, matching sails/'s
-    # "only count confirmed attendees; pending waits until approval". A
-    # cancelled row occupies nothing, so re-joining takes a seat like a first
-    # join does.
-    if status == "attending" && (err = capacity_error)
-      return render_error(err)
-    end
+      # Only a status that counts toward capacity needs the check — a "pending"
+      # join (awaiting approval) doesn't occupy a seat yet, matching sails/'s
+      # "only count confirmed attendees; pending waits until approval". A
+      # cancelled row occupies nothing, so re-joining takes a seat like a first
+      # join does.
+      if status == "attending" && (err = capacity_error)
+        return render_error(err)
+      end
 
-    participant.assign_attributes(status: status, registered_at: Time.current)
+      participant.assign_attributes(status: status, registered_at: Time.current, checked_in_at: nil, cancelled_at: nil, reviewed_at: nil, reviewed_by: nil, review_reason: nil, cancellation_reason: nil, payment_due_at: nil)
 
-    ActiveRecord::Base.transaction do
-      participant.save!
-      @event.increment!(:participant_count) if status == "attending"
+      ActiveRecord::Base.transaction do
+        participant.save!
+        @event.increment!(:participant_count) if status == "attending"
 
-      if @event.form_id
-        # The submission's status has to follow the application's, or the
-        # organizer's list keeps showing the old verdict. This matters now that
-        # a REJECTED applicant may apply again: without it their submission
-        # would still read "rejected" while the participant is back to
-        # "pending", and the two views of one application would disagree.
-        #
-        # A submission is only created when there are answers, though — an
-        # empty row for a form nobody filled in is not a response.
-        submission = FormSubmission.find_by(form_id: @event.form_id, user_id: current_user.id)
-        if params[:form_answers].present?
-          submission ||= FormSubmission.new(form_id: @event.form_id, user_id: current_user.id)
-          submission.submitted_at = Time.current
-        end
-
-        if submission
-          submission.status = "pending"
-          submission.save!
+        if @event.form_id
+          # The submission's status has to follow the application's, or the
+          # organizer's list keeps showing the old verdict. This matters now that
+          # a REJECTED applicant may apply again: without it their submission
+          # would still read "rejected" while the participant is back to
+          # "pending", and the two views of one application would disagree.
+          #
+          # A submission is only created when there are answers, though — an
+          # empty row for a form nobody filled in is not a response.
+          submission = FormSubmission.find_by(form_id: @event.form_id, user_id: current_user.id)
           if params[:form_answers].present?
-            FormBuilder.record_answers!(submission, params[:form_answers],
-                                        FormField.where(form_id: @event.form_id).pluck(:id))
+            submission ||= FormSubmission.new(form_id: @event.form_id, user_id: current_user.id)
+            submission.submitted_at = Time.current
+          end
+
+          if submission
+            submission.status = status == "pending" ? "pending" : "approved"
+            submission.save!
+            if params[:form_answers].present?
+              FormBuilder.record_answers!(submission, params[:form_answers],
+                                          FormField.where(form_id: @event.form_id, for_admin: false).pluck(:id))
+            end
           end
         end
       end
-    end
 
-    render json: ParticipantBlueprint.render(participant), status: :created
+      render json: ParticipantBlueprint.render(participant, own: true), status: :created
+    end
   rescue ActiveRecord::RecordInvalid => e
     render_error(e.record.errors.full_messages.join(", "))
   end
@@ -117,19 +145,16 @@ class Api::V1::ParticipantsController < Api::BaseController
     end
 
     new_status = params.dig(:participant, :status)
-    if participant.seated? && new_status != "attending" && participant.ticket_items.any? { |order| refundable_charge?(order) }
-      return render_error("refund required before cancel")
+    # PATCH is retained for older clients, but must not provide a second
+    # registration/payment/review entrance. All exits use the same teardown.
+    unless new_status == "maybe"
+      return render_error("请通过报名入口重新报名，审核及支付完成后将自动确认")
     end
-
-    was_seated = participant.seated?
-    will_be_seated = Participant::SEATED.include?(new_status)
-    if will_be_seated && !was_seated && (err = capacity_error)
-      return render_error(err)
-    end
-
-    # transition! moves participant_count itself — the seat follows the status.
-    participant.transition!(new_status)
-    render json: ParticipantBlueprint.render(participant)
+    return render_error("只有已确认报名可以标记为可能参加") if participant.status != "attending"
+    withdraw_participant!(participant, status: new_status)
+    render json: ParticipantBlueprint.render(participant, own: true)
+  rescue TicketItem::InvalidTransition, Stripe::StripeError => e
+    render_error(e.message)
   rescue Participant::InvalidTransition => e
     render_error(e.message)
   rescue ActiveRecord::RecordInvalid => e
@@ -150,23 +175,10 @@ class Api::V1::ParticipantsController < Api::BaseController
     unless participant.user_id == current_user.id || EventPolicy.new(current_user, @event).update?
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    return head :no_content if participant.status == "cancelled" # idempotent
-
-    ActiveRecord::Base.transaction do
-      orders = participant.ticket_items.order(:id).lock.to_a
-      if participant.user_id == current_user.id && orders.any? { |order| refundable_charge?(order) }
-        return render_error("refund required before cancel")
-      end
-
-      release_orders!(orders)
-      # Cancelling the last live order already withdraws the participant
-      # (TicketItem#settle_participant!), so only transition if it didn't.
-      # Either way the seat is given back exactly once, by whichever
-      # transition! actually ran.
-      participant.reload
-      participant.transition!(:cancelled) unless participant.cancelled?
-    end
+    withdraw_participant!(participant, require_refund: participant.user_id == current_user.id)
     head :no_content
+  rescue TicketItem::InvalidTransition, Stripe::StripeError => e
+    render_error(e.message)
   rescue Participant::InvalidTransition
     # Two withdrawals in flight at once — a double-click on the cancel button,
     # which is a thing people do to a button that reloads the page. The other
@@ -182,12 +194,11 @@ class Api::V1::ParticipantsController < Api::BaseController
   def approve
     authorize @event, :update?
     participant = @event.participants.find(params[:id])
-    return render_error("participant is not pending") unless participant.status == "pending"
-
-    participant.transition!(:attending)
-    sync_form_submission!(participant, "approved")
+    RegistrationReview.approve!(participant, actor: current_user)
     EventMailer.participant_approved(participant_id: participant.id).deliver_later
-    render json: ParticipantBlueprint.render(participant)
+    render json: ParticipantBlueprint.render(participant, own: true)
+  rescue RegistrationReview::Error => e
+    render_error(e.message)
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -198,12 +209,11 @@ class Api::V1::ParticipantsController < Api::BaseController
   def reject
     authorize @event, :update?
     participant = @event.participants.find(params[:id])
-    return render_error("participant is not pending") unless participant.status == "pending"
-
-    participant.transition!(:declined)
-    sync_form_submission!(participant, "rejected")
+    RegistrationReview.reject!(participant, actor: current_user, reason: params[:reason])
     EventMailer.participant_rejected(participant_id: participant.id).deliver_later
-    render json: ParticipantBlueprint.render(participant)
+    render json: ParticipantBlueprint.render(participant, own: true)
+  rescue RegistrationReview::Error => e
+    render_error(e.message)
   rescue ActiveRecord::RecordNotFound
     render_not_found
   end
@@ -216,24 +226,81 @@ class Api::V1::ParticipantsController < Api::BaseController
   # column made every registrant look checked in.
   def check_in
     authorize @event, :update?
-    # .active — someone who withdrew is not at the door.
-    participant = @event.participants.active.find_by(user_id: params[:user_id])
-    return render_error("user is not a participant of this event") unless participant
+    participant = if params[:token].present?
+      data = Rails.application.message_verifier("event-ticket").verified(params[:token], purpose: "check_in")
+      return render_error("无效或已过期的票券") unless data && data["event_id"] == @event.id
+      return check_in_team!(data["team_user_id"]) if data["team_user_id"]
+      @event.participants.find_by(id: data["participant_id"], registered_at: data["registered_at"])
+    else
+      return check_in_team!(params[:user_id]) if team_member?(params[:user_id])
+      @event.participants.find_by(user_id: params[:user_id])
+    end
+    return render_error("该用户尚未报名此活动") unless participant
 
-    participant.update!(checked_in_at: Time.current)
-    render json: ParticipantBlueprint.render(participant)
+    participant.with_lock do
+      participant.refresh_payment_status!
+      return render_error("报名未审核通过或已取消") unless participant.status == "attending"
+      return render_error("票券尚未支付或已失效") unless participant.payment_status.nil? || participant.payment_status == "succeeded"
+      participant.update!(checked_in_at: Time.current) unless participant.checked_in_at
+    end
+    render json: ParticipantBlueprint.render(participant, own: true)
+  end
+
+  # Only the holder can obtain their event-bound, short-lived credential.
+  def ticket_pass
+    if team_member?(current_user.id)
+      token = Rails.application.message_verifier("event-ticket").generate(
+        {"event_id" => @event.id, "team_user_id" => current_user.id}, purpose: "check_in", expires_in: 15.minutes)
+      stamp = EventTeamCheckIn.find_by(event: @event, user: current_user)&.checked_in_at
+      return render json: {participant: {status: "attending", checked_in_at: stamp, user: JSON.parse(UserBlueprint.render(current_user))},
+                           token: token, expires_in: 900, tickets: [], team: true}
+    end
+    participant = @event.participants.find_by!(user: current_user)
+    participant.refresh_payment_status!
+    eligible = participant.status == "attending" && [nil, "succeeded"].include?(participant.payment_status)
+    token = if eligible
+      Rails.application.message_verifier("event-ticket").generate(
+        { "event_id" => @event.id, "participant_id" => participant.id,
+          "registered_at" => participant.registered_at&.iso8601(6) },
+        purpose: "check_in", expires_in: 15.minutes)
+    end
+    render json: { participant: JSON.parse(ParticipantBlueprint.render(participant)),
+                   token: token, expires_in: eligible ? 900 : 0,
+                   tickets: JSON.parse(TicketItemBlueprint.render(participant.ticket_items.includes(:ticket), view: :order_detail)) }
+  rescue ActiveRecord::RecordNotFound
+    render_not_found
   end
 
   private
 
-  # The approval decision lives on the participant; the application form's
-  # submission carried its own status that nobody ever advanced, so a decided
-  # applicant still read as "pending" in the submissions list.
-  def sync_form_submission!(participant, status)
-    return unless @event.form_id
+  def team_member?(user_id)
+    user = User.find_by(id: user_id)
+    user && Event.team_for(user).exists?(id: @event.id) && @event.status.in?(%w[published closed])
+  end
 
-    FormSubmission.where(form_id: @event.form_id, user_id: participant.user_id)
-                  .update_all(status: status, updated_at: Time.current)
+  def check_in_team!(user_id)
+    return render_error("活动角色已移除或活动不可入场") unless team_member?(user_id)
+    check_in = EventTeamCheckIn.create_or_find_by!(event: @event, user_id: user_id) do |record|
+      record.checked_in_at = Time.current
+    end
+    render json: {status: "attending", checked_in_at: check_in.checked_in_at, team: true,
+                  user: JSON.parse(UserBlueprint.render(User.find(user_id)))}
+  end
+
+  def withdraw_participant!(participant, status: "cancelled", require_refund: true)
+    @event.with_lock do
+      participant.with_lock do
+        return if participant.status == status
+
+        raise PaidRefundRequired if require_refund && RefundRequest.required_before_exit?(participant)
+        release_orders!(participant)
+        participant.reload
+        if participant.status != status
+          participant.transition!(status)
+        end
+        RegistrationReview.sync_form!(participant, "cancelled")
+      end
+    end
   end
 
   # Hands back the ticket units and coupon usage the withdrawing participant
@@ -244,12 +311,8 @@ class Api::V1::ParticipantsController < Api::BaseController
   # attendee withdrawing is not a refund, and the event owner must still be
   # able to refund it afterwards from the order list — which is why the
   # participant link is left intact too.
-  def refundable_charge?(order)
-    order.amount.to_i.positive? && order.status.in?(%w[succeeded partially_refunded disputed])
-  end
-
-  def release_orders!(orders)
-    orders.each do |item|
+  def release_orders!(participant)
+    TicketItem.where(event_id: @event.id, participant_id: participant.id).each do |item|
       case item.status
       when "pending"
         item.cancel # marks cancelled and releases the hold
@@ -274,7 +337,7 @@ class Api::V1::ParticipantsController < Api::BaseController
   # cover max_participant (rsvp has no ticket-quantity-independent event cap
   # to check; the free/direct-join path does).
   def capacity_error
-    return "event is full" if @event.max_participant && @event.participant_count.to_i >= @event.max_participant
+    return "event is full" if RegistrationReview.capacity_full?(@event)
 
     if @event.venue&.capacity.to_i > 0 && @event.participant_count.to_i >= @event.venue.capacity
       return "exceed venue capacity"

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_21_104400) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -21,12 +21,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "initiator_id", null: false
     t.string "item_id"
     t.string "item_type"
+    t.string "notification_key"
     t.jsonb "payload", default: {}
     t.string "receiver_address"
     t.string "receiver_id"
     t.index ["created_at"], name: "index_activities_on_created_at"
     t.index ["initiator_id"], name: "index_activities_on_initiator_id"
     t.index ["item_type", "item_id"], name: "index_activities_on_item_type_and_item_id"
+    t.index ["receiver_id", "created_at", "id"], name: "idx_activities_receiver_timeline"
+    t.index ["receiver_id", "notification_key"], name: "index_activities_notification_dedup", unique: true, where: "(notification_key IS NOT NULL)"
+    t.index ["receiver_id"], name: "idx_activities_receiver_unread", where: "(has_read = false)"
     t.index ["receiver_id"], name: "index_activities_on_receiver_id"
   end
 
@@ -140,6 +144,53 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["voucher_id"], name: "index_badges_on_voucher_id"
   end
 
+  create_table "campaign_events", id: :string, force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["campaign_id", "event_id"], name: "index_campaign_events_on_campaign_id_and_event_id", unique: true
+    t.index ["campaign_id"], name: "index_campaign_events_on_campaign_id"
+    t.index ["event_id"], name: "index_campaign_events_on_event_id"
+  end
+
+  create_table "campaign_review_logs", id: :string, force: :cascade do |t|
+    t.string "campaign_id", null: false
+    t.datetime "created_at", null: false
+    t.string "decision", null: false
+    t.text "reason"
+    t.string "reviewer_id"
+    t.datetime "updated_at", null: false
+    t.index ["campaign_id"], name: "index_campaign_review_logs_on_campaign_id"
+    t.index ["reviewer_id"], name: "index_campaign_review_logs_on_reviewer_id"
+  end
+
+  create_table "campaigns", id: :string, force: :cascade do |t|
+    t.string "cover_url"
+    t.datetime "created_at", null: false
+    t.string "group_id", null: false
+    t.text "introduction"
+    t.string "kicker"
+    t.jsonb "media", default: [], null: false
+    t.string "owner_id", null: false
+    t.string "positions", default: [], null: false, array: true
+    t.string "resource_links", default: [], null: false, array: true
+    t.text "review_reason"
+    t.string "review_status", default: "pending", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
+    t.string "status", default: "draft", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["group_id", "status"], name: "index_campaigns_on_group_id_and_status"
+    t.index ["group_id"], name: "index_campaigns_on_group_id"
+    t.index ["owner_id"], name: "index_campaigns_on_owner_id"
+    t.index ["review_status", "created_at", "id"], name: "index_campaigns_on_review_status_and_created_at_and_id"
+    t.index ["reviewed_by_id"], name: "index_campaigns_on_reviewed_by_id"
+    t.index ["status", "review_status", "created_at", "id"], name: "index_campaigns_public_review"
+  end
+
   create_table "cart_items", id: :string, force: :cascade do |t|
     t.string "cart_id", null: false
     t.datetime "created_at", null: false
@@ -202,9 +253,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.index ["fed_uri"], name: "index_comments_on_fed_uri", unique: true, where: "(fed_uri IS NOT NULL)"
+    t.index ["item_type", "item_id", "comment_type", "created_at", "id"], name: "index_comments_for_newest_threads", where: "(removed = false)"
     t.index ["item_type", "item_id", "removed"], name: "index_comments_on_item_type_and_item_id_and_removed"
     t.index ["user_id", "comment_type"], name: "index_comments_on_user_id_and_comment_type"
     t.index ["user_id"], name: "index_comments_on_user_id"
+  end
+
+  create_table "content_reports", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "decision"
+    t.string "reason", null: false
+    t.string "reporter_id", null: false
+    t.text "restore_note"
+    t.datetime "restored_at"
+    t.string "restored_by_id"
+    t.text "review_note"
+    t.datetime "reviewed_at"
+    t.string "reviewer_id"
+    t.string "status", default: "pending", null: false
+    t.string "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["reporter_id", "target_type", "target_id"], name: "index_content_reports_pending_unique", unique: true, where: "((status)::text = 'pending'::text)"
+    t.index ["status", "created_at", "id"], name: "index_content_reports_on_status_and_created_at_and_id"
+  end
+
+  create_table "content_safety_images", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "sha256", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["url"], name: "index_content_safety_images_on_url", unique: true
   end
 
   create_table "coupon_redemptions", id: :string, force: :cascade do |t|
@@ -246,6 +325,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["owner_type", "owner_id"], name: "index_coupons_on_owner_type_and_owner_id"
   end
 
+  create_table "creation_receipts", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "fingerprint", null: false
+    t.string "request_key", null: false
+    t.text "response_body", null: false
+    t.integer "response_status", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["user_id", "request_key"], name: "index_creation_receipts_on_user_id_and_request_key", unique: true
+    t.index ["user_id"], name: "index_creation_receipts_on_user_id"
+  end
+
   create_table "domains", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "fullname"
@@ -266,8 +357,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "item_type", null: false, comment: "user | group"
     t.string "role", null: false, comment: "member | manager"
     t.datetime "updated_at", null: false
+    t.index ["email", "event_id"], name: "idx_event_roles_email_agenda", where: "(((item_type)::text = 'User'::text) AND (email IS NOT NULL))"
     t.index ["event_id", "item_id", "item_type"], name: "index_event_roles_on_event_id_and_item_id_and_item_type", unique: true
     t.index ["event_id"], name: "index_event_roles_on_event_id"
+    t.index ["item_id", "event_id"], name: "idx_event_roles_user_agenda", where: "((item_type)::text = 'User'::text)"
+  end
+
+  create_table "event_team_check_ins", id: :string, force: :cascade do |t|
+    t.datetime "checked_in_at", null: false
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["event_id", "user_id"], name: "index_event_team_check_ins_on_event_id_and_user_id", unique: true
+    t.index ["event_id"], name: "index_event_team_check_ins_on_event_id"
+    t.index ["user_id"], name: "index_event_team_check_ins_on_user_id"
   end
 
   create_table "events", id: :string, force: :cascade do |t|
@@ -283,6 +387,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "kind"
     t.integer "max_participant"
     t.string "meeting_url"
+    t.datetime "moderated_at"
+    t.string "moderated_by_id"
+    t.text "moderation_reason"
     t.text "notes"
     t.string "op_assigned_users", default: [], array: true
     t.string "op_labels", default: [], array: true
@@ -306,11 +413,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
     t.string "venue_id"
     t.string "visibility", default: "normal", comment: "normal | open_registration | unlisted"
+    t.index ["end_time", "start_time"], name: "idx_events_discovery_end", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["form_id"], name: "index_events_on_form_id"
+    t.index ["group_id", "created_at", "id"], name: "idx_events_discovery_contribution", order: { created_at: :desc, id: :desc }, where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
+    t.index ["group_id", "start_time", "id"], name: "idx_events_discovery_group_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
     t.index ["group_id"], name: "index_events_on_group_id"
+    t.index ["owner_id", "start_time", "id"], name: "idx_events_owner_start"
     t.index ["owner_id"], name: "index_events_on_owner_id"
     t.index ["place_id"], name: "index_events_on_place_id"
     t.index ["ref_id"], name: "index_events_on_ref_id", where: "(ref_id IS NOT NULL)"
+    t.index ["start_time", "id"], name: "idx_events_discovery_start", where: "(((status)::text = 'published'::text) AND ((visibility)::text = ANY (ARRAY[('normal'::character varying)::text, ('open_registration'::character varying)::text])))"
+    t.index ["tags"], name: "index_events_on_tags", using: :gin
     t.index ["track_id"], name: "index_events_on_track_id"
     t.index ["venue_id"], name: "index_events_on_venue_id"
   end
@@ -459,6 +572,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "user_id", null: false
     t.index ["uri"], name: "index_fed_participations_on_uri", unique: true
     t.index ["user_id", "fed_event_id"], name: "index_fed_participations_on_user_id_and_fed_event_id", unique: true
+  end
+
+  create_table "follows", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "status", default: "active", null: false
+    t.string "target_id", null: false
+    t.string "target_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["target_type", "target_id", "created_at"], name: "index_follows_on_target_type_and_target_id_and_created_at"
+    t.index ["user_id", "target_type", "target_id"], name: "index_follows_on_user_id_and_target_type_and_target_id", unique: true
+    t.check_constraint "NOT (target_type::text = 'User'::text AND target_id::text = user_id::text)", name: "follows_no_self"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'pending'::character varying::text, 'declined'::character varying::text])", name: "follows_status_valid"
+    t.check_constraint "target_type::text = ANY (ARRAY['User'::character varying::text, 'Group'::character varying::text])", name: "follows_target_type_valid"
   end
 
   create_table "form_answers", id: :string, force: :cascade do |t|
@@ -629,9 +756,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "status", default: "sending", null: false, comment: "sending | requesting | accepted | cancelled | revoked"
     t.string "ticket_id"
     t.datetime "updated_at", null: false
+    t.index ["group_id", "status", "created_at", "id"], name: "idx_group_invites_review_tasks"
     t.index ["group_id"], name: "index_group_invites_on_group_id"
     t.index ["receiver_id"], name: "index_group_invites_on_receiver_id"
     t.index ["sender_id"], name: "index_group_invites_on_sender_id"
+  end
+
+  create_table "group_review_logs", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "decision", null: false
+    t.string "group_id", null: false
+    t.text "reason"
+    t.string "reviewer_id"
+    t.datetime "updated_at", null: false
+    t.index ["group_id"], name: "index_group_review_logs_on_group_id"
+    t.index ["reviewer_id"], name: "index_group_review_logs_on_reviewer_id"
   end
 
   create_table "groups", id: :string, force: :cascade do |t|
@@ -640,19 +779,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "banner_link_url"
     t.text "banner_text"
     t.text "bio"
+    t.string "browse_city"
     t.string "can_create_hackathon", default: "manager", comment: "manager | member | everyone"
     t.string "can_create_poll", default: "member", comment: "manager | member | everyone"
     t.string "can_join_event", default: "everyone", comment: "manager | member | everyone"
-    t.string "can_post_topic", default: "member", comment: "manager | member | everyone"
+    t.string "can_post_topic", default: "everyone", comment: "manager | member | everyone"
     t.string "can_publish_event", default: "everyone", comment: "manager | member | everyone"
     t.string "can_view_event", default: "everyone", comment: "manager | member | everyone"
+    t.string "city"
     t.datetime "created_at", null: false
     t.string "custom_domain"
     t.string "custom_domain_pending"
     t.string "custom_domain_token"
     t.datetime "custom_domain_verified_at"
     t.jsonb "data", default: {}
-    t.boolean "discussion_enabled", default: false, null: false
+    t.datetime "discovery_active_at"
+    t.boolean "discussion_enabled", default: true, null: false
     t.date "end_date"
     t.string "event_tag_list", default: [], array: true
     t.string "event_union", array: true
@@ -668,8 +810,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "group_ticket_event_id"
     t.boolean "hackathon_enabled", default: false, null: false
     t.string "image_url"
+    t.decimal "latitude", precision: 10, scale: 6
     t.string "location"
     t.string "logo_url"
+    t.decimal "longitude", precision: 10, scale: 6
     t.boolean "map_enabled", default: false, null: false
     t.integer "memberships_count", default: 0, null: false
     t.string "name"
@@ -681,16 +825,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "ref_id"
     t.boolean "require_event_approval", default: false, null: false
     t.string "requirement_tag_list", default: [], array: true
+    t.text "review_reason"
+    t.string "review_status", default: "approved", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
     t.jsonb "social_links", default: {}
     t.date "start_date"
     t.string "timezone"
     t.datetime "updated_at", null: false
     t.string "venue_tag_list", default: [], array: true
     t.string "venue_union", array: true
+    t.index ["browse_city", "discovery_active_at", "id"], name: "idx_groups_discovery_city_activity", order: { discovery_active_at: "DESC NULLS LAST", id: :desc }, where: "((active = true) AND ((review_status)::text = 'approved'::text))"
+    t.index ["city"], name: "index_groups_on_city"
     t.index ["custom_domain"], name: "index_groups_on_custom_domain", unique: true, where: "(custom_domain IS NOT NULL)"
     t.index ["name"], name: "index_groups_on_name", unique: true
     t.index ["parent_id"], name: "index_groups_on_parent_id"
     t.index ["ref_id"], name: "index_groups_on_ref_id", where: "(ref_id IS NOT NULL)"
+    t.index ["review_status", "created_at"], name: "index_groups_on_review_status_and_created_at"
+    t.index ["reviewed_by_id"], name: "index_groups_on_reviewed_by_id"
+    t.check_constraint "review_status::text = ANY (ARRAY['pending'::character varying::text, 'approved'::character varying::text, 'rejected'::character varying::text])", name: "groups_review_status"
   end
 
   create_table "hackathon_project_members", id: :string, force: :cascade do |t|
@@ -805,6 +958,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "user_id", null: false
     t.index ["expires_at"], name: "index_memberships_on_expires_at"
     t.index ["group_id", "role"], name: "index_memberships_on_group_id_and_role"
+    t.index ["group_id", "user_id"], name: "idx_memberships_group_user_discovery"
     t.index ["group_id"], name: "index_memberships_on_group_id"
     t.index ["user_id", "group_id"], name: "index_memberships_on_user_id_and_group_id", unique: true
     t.index ["user_id"], name: "index_memberships_on_user_id"
@@ -955,6 +1109,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
 
   create_table "participants", id: :string, force: :cascade do |t|
     t.string "badge_id"
+    t.string "cancellation_reason"
     t.datetime "cancelled_at"
     t.datetime "checked_in_at"
     t.datetime "created_at", null: false
@@ -962,16 +1117,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "fed_actor_id"
     t.string "fed_join_uri"
     t.string "message"
+    t.datetime "payment_due_at"
     t.string "payment_status", comment: "derived summary of this participant's ticket_items; see Participant#refresh_payment_status!"
     t.datetime "registered_at"
+    t.text "review_reason"
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
     t.string "status", default: "attending", null: false, comment: "attending | pending | declined | maybe | cancelled — see Participant"
     t.datetime "updated_at", null: false
     t.string "user_id"
     t.string "voucher_id"
+    t.index ["event_id", "payment_due_at"], name: "idx_participants_payment_holds", where: "((status)::text = 'awaiting_payment'::text)"
     t.index ["event_id", "status"], name: "index_participants_on_event_id_and_status"
     t.index ["event_id"], name: "index_participants_on_event_id"
     t.index ["fed_actor_id", "event_id"], name: "index_participants_on_fed_actor_id_and_event_id", unique: true, where: "(fed_actor_id IS NOT NULL)"
     t.index ["fed_join_uri"], name: "index_participants_on_fed_join_uri", unique: true, where: "(fed_join_uri IS NOT NULL)"
+    t.index ["reviewed_by_id"], name: "index_participants_on_reviewed_by_id"
+    t.index ["user_id", "event_id"], name: "idx_participants_confirmed_agenda", where: "(((status)::text = 'attending'::text) AND ((payment_status IS NULL) OR ((payment_status)::text = 'succeeded'::text)))"
     t.index ["user_id", "event_id"], name: "index_participants_on_user_id_and_event_id", unique: true
     t.index ["user_id"], name: "index_participants_on_user_id"
   end
@@ -1124,6 +1286,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "refund_requests", id: :string, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "reason"
+    t.string "refund_id"
+    t.text "review_reason"
+    t.datetime "reviewed_at"
+    t.string "reviewed_by_id"
+    t.string "status", default: "requested", null: false
+    t.string "ticket_item_id", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["refund_id"], name: "index_refund_requests_on_refund_id", unique: true
+    t.index ["reviewed_by_id"], name: "index_refund_requests_on_reviewed_by_id"
+    t.index ["status", "created_at", "id"], name: "index_refund_requests_on_status_and_created_at_and_id"
+    t.index ["ticket_item_id"], name: "index_refund_requests_on_ticket_item_id"
+    t.index ["ticket_item_id"], name: "index_refund_requests_one_open", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('processing'::character varying)::text]))"
+    t.index ["user_id"], name: "index_refund_requests_on_user_id"
+  end
+
   create_table "refunds", id: :string, force: :cascade do |t|
     t.string "after_sale_request_id", comment: "the shop's after-sale case this refund settles, when there is one"
     t.integer "amount", null: false, comment: "minor units; equal to the item amount for a full refund"
@@ -1140,7 +1321,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "ticket_item_id"
     t.datetime "updated_at", null: false
     t.index ["refundable_type", "refundable_id"], name: "index_refunds_on_refundable_type_and_refundable_id"
-    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying])::text[])))"
+    t.index ["refundable_type", "refundable_id"], name: "index_refunds_one_live_full_refund_per_refundable", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
     t.index ["ticket_item_id"], name: "index_refunds_on_ticket_item_id"
     t.index ["ticket_item_id"], name: "index_refunds_one_live_full_refund_per_item", unique: true, where: "(full_refund AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('succeeded'::character varying)::text])))"
   end
@@ -1253,6 +1434,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.index ["group_id"], name: "index_shops_on_group_id", unique: true
   end
 
+  create_table "soda_identities", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "issuer", null: false
+    t.string "subject", null: false
+    t.datetime "updated_at", null: false
+    t.string "user_id", null: false
+    t.index ["issuer", "subject"], name: "index_soda_identities_on_issuer_and_subject", unique: true
+    t.index ["user_id"], name: "index_soda_identities_on_user_id"
+  end
+
   create_table "stripe_events", id: :string, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error"
@@ -1316,6 +1507,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.integer "discount_value"
     t.string "event_id"
     t.string "group_id"
+    t.datetime "group_owner_notified_at"
+    t.boolean "inventory_reserved", default: true, null: false
     t.decimal "original_price", precision: 40
     t.datetime "paid_at"
     t.string "participant_id"
@@ -1401,6 +1594,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "created_at", null: false
     t.datetime "deleted_at"
     t.string "deleted_by_id"
+    t.string "event_id"
     t.string "flag_reason"
     t.datetime "flagged_at"
     t.string "flagged_by_id"
@@ -1413,13 +1607,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.datetime "replied_at"
     t.integer "replies_count", default: 0, null: false
     t.integer "stars_count", default: 0, null: false
+    t.boolean "sync_to_community", default: true, null: false
     t.string "tags", default: [], array: true
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.string "user_id", null: false
     t.index ["category_id", "last_active_mark"], name: "index_topics_on_category_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
+    t.index ["created_at", "id"], name: "idx_topics_discovery_created", order: :desc, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"
     t.index ["deleted_at"], name: "index_topics_on_deleted_at"
+    t.index ["event_id", "created_at", "id"], name: "index_topics_for_event_newest"
+    t.index ["event_id"], name: "index_topics_on_event_id"
     t.index ["flagged_at"], name: "index_topics_on_flagged_at"
+    t.index ["group_id", "created_at", "id"], name: "idx_topics_discovery_group_created", order: { created_at: :desc, id: :desc }, where: "((deleted_at IS NULL) AND (flagged_at IS NULL) AND (sync_to_community = true))"
     t.index ["group_id", "last_active_mark"], name: "index_topics_on_group_and_active", where: "((deleted_at IS NULL) AND (flagged_at IS NULL))"
     t.index ["group_id", "pinned_at"], name: "index_topics_on_group_id_and_pinned_at"
     t.index ["tags"], name: "index_topics_on_tags", using: :gin
@@ -1587,6 +1786,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
     t.string "user_id", null: false
     t.index ["group_id"], name: "index_withdrawals_on_group_id"
     t.index ["processed_by_id"], name: "index_withdrawals_on_processed_by_id"
+    t.index ["status", "created_at", "id"], name: "idx_withdrawals_pending_tasks"
     t.index ["user_id", "status"], name: "index_withdrawals_on_user_id_and_status"
     t.index ["user_id"], name: "index_withdrawals_on_user_id"
   end
@@ -1604,6 +1804,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "badges", "users", column: "creator_id"
   add_foreign_key "badges", "users", column: "owner_id"
   add_foreign_key "badges", "vouchers"
+  add_foreign_key "campaign_events", "campaigns"
+  add_foreign_key "campaign_events", "events"
+  add_foreign_key "campaign_review_logs", "campaigns"
+  add_foreign_key "campaign_review_logs", "users", column: "reviewer_id"
+  add_foreign_key "campaigns", "groups"
+  add_foreign_key "campaigns", "users", column: "owner_id"
+  add_foreign_key "campaigns", "users", column: "reviewed_by_id"
   add_foreign_key "cart_items", "carts"
   add_foreign_key "cart_items", "product_variants"
   add_foreign_key "carts", "shops"
@@ -1620,7 +1827,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "coupon_redemptions", "orders"
   add_foreign_key "coupon_redemptions", "users"
   add_foreign_key "coupons", "events"
+  add_foreign_key "creation_receipts", "users", on_delete: :cascade
   add_foreign_key "event_roles", "events"
+  add_foreign_key "event_team_check_ins", "events", on_delete: :cascade
+  add_foreign_key "event_team_check_ins", "users", on_delete: :cascade
   add_foreign_key "events", "forms"
   add_foreign_key "events", "groups"
   add_foreign_key "events", "places"
@@ -1631,6 +1841,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "fed_follows", "fed_actors"
   add_foreign_key "fed_participations", "fed_events"
   add_foreign_key "fed_participations", "users"
+  add_foreign_key "follows", "users"
   add_foreign_key "form_answers", "form_fields"
   add_foreign_key "form_answers", "form_submissions"
   add_foreign_key "form_fields", "forms"
@@ -1642,6 +1853,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "group_invites", "tickets"
   add_foreign_key "group_invites", "users", column: "receiver_id"
   add_foreign_key "group_invites", "users", column: "sender_id"
+  add_foreign_key "group_review_logs", "groups"
+  add_foreign_key "group_review_logs", "users", column: "reviewer_id", on_delete: :nullify
+  add_foreign_key "groups", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "hackathon_project_members", "hackathon_projects", column: "project_id"
   add_foreign_key "hackathon_project_members", "hackathons"
   add_foreign_key "hackathon_project_members", "users"
@@ -1675,6 +1889,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "participants", "events"
   add_foreign_key "participants", "fed_actors", on_delete: :cascade
   add_foreign_key "participants", "users"
+  add_foreign_key "participants", "users", column: "reviewed_by_id", on_delete: :nullify
   add_foreign_key "participants", "vouchers"
   add_foreign_key "poll_options", "polls"
   add_foreign_key "poll_votes", "poll_options", column: "option_id"
@@ -1685,6 +1900,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "product_variants", "products"
   add_foreign_key "products", "groups"
   add_foreign_key "products", "shops"
+  add_foreign_key "refund_requests", "refunds"
+  add_foreign_key "refund_requests", "ticket_items"
+  add_foreign_key "refund_requests", "users"
+  add_foreign_key "refund_requests", "users", column: "reviewed_by_id"
   add_foreign_key "replies", "topics"
   add_foreign_key "replies", "users"
   add_foreign_key "shipment_items", "order_items"
@@ -1696,6 +1915,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "shipping_rates", "shops"
   add_foreign_key "shops", "groups"
   add_foreign_key "shops", "users", column: "opened_by_user_id"
+  add_foreign_key "soda_identities", "users", on_delete: :cascade
   add_foreign_key "team_memberships", "teams"
   add_foreign_key "team_memberships", "users"
   add_foreign_key "teams", "groups"
@@ -1710,6 +1930,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_09_030000) do
   add_foreign_key "tickets", "events"
   add_foreign_key "tickets", "groups"
   add_foreign_key "topics", "categories"
+  add_foreign_key "topics", "events"
   add_foreign_key "topics", "groups"
   add_foreign_key "topics", "users"
   add_foreign_key "track_roles", "tracks"

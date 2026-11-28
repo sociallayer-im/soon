@@ -1,12 +1,14 @@
 class Api::V1::EventsController < Api::BaseController
+  include ContentSafetyGate
+  include IdempotentCreation
   # Raised when a nested role/ticket in an atomic create is malformed; rolls the
   # whole event create back with a precise message.
   class InvalidChild < StandardError; end
 
   # Event browsing/pages are public — EventPolicy/visible_to still hide
   # drafts/private events from anonymous viewers.
-  skip_before_action :authenticate!, only: %i[index show]
-  before_action :authenticate_optional!, only: %i[index show]
+  skip_before_action :authenticate!, only: %i[index show tag_suggestions]
+  before_action :authenticate_optional!, only: %i[index show tag_suggestions]
   before_action :set_event, only: %i[show update destroy approve]
 
   # GET /api/v1/events — the browse/schedule listing.
@@ -18,9 +20,34 @@ class Api::V1::EventsController < Api::BaseController
   # is_attending/is_starred/is_owner flags.
   def index
     cache_when_anonymous!(max_age: 30)
-    scope = Event.includes(:group, :place, :venue, :owner, :track).visible_to(current_user)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, :event_roles).visible_to(current_user)
     scope = apply_filters(scope)
     render_collection scope, blueprint: EventBlueprint, **personalization_options
+  end
+
+  # Suggestions only expose tags from discoverable public events, never drafts or unlisted events.
+  def tag_suggestions
+    query = params[:q].to_s.strip.first(50)
+    limit = params[:limit].to_i.clamp(1, 20)
+    limit = 10 if params[:limit].blank?
+    visible = Event.publicly_discoverable.select(:id)
+    rows = Event.where(id: visible).where.not(tags: nil)
+      .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
+      .where("event_tag.value <> ''")
+    # Cache candidates briefly, then re-check their visibility against live rows.
+    # This avoids leaking a tag when the last public event becomes private.
+    key = "event-tag-suggestions:v1:all"
+    candidates = Rails.cache.fetch(key, expires_in: 30.seconds, race_condition_ttl: 2.seconds) do
+      rows.group("event_tag.value").order(Arel.sql("COUNT(*) DESC, event_tag.value ASC")).pluck(Arel.sql("event_tag.value"))
+    end
+    candidates = candidates.select { |tag| tag.downcase.include?(query.downcase) }.first(limit)
+    if candidates.any?
+      still_visible = Event.where(id: visible).where("events.tags && ARRAY[?]::varchar[]", candidates)
+        .joins("CROSS JOIN LATERAL unnest(events.tags) AS event_tag(value)")
+        .where("event_tag.value IN (?)", candidates).distinct.pluck(Arel.sql("event_tag.value"))
+      candidates &= still_visible
+    end
+    render json: { data: candidates }
   end
 
   # GET /api/v1/events/:id
@@ -30,7 +57,11 @@ class Api::V1::EventsController < Api::BaseController
   # doesn't depend on it.
   def show
     authorize @event
-    render json: EventBlueprint.render(@event, view: :extended, **show_options)
+    options = show_options
+    view = ActiveModel::Type::Boolean.new.cast(params[:summary]) ? :default : :extended
+    options[:ticket_occupied_counts] = TicketItem.where(ticket_id: @event.tickets.select(:id), inventory_reserved: true, released_at: nil).group(:ticket_id).count if view == :extended
+    options[:ticket_occupied_counts] = Hash.new(0).merge(options[:ticket_occupied_counts]) if view == :extended
+    render json: EventBlueprint.render(@event, view: view, **options)
   end
 
   # Optionally accepts `event_roles: [...]` and `tickets: [...]` alongside the
@@ -39,7 +70,10 @@ class Api::V1::EventsController < Api::BaseController
   # retry after failure starts from a clean slate instead of duplicating
   # children against a partially-created parent.
   def create
+    return unless safe_text_submission?(event_params, scene: 4)
     attrs = event_params.to_h
+    # Surf events are authored in Shanghai time, independently of device/group defaults.
+    attrs[:timezone] = "Asia/Shanghai"
     group = Group.find_by(id: attrs[:group_id])
     gate_pinned!(attrs, group)
     gate_approval!(attrs, group)
@@ -54,7 +88,9 @@ class Api::V1::EventsController < Api::BaseController
       event.save!
       apply_group_ticket_designation!(event)
       create_nested_roles!(event, params[:event_roles])
+      SiteNotifications.roles_changed(event, {}, actor: current_user)
       create_nested_tickets!(event, params[:tickets], event.group_id)
+      ReviewNotifications.submitted(event, applicant: current_user, cycle: "created")
     end
     notify_group_admins_of_submission(event)
     render json: EventBlueprint.render(event), status: :created
@@ -65,6 +101,7 @@ class Api::V1::EventsController < Api::BaseController
   end
 
   def update
+    return unless safe_text_submission?(event_params, scene: 4, previous: @event)
     authorize @event
     # group_id is intentionally not updatable — moving an event into another
     # group would escape the authorization that was checked against its current
@@ -72,18 +109,30 @@ class Api::V1::EventsController < Api::BaseController
     attrs = event_params.to_h.except("group_id")
     gate_pinned!(attrs, @event.group)
     gate_pending_status!(attrs, @event)
+    # Publishing a draft/archived event is a submission, regardless of endpoint.
+    gate_approval!(attrs, @event.group) if attrs["status"] == "published" && @event.status != "published"
     normalize_times!(attrs, group: @event.group, current_tz: @event.timezone)
     @event.assign_attributes(attrs)
     if (err = reference_error(@event))
       return render_error(err)
     end
-    if @event.save
+    ActiveRecord::Base.transaction do
+      prior_roles = SiteNotifications.role_links(@event) if params.key?(:event_roles)
+      @event.save!
+      if params.key?(:event_roles)
+        @event.event_roles.destroy_all
+        create_nested_roles!(@event, params[:event_roles])
+        SiteNotifications.roles_changed(@event, prior_roles, actor: current_user)
+      end
       apply_group_ticket_designation!(@event)
-      notify_attendees_of_update if calendar_relevant_change?
-      render json: EventBlueprint.render(@event)
-    else
-      render_error(@event.errors.full_messages.join(", "))
+      ReviewNotifications.submitted(@event, applicant: current_user)
     end
+    notify_attendees_of_update if calendar_relevant_change?
+    render json: EventBlueprint.render(@event)
+  rescue InvalidChild => e
+    render_error(e.message)
+  rescue ActiveRecord::RecordInvalid => e
+    render_error(e.record.errors.full_messages.join(", "))
   end
 
   # "Cancelling" an event must not destroy it (and cascade away every
@@ -98,8 +147,8 @@ class Api::V1::EventsController < Api::BaseController
   # GET /api/v1/events/pending_approval — events awaiting review in groups the
   # caller manages (the dashboard inbox).
   def pending_approval
-    managed = current_user.memberships.where(role: %w[manager owner]).select(:group_id)
-    scope = Event.includes(:group, :place, :venue, :owner, :track)
+    managed = current_user.memberships.active.where(role: %w[manager owner]).select(:group_id)
+    scope = Event.includes(:group, :place, :venue, :owner, :track, :event_roles)
                  .where(status: "pending", group_id: managed).order(:start_time)
     render_collection scope, blueprint: EventBlueprint
   end
@@ -107,8 +156,10 @@ class Api::V1::EventsController < Api::BaseController
   # POST /api/v1/events/:id/approve — group manager publishes a pending event.
   def approve
     authorize @event
-    return render_error("event is not pending approval") unless @event.status == "pending"
-    @event.update!(status: "published")
+    @event.with_lock do
+      return render_error("event is not pending approval", status: :conflict) unless @event.status == "pending"
+      @event.update!(status: "published")
+    end
     render json: EventBlueprint.render(@event)
   end
 
@@ -123,9 +174,10 @@ class Api::V1::EventsController < Api::BaseController
   # Narrows the browse scope by the request's filter params. Invalid dates are
   # ignored rather than 422ing — a bad filter degrades to "unfiltered".
   def apply_filters(scope)
+    scope = scope.merge(Event.publicly_discoverable) if ActiveModel::Type::Boolean.new.cast(params[:browse_all])
     if params[:group_id].present?
       scope = scope.where(group_id: Group.resolve!(params[:group_id]).event_group_ids)
-    elsif current_user && params[:owner_id].blank? && params[:attendee_id].blank?
+    elsif current_user && !ActiveModel::Type::Boolean.new.cast(params[:browse_all]) && params[:owner_id].blank? && params[:attendee_id].blank? && params[:city].blank? && params[:campaign_id].blank? && params[:user_id].blank?
       # No group/user filter: an authenticated caller browses their own groups
       # (the pre-existing "my events" behavior); anonymous callers see all
       # public events (feeds/search). Profile-tab filters (owner_id/attendee_id)
@@ -144,14 +196,23 @@ class Api::V1::EventsController < Api::BaseController
     else scope.order(:start_time)
     end
 
+    if params[:sort] == "upcoming_first"
+      now_sql = Event.connection.quote(Time.current)
+      scope = scope.reorder(Arel.sql("CASE WHEN events.end_time >= #{now_sql} THEN 0 ELSE 1 END, CASE WHEN events.end_time >= #{now_sql} THEN events.start_time END ASC, events.start_time DESC, events.id ASC"))
+    end
+
     # Profile-page tabs: events a user hosts / attends (public visibility rules
     # still apply through visible_to). Both accept a TSID or username.
+    if params[:user_id].present?
+      profile = User.resolve!(params[:user_id])
+      scope = scope.merge(Event.agenda_for(profile).or(Event.where(owner_id: profile.id)))
+    end
     if params[:owner_id].present?
       scope = scope.where(owner_id: User.resolve!(params[:owner_id]).id)
     end
     if params[:attendee_id].present?
       attendee = User.resolve!(params[:attendee_id])
-      scope = scope.where(id: Participant.where(user_id: attendee.id, status: "attending").select(:event_id))
+      scope = scope.merge(Event.agenda_for(attendee))
     end
     if params[:co_host_id].present?
       co_host = User.resolve!(params[:co_host_id])
@@ -163,6 +224,8 @@ class Api::V1::EventsController < Api::BaseController
                                       .visible.select(:item_id))
     end
 
+    scope = scope.where(group_id: Group.where(city: params[:city].to_s.strip).select(:id)) if params[:city].present?
+    scope = scope.where(id: CampaignEvent.where(campaign_id: params[:campaign_id]).select(:event_id)) if params[:campaign_id].present?
     scope = scope.where(venue_id: params[:venue_id]) if params[:venue_id].present?
     scope = scope.where(track_id: params[:track_id]) if params[:track_id].present?
     scope = scope.where(kind: params[:kind])         if params[:kind].present?
@@ -172,6 +235,7 @@ class Api::V1::EventsController < Api::BaseController
     if params[:search_title].present?
       scope = scope.where("title ILIKE ?", "%#{Event.sanitize_sql_like(params[:search_title])}%")
     end
+    scope = scope.where("events.tags @> ARRAY[?]::varchar[]", params[:tag].to_s.strip) if params[:tag].present?
     if params[:tags].present?
       scope = scope.where("tags && ARRAY[?]::varchar[]", Array(params[:tags]))
     end
@@ -196,8 +260,22 @@ class Api::V1::EventsController < Api::BaseController
   # reads as "not joined" — the same rule the array itself applies.
   def show_options
     options = personalization_options
+    options[:manage_participants] = EventPolicy.new(current_user, @event).update?
+    options[:can_manage_orders] = current_user && (@event.owner_id == current_user.id ||
+      current_user.memberships.active.exists?(group_id: @event.group_id, role: %w[owner manager]) ||
+      @event.event_roles.exists?(item_type: "User", item_id: current_user.id, role: "co_host"))
+    options[:can_edit] = options[:manage_participants]
+    options[:can_register] = @event.registration_open? && (!current_user || EventPolicy.new(current_user, @event).join?)
+    options[:registration_unavailable_reason] = if @event.moderated_at.present?
+      "活动已下架"
+    elsif !@event.registration_open?
+      {"draft" => "尚未发布", "pending" => "待审核", "closed" => "报名已截止", "archived" => "已归档", "cancelled" => "活动已取消"}[@event.status] || "报名已结束"
+    elsif !options[:can_register]
+      "当前账号不符合群组的报名条件"
+    end
+    options[:viewer_id] = current_user&.id
     options[:include_participants] = false if params[:include_participants].to_s == "false"
-    options[:current_participant] = @event.participants.active.find_by(user_id: current_user.id) if current_user
+    options[:current_participant] = @event.participants.where("status != ? OR cancellation_reason = ?", "cancelled", "timeout").find_by(user_id: current_user.id) if current_user
     options[:reveal_image_note] = reveal_image_note?(options[:current_participant])
     options
   end
@@ -208,6 +286,7 @@ class Api::V1::EventsController < Api::BaseController
   # Organizers see their own note regardless — they have to edit it.
   def reveal_image_note?(participant)
     return false unless current_user
+    return true if Event.team_for(current_user).exists?(id: @event.id)
     return true if EventPolicy.new(current_user, @event).update?
     participant.present? &&
       participant.status == "attending" &&
@@ -216,9 +295,11 @@ class Api::V1::EventsController < Api::BaseController
 
   def personalization_options
     return {} unless current_user
+    team_ids = Event.team_for(current_user).pluck(:id).to_set
     {
       viewer_id: current_user.id,
-      attending_ids: current_user.participants.where(status: "attending").pluck(:event_id).to_set,
+      event_team_ids: team_ids,
+      attending_ids: current_user.participants.where(status: "attending", payment_status: [nil, "succeeded"]).pluck(:event_id).to_set | team_ids,
       starred_ids: Comment.where(user_id: current_user.id, comment_type: "star", item_type: "Event", removed: false)
                           .pluck(:item_id).to_set
     }
@@ -236,7 +317,7 @@ class Api::V1::EventsController < Api::BaseController
   # asking anything of a reviewer; it becomes news if and when it's published.
   def notify_group_admins_of_submission(event)
     return if event.group_id.blank? || event.status == "draft"
-    return if current_user.memberships.exists?(group_id: event.group_id, role: %w[manager owner])
+    return if current_user.memberships.active.exists?(group_id: event.group_id, role: %w[manager owner])
 
     EventSubmittedMailJob.perform_later(event_id: event.id)
   end

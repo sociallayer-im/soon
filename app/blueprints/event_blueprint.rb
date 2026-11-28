@@ -8,12 +8,15 @@ class EventBlueprint < Blueprinter::Base
   fields :title, :start_time, :end_time, :timezone, :status, :visibility,
          :meeting_url, :external_url, :category, :kind, :tags, :pinned,
          :max_participant, :participant_count, :require_approval, :requirement_tags,
-         :image_url, :recurring_id, :form_id, :notes, :created_at
+         :image_url, :recurring_id, :form_id, :created_at
 
   # Viewer flags — only emitted when the request was authenticated and the
   # controller passed the viewer's sets (see EventsController#personalization_options).
   field :is_attending, if: ->(_n, _o, options) { options.key?(:attending_ids) } do |event, options|
     options[:attending_ids].include?(event.id)
+  end
+  field :is_event_team, if: ->(_n, _o, options) { options.key?(:event_team_ids) } do |event, options|
+    options[:event_team_ids].include?(event.id)
   end
   field :is_starred, if: ->(_n, _o, options) { options.key?(:starred_ids) } do |event, options|
     options[:starred_ids].include?(event.id)
@@ -25,16 +28,39 @@ class EventBlueprint < Blueprinter::Base
   association :group, blueprint: GroupBlueprint
   association :place, blueprint: PlaceBlueprint
   association :venue, blueprint: VenueRefBlueprint
+  association :event_roles, blueprint: EventRoleBlueprint
   association :owner, blueprint: UserBlueprint
   association :track, blueprint: TrackRefBlueprint
 
+  field :is_moderated do |event|
+    event.moderated_at.present?
+  end
+
   view :extended do
+    field :can_manage_orders do |_event, options|
+      !!options[:can_manage_orders]
+    end
+    field :can_edit do |_event, options|
+      !!options[:can_edit]
+    end
+    field :can_manage_participants do |_event, options|
+      !!options[:manage_participants]
+    end
+    field :can_check_in do |_event, options|
+      !!options[:manage_participants]
+    end
+    field :can_register do |event, options|
+      options.fetch(:can_register) { event.registration_open? }
+    end
+    field :registration_unavailable_reason do |_event, options|
+      options[:registration_unavailable_reason]
+    end
     field :content
     # Confirmed-attendees-only image (group QR code). The controller decides
     # who qualifies (EventsController#reveal_image_note?); absent from the
     # payload entirely for everyone else, so a signed-out fetch can't leak it.
+    field :notes, if: ->(_n, _o, options) { options[:reveal_image_note] }
     field :image_note, if: ->(_n, _o, options) { options[:reveal_image_note] }
-    association :event_roles, blueprint: EventRoleBlueprint
     # Withdrawn (soft-deleted) participants are not attendees — reject in Ruby
     # so a preloaded association isn't re-queried.
     #
@@ -45,8 +71,8 @@ class EventBlueprint < Blueprinter::Base
     # wanted. Opt-out rather than opt-in so already-deployed clients, which
     # index into this array, keep working.
     association :participants, blueprint: ParticipantBlueprint,
-                if: ->(_n, _o, options) { options[:include_participants] != false } do |event|
-      event.participants.reject(&:cancelled?)
+                if: ->(_n, _o, options) { options[:include_participants] != false } do |event, options|
+      event.participants.select { |p| options[:manage_participants] ? !p.cancelled? : p.status == "attending" && [nil, "succeeded"].include?(p.payment_status) }
     end
     # The viewer's own RSVP. Without it, dropping the array above would also
     # drop the answer to "have I joined, did my payment go through, was I

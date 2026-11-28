@@ -1,4 +1,21 @@
 class Event < ApplicationRecord
+  after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id status visibility group_id moderated_at]).any? }
+  after_destroy :refresh_discovery_signal
+  def refresh_discovery_signal
+    ([group_id] + Array(saved_changes["group_id"]).compact).uniq.each { |id| DiscoverySignals.refresh_group!(id) }
+  end
+
+  include SiteNotifiable
+  scope :team_for, ->(user) {
+    user ? where(owner_id: user.id).or(where(id: EventRole.linked_to(user).select(:event_id))) : none
+  }
+  scope :agenda_for, ->(user) {
+    team_for(user).or(where(id: Participant.where(user_id: user.id, status: "attending", payment_status: [nil, "succeeded"]).select(:event_id)))
+  }
+  scope :publicly_discoverable, -> {
+    joins(:group).where(moderated_at: nil, groups: {active: true, review_status: "approved"})
+      .where(status: "published", visibility: %w[normal open_registration])
+  }
   belongs_to :group, inverse_of: :events
   belongs_to :owner, class_name: "User"
   belongs_to :place, optional: true
@@ -6,6 +23,8 @@ class Event < ApplicationRecord
   belongs_to :venue, optional: true
   belongs_to :recurring, optional: true
   belongs_to :form, optional: true
+  has_many :campaign_events, dependent: :destroy
+  has_many :campaigns, through: :campaign_events
   has_many :participants, dependent: :destroy
   has_many :participant_users, through: :participants, source: :user
   has_many :event_roles, dependent: :destroy
@@ -14,6 +33,11 @@ class Event < ApplicationRecord
   has_many :coupons, dependent: :destroy
 
   accepts_nested_attributes_for :coupons, allow_destroy: true
+
+  # All signup paths, including manager approval, use the same lifecycle gate.
+  def registration_open?
+    moderated_at.nil? && status == "published" && end_time.present? && end_time > Time.current
+  end
 
   STATUSES = %w(draft pending published archived closed cancelled).freeze
   # normal            — default; publicly listed, joining follows the group's
@@ -61,14 +85,15 @@ class Event < ApplicationRecord
   # as a draft), plus anything they own or manage (group admin/owner). Callers
   # still scope by group membership on top of this.
   scope :visible_to, ->(user) {
-    managed = Membership.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
+    managed = Membership.active.where(user_id: user&.id, role: %w[manager owner]).select(:group_id)
     # NULL-safe on purpose: `status` has a default but no NOT NULL constraint,
     # and a bare `where.not(status: [...])` evaluates to NULL for a NULL status,
     # which would silently drop every legacy row that has none.
-    where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
+    where("events.moderated_at IS NULL OR events.owner_id = :uid", uid: user&.id)
+    .where("events.status IS NULL OR events.status NOT IN (:unlisted)", unlisted: UNLISTED_STATUSES).where(
       "(events.visibility IN ('normal', 'open_registration') AND events.status NOT IN ('draft', 'pending', 'archived')) " \
-      "OR events.owner_id = :uid OR events.group_id IN (:managed)",
-      uid: user&.id, managed: managed
+      "OR events.owner_id = :uid OR events.group_id IN (:managed) OR (events.status = 'published' AND events.id IN (:team))",
+      uid: user&.id, managed: managed, team: EventRole.linked_to(user).select(:event_id)
     )
   }
 

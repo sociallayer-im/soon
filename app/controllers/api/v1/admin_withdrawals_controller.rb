@@ -5,7 +5,7 @@
 # outcome here.
 class Api::V1::AdminWithdrawalsController < Api::BaseController
   before_action :require_platform_admin!
-  before_action :set_withdrawal, only: %i[update]
+  before_action :set_withdrawal, only: %i[show update]
 
   # GET /api/v1/admin/withdrawals?status=
   def index
@@ -14,22 +14,35 @@ class Api::V1::AdminWithdrawalsController < Api::BaseController
     render_collection(scope, blueprint: WithdrawalBlueprint, view: :admin)
   end
 
+  # Exact notification target, including requests outside the first list page.
+  def show
+    render json: WithdrawalBlueprint.render_as_hash(@withdrawal, view: :admin)
+  end
+
   # PATCH /api/v1/admin/withdrawals/:id — settle or reject a pending request.
   def update
     unless %w[completed rejected].include?(params[:status])
       return render_error("status must be completed or rejected")
     end
-    unless @withdrawal.status == "pending"
-      return render_error("only a pending withdrawal can be settled or rejected")
+    # Serialize terminal status changes: two administrators must not settle
+    # and reject the same request based on the same stale pending status.
+    outcome = @withdrawal.group.with_lock do
+      @withdrawal.with_lock do
+        if @withdrawal.status != "pending"
+          { error: "only a pending withdrawal can be settled or rejected" }
+        elsif params[:status] == "completed" && Withdrawal.wechat_net_amount(@withdrawal.group) * Withdrawal::NET_NUM / Withdrawal::NET_DEN < Withdrawal.withdrawn_amount(@withdrawal.group)
+          { error: "可结算余额不足，存在退款或余额变更，请重新核对并拒绝原申请后重新申请" }
+        else
+          attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
+          attrs[:note] = params[:note] if params[:note].present?
+          @withdrawal.update(attrs) ? { ok: true } : { error: @withdrawal.errors.full_messages.join(", ") }
+        end
+      end
     end
-
-    attrs = { status: params[:status], processed_by: current_user, processed_at: Time.current }
-    attrs[:note] = params[:note] if params[:note].present?
-
-    if @withdrawal.update(attrs)
+    if outcome[:ok]
       render json: WithdrawalBlueprint.render_as_hash(@withdrawal, view: :admin)
     else
-      render_error(@withdrawal.errors.full_messages.join(", "))
+      render_error(outcome[:error])
     end
   end
 
@@ -40,6 +53,6 @@ class Api::V1::AdminWithdrawalsController < Api::BaseController
   end
 
   def require_platform_admin!
-    render json: { error: "Forbidden" }, status: :forbidden unless current_user&.platform_admin?
+    render json: { error: "Forbidden" }, status: :forbidden unless current_user&.active? && current_user.platform_admin?
   end
 end

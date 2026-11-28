@@ -1,7 +1,7 @@
 class Api::V1::AuthController < Api::BaseController
   # Everything here IS the login flow — only the bind_* actions run with a
   # session already in hand.
-  skip_before_action :authenticate!, except: %i[bind_email bind_phone bind_wechat]
+  skip_before_action :authenticate!, except: %i[bind_email bind_phone bind_wechat wechat_miniprogram_phone]
 
   LOGIN_CONTEXT = "login".freeze
   # Binding an email to a wallet-first account uses its own context so a bind
@@ -200,6 +200,59 @@ class Api::V1::AuthController < Api::BaseController
     render_token user
   end
 
+  def wechat_miniprogram
+    code = params[:js_code].to_s.strip
+    return render_error("js_code is required") if code.blank?
+
+    identity = WechatMiniprogramAuth.identity(code)
+    user = wechat_user(openid: identity.fetch(:openid), unionid: identity[:unionid])
+    render_token user, new_user: user.previously_new_record?
+  rescue WechatMiniprogramAuth::Unavailable
+    render json: { error: "WeChat sign-in is not configured or temporarily unavailable", code: "WECHAT_UNAVAILABLE" }, status: :service_unavailable
+  rescue WechatMiniprogramAuth::InvalidCode
+    render json: { error: "WeChat login code expired or invalid. Please try again.", code: "WECHAT_INVALID_CODE" }, status: :unauthorized
+  end
+
+  # Any authenticated account can prove control of a number with a fresh
+  # WeChat phone authorization code; it does not require switching login identity.
+  def wechat_miniprogram_phone
+    return render json: UserBlueprint.render(current_user, view: :self) if current_user.phone.present?
+    code = params[:phone_code].to_s.strip
+    return render_error("请先授权微信手机号") if code.blank?
+    phone = WechatMiniprogramPhone.phone_number(code)
+    if (existing = User.find_by(phone: phone))
+      linked = VerifiedPhoneAccountLinker.call(from: current_user, into: existing)
+      return render_token(linked, merged: true)
+    end
+    current_user.update!(phone: phone)
+    GroupInvite.auto_accept_phone_invites_for(current_user)
+    render json: UserBlueprint.render(current_user, view: :self)
+  rescue WechatMiniprogramPhone::InvalidCode
+    render_error("手机号授权已失效或暂不支持该号码，请重新授权或使用短信验证", status: :unauthorized)
+  rescue WechatMiniprogramPhone::Unavailable
+    render_error("微信手机号服务暂不可用，请稍后重试或使用短信验证", status: :service_unavailable)
+  rescue VerifiedPhoneAccountLinker::Conflict => e
+    render_error(e.message)
+  end
+
+  def soda_oauth_config
+    response.headers["Cache-Control"] = "no-store"
+    render json: { oauth: SodaOauthLogin.configuration }
+  end
+
+  def soda_oauth_signin
+    response.headers["Cache-Control"] = "no-store"
+    identity = SodaOauthLogin.identity(code: params[:code].to_s, verifier: params[:verifier].to_s,
+      redirect_uri: params[:redirect_uri].to_s)
+    user = SodaIdentity.resolve!(**identity)
+    return render_error("账号不可用", status: :forbidden) unless user.active?
+    render_token(user)
+  rescue SodaOauthLogin::InvalidCode
+    render_error("Soda 授权无效或已过期，请重新登录")
+  rescue SodaOauthLogin::Unavailable
+    render_error("Soda 登录暂不可用", status: :service_unavailable)
+  end
+
   # POST /api/v1/auth/trusted_signin
   # For the frontend's WeChat 网页授权 callback ONLY: the openid is proven by the
   # frontend server redeeming the code with the app secret, so that server (and
@@ -253,6 +306,10 @@ class Api::V1::AuthController < Api::BaseController
     return unless consume_code!(recipient: phone, context: BIND_PHONE_CONTEXT, attempt: params[:code])
 
     if (existing = User.find_by(phone: phone))
+      if current_user.email.present?
+        linked = VerifiedPhoneAccountLinker.call(from: current_user, into: existing)
+        return render_token(linked, merged: true)
+      end
       return render_error("this phone number is already in use") unless mergeable?(current_user, existing)
       return render_token(merge_wechat_account!(current_user, existing), merged: true)
     end
@@ -260,6 +317,8 @@ class Api::V1::AuthController < Api::BaseController
     current_user.update!(phone: phone)
     GroupInvite.auto_accept_phone_invites_for(current_user)
     render json: UserBlueprint.render(current_user, view: :self)
+  rescue VerifiedPhoneAccountLinker::Conflict => e
+    render_error(e.message)
   end
 
   # POST /api/v1/auth/bind_wechat  {next_token, wechat_openid, wechat_unionid?}
@@ -317,9 +376,7 @@ class Api::V1::AuthController < Api::BaseController
   # openid alone — before the 开放平台 binding existed, or from a scope that
   # doesn't return unionid — is claimed and back-filled on the first sign-in
   # that does carry one, so the same person never ends up with two rows.
-  def wechat_user
-    openid = params[:wechat_openid].presence&.to_s
-    unionid = params[:wechat_unionid].presence&.to_s
+  def wechat_user(openid: params[:wechat_openid].presence&.to_s, unionid: params[:wechat_unionid].presence&.to_s)
 
     user = User.find_by(wechat_unionid: unionid) if unionid
     user ||= User.find_by(wechat_openid: openid) if openid
@@ -498,11 +555,12 @@ class Api::V1::AuthController < Api::BaseController
 
   # `merged` tells the caller its session just became a DIFFERENT account, so
   # the client must replace its stored token rather than keep the one it sent.
-  def render_token(user, merged: false)
+  def render_token(user, merged: false, new_user: nil)
     user.update(last_signin_at: Time.current)
     token = JwtService.encode({ "user_id" => user.id })
-    payload = { token: token, user: { id: user.id, email: user.email, name: user.name } }
+    payload = { token: token, user: JSON.parse(UserBlueprint.render(user, view: :self)) }
     payload[:merged] = true if merged
+    payload[:is_new_user] = new_user unless new_user.nil?
     render json: payload
   end
 end

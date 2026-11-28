@@ -50,6 +50,28 @@ class UserMergerTeamTest < ActiveSupport::TestCase
     assert_equal @into.id, other.reload.flagged_by_id
   end
 
+  test "follows transfer, and a collision or a self follow is dropped" do
+    stranger = create_user
+    group = create_group
+    kept = create_follow(user: @from, target: stranger)
+    create_follow(user: @from, target: group)
+    create_follow(user: @into, target: group)
+    create_follow(user: @from, target: @into)
+    duplicate_incoming = create_follow(user: stranger, target: @from)
+    create_follow(user: stranger, target: @into)
+    solo = create_user
+    transferred = create_follow(user: solo, target: @from)
+
+    UserMerger.call(from: @from, into: @into)
+
+    assert_equal @into.id, kept.reload.user_id
+    assert_equal 1, Follow.where(user: @into, target: group).count
+    assert_not Follow.exists?(user: @into, target: @into)
+    assert_not Follow.exists?(duplicate_incoming.id)
+    assert_equal 1, Follow.where(user: stranger, target: @into).count
+    assert_equal @into.id, transferred.reload.target_id
+  end
+
   test "a merge does not raise when the absorbed account has discussion rows" do
     category = create_category(group: @group)
     create_topic(category: category, user: @from)

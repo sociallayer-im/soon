@@ -10,9 +10,26 @@
 #
 # See design/DISCUSSION_PLAN.md 1.3.
 class Topic < ApplicationRecord
+  include SiteNotifiable
+  after_save :refresh_discovery_signal, if: -> { (saved_changes.keys & %w[id deleted_at flagged_at category_id group_id event_id sync_to_community]).any? }
+  def refresh_discovery_signal
+    ([group_id] + Array(saved_changes["group_id"]).compact).uniq.each { |id| DiscoverySignals.refresh_group!(id) }
+  end
+
   include SoftDelete
   include Flaggable
   include Starrable
+
+  def list_media
+    lines = content.to_s.rstrip.split("\n")
+    images = []
+    while (match = /\A!\[Surf 帖子附件\]\(([^\s]+)\)\z/.match(lines.last.to_s.strip))
+      images.unshift(match[1])
+      lines.pop
+      lines.pop while lines.last == ""
+    end
+    {text: lines.join("\n"), images: ([image_url.presence] + images).compact.uniq.first(9)}
+  end
 
   MAX_CONTENT   = 64.kilobytes
   MAX_TAGS      = 10
@@ -23,6 +40,7 @@ class Topic < ApplicationRecord
   # sort index confined to recent rows.
   BUMP_WINDOW = 1.month
 
+  belongs_to :event, optional: true
   belongs_to :group
   belongs_to :category, counter_cache: false
   belongs_to :user
@@ -36,6 +54,7 @@ class Topic < ApplicationRecord
   # group_id is denormalised off category so the group-level list needs no
   # join. That makes disagreement possible, so it is checked on every save:
   # without this, one move could relocate a topic into another community.
+  validate :event_belongs_to_group
   validate  :category_belongs_to_group
 
   before_validation :default_group_from_category, on: :create
@@ -89,9 +108,28 @@ class Topic < ApplicationRecord
     update_columns(attrs)
   end
 
-  def after_flag_change! = refresh_category_counts!
+  def after_flag_change!
+    refresh_category_counts!
+    DiscoverySignals.refresh_group!(group_id)
+  end
+
+  def soft_delete!(by: nil)
+    result = super
+    DiscoverySignals.refresh_group!(group_id)
+    result
+  end
+
+  def restore!
+    result = super
+    DiscoverySignals.refresh_group!(group_id)
+    result
+  end
 
   private
+
+  def event_belongs_to_group
+    errors.add(:event, "must belong to the same group") if event && event.group_id != group_id
+  end
 
   def default_group_from_category
     self.group_id ||= category&.group_id

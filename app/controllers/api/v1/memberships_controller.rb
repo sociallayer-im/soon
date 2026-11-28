@@ -4,6 +4,7 @@ class Api::V1::MembershipsController < Api::BaseController
   # Personalizes the team badges only; see MembershipBlueprint.
   before_action :authenticate_optional!, only: :index
   before_action :set_group
+  around_action :lock_member_change, only: %i[update destroy]
 
   # GET /api/v1/groups/:group_id/memberships
   def index
@@ -53,6 +54,9 @@ class Api::V1::MembershipsController < Api::BaseController
       if (new_role == "owner" || membership.role == "owner") && !group_owner?
         return render_error("only an owner can change owner-level roles", status: :forbidden)
       end
+      if membership.role == "owner" && membership.active? && membership.unexpired? && new_role != "owner" && @group.memberships.active.where(role: "owner").count <= 1
+        return render_error("不能取消最后一位群主，请先指定另一位群主")
+      end
       writes[:role] = new_role
     end
 
@@ -70,7 +74,7 @@ class Api::V1::MembershipsController < Api::BaseController
     membership = @group.memberships.find(params[:id])
     raise Pundit::NotAuthorizedError unless can_remove?(membership)
 
-    if membership.role == "owner" && @group.memberships.where(role: "owner").count <= 1
+    if membership.role == "owner" && membership.active? && membership.unexpired? && @group.memberships.active.where(role: "owner").count <= 1
       return render_error("cannot remove the last owner of a group")
     end
 
@@ -79,6 +83,10 @@ class Api::V1::MembershipsController < Api::BaseController
   end
 
   private
+
+  def lock_member_change(&block)
+    @group.with_lock(&block)
+  end
 
   def set_group
     @group = Group.resolve!(params[:group_id])
@@ -129,6 +137,6 @@ class Api::V1::MembershipsController < Api::BaseController
   end
 
   def group_owner?
-    current_user.memberships.exists?(group: @group, role: "owner")
+    current_user.memberships.active.exists?(group: @group, role: "owner")
   end
 end

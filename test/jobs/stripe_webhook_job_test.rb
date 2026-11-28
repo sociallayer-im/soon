@@ -1,4 +1,5 @@
 require "test_helper"
+require "ostruct"
 
 class StripeWebhookJobTest < ActiveSupport::TestCase
   include FactoryHelpers
@@ -61,7 +62,9 @@ class StripeWebhookJobTest < ActiveSupport::TestCase
 
   test "a late success after cancellation is recorded as an error, never resurrects the order" do
     item = create_order(provider_ref: "cs_late")
-    item.cancel
+    StripeGateway.stub :retrieve_checkout_session, OpenStruct.new(status: "expired", payment_status: "unpaid") do
+      item.cancel
+    end
     quantity_after_release = @ticket.reload.quantity
 
     ev = record_event("checkout.session.completed",

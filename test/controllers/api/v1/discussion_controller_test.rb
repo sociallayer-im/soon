@@ -3,6 +3,7 @@ require "test_helper"
 # The endpoints, including the two gates that turn the whole feature off and
 # every read path a private board could leak through.
 class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
+  include ContentSafetyTestGateway
   def setup
     @owner = create_user
     @author = create_user
@@ -18,6 +19,37 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
     yield
   ensure
     ENV.delete("DISCUSSION_ENABLED")
+  end
+
+  test "reply targets must be visible and belong to the same topic" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      target = create_reply(topic: topic, user: @author)
+      post "/api/v1/topics/#{topic.id}/replies", params: {reply: {content: "回复", reply_to_id: target.id}}, headers: auth_headers(@owner)
+      assert_response :created
+      assert_equal target.id, json_response["reply_to_id"]
+      assert_equal target.user_id, json_response.dig("reply_to", "user", "id")
+      other = create_topic(category: @category, user: @author)
+      post "/api/v1/topics/#{other.id}/replies", params: {reply: {content: "回复", reply_to_id: target.id}}, headers: auth_headers(@owner)
+      assert_response :unprocessable_entity
+    end
+  end
+
+  test "newest replies are ordered before pagination with chronological default" do
+    with_discussion do
+      topic = create_topic(category: @category, user: @author)
+      time = 1.hour.ago
+      rows = 3.times.map { create_reply(topic: topic, user: @author, created_at: time) }
+      expected = rows.sort_by(&:id).reverse
+      [1, 2, 3].each do |page|
+        get "/api/v1/topics/#{topic.id}/replies", params: {sort: "newest", page: page, limit: 1}
+        assert_response :success
+        assert_equal [expected[page - 1].id], json_response["data"].pluck("id")
+      end
+      get "/api/v1/topics/#{topic.id}/replies", params: {limit: 1}
+      assert_response :success
+      assert_equal [expected.last.id], json_response["data"].pluck("id")
+    end
   end
 
   test "every discussion endpoint 404s when the deployment gate is closed" do
@@ -39,7 +71,7 @@ class Api::V1::DiscussionControllerTest < ActionDispatch::IntegrationTest
 
   test "a group with discussion off 404s even when the deployment gate is open" do
     with_discussion do
-      off = create_group(owner: @owner)
+      off = create_group(owner: @owner, discussion_enabled: false)
       get "/api/v1/topics", params: { group_id: off.id }
       assert_response :not_found
       get "/api/v1/categories", params: { group_id: off.id }

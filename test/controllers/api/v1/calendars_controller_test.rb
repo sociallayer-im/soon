@@ -50,9 +50,9 @@ class Api::V1::CalendarsControllerTest < ActionDispatch::IntegrationTest
 
   test "group feed lists published public events as a named subscribable calendar" do
     create_event(group: @group, owner: @owner, title: "Shown", status: "published", visibility: "normal",
-      start_time: Time.utc(2026, 7, 16, 14, 0, 0), end_time: Time.utc(2026, 7, 16, 15, 0, 0))
+      start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour)
     create_event(group: @group, owner: @owner, title: "Hidden Draft", status: "draft", visibility: "normal",
-      start_time: Time.utc(2026, 7, 17, 14, 0, 0), end_time: Time.utc(2026, 7, 17, 15, 0, 0))
+      start_time: 2.days.from_now, end_time: 2.days.from_now + 1.hour)
 
     get "/api/v1/groups/#{@group.id}/calendar.ics" # public, no auth
     assert_response :success

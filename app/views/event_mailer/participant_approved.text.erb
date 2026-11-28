@@ -1,8 +1,9 @@
-You're in!
+报名审核已通过
 
-Your application to <%= @event.title %> was approved. A calendar invite is attached.
-
-When: <%= @event.local_start&.strftime("%b %-d, %Y · %H:%M %Z") %>
-<% if @event.location_text.present? %>Where: <%= @event.location_text %>
+你申请的「<%= @event.title %>」已通过审核。
+<% if @participant.status == "awaiting_payment" %>请于 <%= @participant.payment_due_at&.in_time_zone(@event.event_timezone)&.strftime("%Y-%m-%d %H:%M") %> 前完成付款；支付成功后报名才生效。
+<% else %>报名成功，活动日历邀请见附件。
 <% end %>
-View event: <%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>
+查看活动：<%= MailerHelper::WEB_URL %>/event/detail/<%= @event.id %>
+
+活动时间：<%= @event.local_start&.strftime("%Y-%m-%d %H:%M %Z") %>

@@ -1,4 +1,5 @@
 class Membership < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user
   # counter_cache keeps groups.memberships_count correct on every create/destroy
   # (including the owner seeded at group creation), so nothing has to remember to
@@ -10,7 +11,7 @@ class Membership < ApplicationRecord
 
   # Query-side counterpart to #unexpired? — for gates that need to
   # filter/exists? rather than load a single row.
-  scope :active, -> { where("expires_at IS NULL OR expires_at > ?", Time.current) }
+  scope :active, -> { where(active: true).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
   # expires_at nil means permanent (manager/owner rows, and plain group-ticket
   # membership grants). Only a membership_card purchase ever sets it.

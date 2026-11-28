@@ -26,7 +26,6 @@ class Api::V1::FormsController < Api::BaseController
     ActiveRecord::Base.transaction do
       form.save!
       @event.update_column(:form_id, form.id) unless @event.form_id == form.id
-      @event.update_column(:require_approval, true) unless @event.require_approval
 
       FormBuilder.apply_fields!(form, params[:fields])
     end
@@ -144,6 +143,6 @@ class Api::V1::FormsController < Api::BaseController
   end
 
   def group_admin_of?(group)
-    current_user.memberships.exists?(group: group, role: %w[manager owner])
+    current_user.memberships.active.exists?(group: group, role: %w[manager owner])
   end
 end

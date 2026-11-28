@@ -39,7 +39,7 @@ class PollPolicy < ApplicationPolicy
     return false if user.nil?
     return group_member?(record.group) if record.eligible_group_ids.empty? && record.eligible_team_ids.empty?
 
-    user.memberships.exists?(group_id: record.eligible_group_ids) ||
+    user.memberships.active.exists?(group_id: record.eligible_group_ids) ||
       user.team_memberships.exists?(team_id: record.eligible_team_ids)
   end
 

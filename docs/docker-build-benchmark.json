@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-30",
+  "environment": "HomePod existing rootless native BuildKit, Linux amd64; Docker image export, not application deployment",
+  "ruby": "4.0.5",
+  "bun": "1.3.14",
+  "buildkit_cache_budget_gib": 16,
+  "cases": {
+    "primed": {
+      "seconds": 299.54,
+      "gems_cached": false,
+      "bun_dependencies_cached": true,
+      "js_assets_cached": false
+    },
+    "app-change": {
+      "seconds": 163.48,
+      "gems_cached": true,
+      "bun_dependencies_cached": true,
+      "js_assets_cached": true
+    },
+    "warm": {
+      "seconds": 7.45,
+      "gems_cached": true,
+      "bun_dependencies_cached": true,
+      "js_assets_cached": true
+    },
+    "gemfile-change": {
+      "seconds": 218.04,
+      "gems_cached": false,
+      "bun_dependencies_cached": true,
+      "js_assets_cached": true
+    }
+  },
+  "gem_install_stage_seconds": {
+    "initial_empty_gem_cache": 335.6,
+    "compiled_gem_cache_reused": 36.5
+  },
+  "notes": [
+    "app-change changes only a controller comment in an isolated copy",
+    "gemfile-change changes only a Gemfile comment: forces installation without changing dependency resolution",
+    "No native extension installation occurred during gemfile-change",
+    "primed includes recovery of layers previously evicted under the old 4 GiB budget"
+  ]
+}

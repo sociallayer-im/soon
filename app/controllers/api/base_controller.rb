@@ -2,6 +2,11 @@ class Api::BaseController < ActionController::API
   include Pundit::Authorization
 
   before_action :authenticate!
+  around_action :with_notification_actor
+
+  def with_notification_actor(&block)
+    NotificationContext.set(actor: current_user, &block)
+  end
 
   rescue_from Pundit::NotAuthorizedError do
     render json: { error: "Forbidden" }, status: :forbidden
@@ -37,10 +42,8 @@ class Api::BaseController < ActionController::API
   # installed, which WechatPaySetting.platform_default is what answers.
   def wechat_pay_enabled? = ENV["WECHAT_PAY_ENABLED"] == "true"
 
-  # The third deployment gate: CN sets it, SG leaves it unset. Lives here rather
-  # than in AuthController because UsersController needs it too — a WeChat
-  # account must bind a phone before it can pick a username, and that rule only
-  # applies where phone sign-in exists.
+  # Feature flag for SMS phone sign-in. Phone completion is a client flow,
+  # not a prerequisite for API business operations or setting a username.
   def phone_login_enabled? = ENV["PHONE_LOGIN_ENABLED"] == "true"
 
   # The discussion boards are off unless a deployment turns them on. Gated
@@ -113,14 +116,42 @@ class Api::BaseController < ActionController::API
   # partial index. Remove once legacy tokens have aged out.
   def user_from_payload(payload)
     if (id = payload["user_id"]).present?
-      User.find_by(id: id)
+      User.find_by(id: id, active: true)
     elsif (legacy_id = payload["id"]).present?
-      User.find_by(ref_id: legacy_id.to_s)
+      User.find_by(ref_id: legacy_id.to_s, active: true)
     end
   end
 
   def current_user
     @current_user
+  end
+
+  # Opt-in keyset pagination. The timestamp and id are both required so rows
+  # sharing a timestamp cannot be skipped. Existing page-based clients remain unchanged.
+  def render_newest_cursor(scope, blueprint:, **blueprint_opts)
+    limit = params.fetch(:limit, PAGY_DEFAULT_LIMIT).to_i.clamp(1, PAGY_MAX_LIMIT)
+    cursor = params[:cursor].to_s
+    unless cursor == "start"
+      begin
+        payload = JSON.parse(Base64.urlsafe_decode64(cursor))
+        raise ArgumentError unless payload.is_a?(Hash) && payload["created_at"].is_a?(String)
+        time = Time.iso8601(payload.fetch("created_at"))
+        id = payload.fetch("id")
+        raise ArgumentError unless id.is_a?(String) && id.length.between?(1, 128)
+      rescue ArgumentError, KeyError, TypeError, JSON::ParserError
+        return render_error("invalid cursor")
+      end
+      table = scope.klass.arel_table
+      scope = scope.where(table[:created_at].lt(time).or(table[:created_at].eq(time).and(table[:id].lt(id))))
+    end
+    rows = scope.reorder(created_at: :desc, id: :desc).limit(limit + 1).to_a
+    has_more = rows.length > limit
+    records = rows.first(limit)
+    last = records.last
+    next_cursor = if has_more && last
+      Base64.urlsafe_encode64({created_at: last.created_at.iso8601(6), id: last.id}.to_json, padding: false)
+    end
+    render json: {data: JSON.parse(blueprint.render(records, **blueprint_opts)), meta: {limit: limit, next_cursor: next_cursor}}
   end
 
   def render_collection(scope, blueprint:, **blueprint_opts)

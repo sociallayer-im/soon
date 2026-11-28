@@ -39,6 +39,10 @@ Rails.application.routes.draw do
       get  "auth/nonce",          to: "auth#nonce"
       post "auth/verify_wallet",  to: "auth#verify_wallet"
       post "auth/verify_google",  to: "auth#verify_google"
+      post "auth/wechat_miniprogram_phone", to: "auth#wechat_miniprogram_phone"
+      post "auth/wechat_miniprogram", to: "auth#wechat_miniprogram"
+      get "auth/soda_oauth", to: "auth#soda_oauth_config"
+      post "auth/soda_oauth", to: "auth#soda_oauth_signin"
       post "auth/trusted_signin", to: "auth#trusted_signin"
       post "auth/bind_email",     to: "auth#bind_email"
       # Both a session and NEXT_TOKEN — see AuthController#bind_wechat.
@@ -55,6 +59,7 @@ Rails.application.routes.draw do
       get  "oauth/userinfo",  to: "oauth#userinfo"
       post "oauth/userinfo",  to: "oauth#userinfo"
       post "oauth/revoke",    to: "oauth#revoke"
+      get  "oauth/identity",  to: "oauth#identity"
 
       # Developer portal and the user's own consent management (session JWT).
       resources :oauth_applications, path: "oauth/applications" do
@@ -63,6 +68,17 @@ Rails.application.routes.draw do
         end
       end
       resources :oauth_grants, path: "oauth/grants", only: %i[index destroy]
+
+      post "groups/:id/resubmit", to: "groups#resubmit"
+      get "activities/:id/review", to: "activities#review"
+      resources :content_reports, only: [:create]
+      get "admin/content_reports", to: "admin_content_reports#index"
+      post "admin/content_reports/:id/review", to: "admin_content_reports#review"
+      post "admin/content_reports/:id/restore", to: "admin_content_reports#restore"
+      get "admin/campaign_reviews", to: "campaign_reviews#index"
+      post "admin/campaign_reviews/:id/review", to: "campaign_reviews#review"
+      get "admin/group_reviews", to: "group_reviews#index"
+      post "admin/group_reviews/:id/review", to: "group_reviews#review"
 
       # Platform admins only — gated on users.admin.
       resources :oauth_admin_applications, path: "oauth/admin/applications", only: %i[index show] do
@@ -99,11 +115,18 @@ Rails.application.routes.draw do
       get "groups/:id/calendar(.ics)", to: "calendars#group", as: :group_calendar
 
       # Public discovery (homepage + global search)
+      get "discovery/home", to: "discovery#home"
+      get "discovery/community", to: "discovery#community"
+      get "discovery/feed", to: "discovery#index"
       get "discover", to: "discover#index"
       get "search",   to: "discover#search"
 
       # Before `resources :users`, or /users/by_email resolves to #show with
       # id "by_email".
+      get "users/:id/topics", to: "topics#user_index"
+      get "registrations", to: "registrations#index"
+      get "users/role_candidates", to: "users#role_candidates"
+      get "users/suggestions", to: "users#suggestions"
       get "users/by_email", to: "users#by_email"
 
       # Resources
@@ -134,6 +157,7 @@ Rails.application.routes.draw do
             post :revoke
           end
           collection do
+            post :lookup
             post :request_invite
             post :send_with_code
             post :accept_with_code
@@ -141,9 +165,17 @@ Rails.application.routes.draw do
         end
       end
 
+      get "cities", to: "cities#index"
+      post "tickets/:ticket_item_id/refund_requests", to: "refund_requests#create"
+      post "refund_requests/:id/reject", to: "refund_requests#reject"
+      resources :campaigns, only: %i[index show create update destroy]
+
+      get "events/:event_id/discussion", to: "event_discussions#index"
+      post "events/:event_id/discussion", to: "event_discussions#create"
       resources :events do
         collection do
           get :pending_approval
+          get :tag_suggestions
         end
         member do
           post :approve
@@ -155,6 +187,7 @@ Rails.application.routes.draw do
           end
           collection do
             post :check_in
+            get :ticket_pass
           end
         end
         resources :event_roles,  only: %i[index create update destroy]
@@ -317,7 +350,7 @@ Rails.application.routes.draw do
       # Platform admins only — gated on users.admin. NOT behind
       # WECHAT_PAY_ENABLED: an SG admin should still be able to see/settle
       # historical CN withdrawals if deployments are ever consolidated.
-      resources :admin_withdrawals, path: "admin/withdrawals", only: %i[index update]
+      resources :admin_withdrawals, path: "admin/withdrawals", only: %i[index show update]
 
       resources :vouchers, only: %i[index show create] do
         collection do
@@ -357,8 +390,12 @@ Rails.application.routes.draw do
       get  "tickets/coupon",                  to: "tickets#coupon"
       get  "tickets/coupon_usage",            to: "tickets#coupon_usage"
 
+      resources :follows, only: %i[index create destroy]
+
       resources :activities, only: %i[index] do
         collection do
+          get :tasks
+          get :summary
           post :mark_read
         end
       end
@@ -374,4 +411,14 @@ Rails.application.routes.draw do
       end
     end
   end
+  if ENV["SERVE_WEB_APP"] == "true"
+    root "web#index"
+    # Static middleware handles existing files first. Missing assets and unknown
+    # API / identity paths must stay 404, not receive an HTML SPA fallback.
+    get "*path", to: "web#index", constraints: ->(request) {
+      request.path !~ %r{\A/(?:api|\.well-known|up|rails|assets|web-assets)(?:/|\z)} &&
+        File.extname(request.path).empty? && request.format.html?
+    }
+  end
+
 end

@@ -6,6 +6,13 @@ class TicketBlueprint < Blueprinter::Base
          :days_allowed, :tracks_allowed, :created_at, :membership_duration_days
 
   view :extended do
+    field :occupied_quantity do |ticket, options|
+      options[:ticket_occupied_counts] ? options[:ticket_occupied_counts][ticket.id].to_i : ticket.ticket_items.where(inventory_reserved: true, released_at: nil).count
+    end
+    field :total_quantity do |ticket, options|
+      occupied = options[:ticket_occupied_counts] ? options[:ticket_occupied_counts][ticket.id].to_i : ticket.ticket_items.where(inventory_reserved: true, released_at: nil).count
+      ticket.quantity.nil? ? nil : ticket.quantity + occupied
+    end
     association :payment_methods, blueprint: PaymentMethodBlueprint
   end
 end

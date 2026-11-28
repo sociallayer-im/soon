@@ -107,6 +107,7 @@ module FactoryHelpers
     place ||= create_place
     Event.create!({
       title: "Event #{unique_suffix}",
+      status: "published",
       start_time: 1.day.from_now,
       end_time: 1.day.from_now + 2.hours,
       group: group,
@@ -211,6 +212,10 @@ module FactoryHelpers
       user: user, item: item, comment_type: comment_type,
       content: "content-#{unique_suffix}"
     }.merge(attrs))
+  end
+
+  def create_follow(user:, target:, **attrs)
+    Follow.create!({ user: user, target: target, status: "active" }.merge(attrs))
   end
 
   def create_activity(initiator:, receiver: nil, action: "badge/transfer", **attrs)

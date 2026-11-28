@@ -1,0 +1,22 @@
+{
+  "targetId": "tgt_2cc67fa5-9dbf-4414-acf1-f468a7c6f009",
+  "deploy": {
+    "port": 8080,
+    "hostname": "surf-api.sola.day",
+    "resources": {
+      "cpuMHz": 256,
+      "memoryMB": 640
+    },
+    "healthcheck": {
+      "type": "http",
+      "path": "/up",
+      "timeoutSeconds": 180
+    },
+    "shutdownSeconds": 30,
+    "readOnlyRootfs": false
+  },
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  }
+}

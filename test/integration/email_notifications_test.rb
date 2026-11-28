@@ -5,6 +5,7 @@ require "test_helper"
 # that hitting an endpoint enqueues/sends to the right recipient.
 class EmailNotificationsTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
+  include ContentSafetyTestGateway
 
   setup do
     @owner = create_user
@@ -20,7 +21,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
     end
     mail = ActionMailer::Base.deliveries.last
     assert_equal [user.email], mail.to
-    assert_equal "Your Social Layer sign-in code", mail.subject
+    assert_equal "Your Surf sign-in code", mail.subject
   end
 
   test "request_code for an unknown email sends a code too — first login is signup" do
@@ -43,7 +44,7 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
   # ---- participant approve / reject (deliver_later) ----
 
   test "approving a pending participant emails them" do
-    event = create_event(group: @group, owner: @owner, require_approval: true)
+    event = create_event(group: @group, owner: @owner, require_approval: true, status: "published")
     attendee = create_user
     participant = create_participant(event: event, user: attendee, status: "pending")
 
@@ -57,12 +58,12 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
   end
 
   test "rejecting a pending participant emails them and sets status declined" do
-    event = create_event(group: @group, owner: @owner, require_approval: true)
+    event = create_event(group: @group, owner: @owner, require_approval: true, status: "published")
     attendee = create_user
     participant = create_participant(event: event, user: attendee, status: "pending")
 
     perform_enqueued_jobs do
-      post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", headers: auth_headers(@owner)
+      post "/api/v1/events/#{event.id}/participants/#{participant.id}/reject", params: {reason: "本场名额已满"}, headers: auth_headers(@owner)
     end
     assert_response :success
     assert_equal "declined", participant.reload.status
@@ -113,6 +114,20 @@ class EmailNotificationsTest < ActionDispatch::IntegrationTest
         headers: auth_headers(author)
     end
     assert_response :created
+  end
+
+  test "repeated group purchase confirmation enqueues owner mail only once" do
+    event = create_group_ticket_event(group: @group, owner: @owner)
+    ticket = create_ticket(event: event)
+    buyer = create_user
+    post "/api/v1/events/#{event.id}/tickets/#{ticket.id}/rsvp", headers: auth_headers(buyer)
+    assert_response :success
+    item = TicketItem.find(json_response.fetch("ticket_item").fetch("id"))
+    assert item.group_owner_notified_at.present?
+    assert_no_enqueued_emails do
+      item.confirm_payment!
+      item.reload.confirm_payment!
+    end
   end
 
   # ---- group ticket purchase (deliver_later) ----

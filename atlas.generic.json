@@ -1,0 +1,22 @@
+{
+  "targetId": "tgt_31334854-772c-43c9-bdcc-638e91dafe9d",
+  "deploy": {
+    "port": 8080,
+    "hostname": "soon.generic.dev",
+    "resources": {
+      "cpuMHz": 256,
+      "memoryMB": 640
+    },
+    "healthcheck": {
+      "type": "http",
+      "path": "/up",
+      "timeoutSeconds": 180
+    },
+    "shutdownSeconds": 30,
+    "readOnlyRootfs": false
+  },
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  }
+}

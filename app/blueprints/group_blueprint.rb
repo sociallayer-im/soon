@@ -2,7 +2,7 @@ class GroupBlueprint < Blueprinter::Base
   identifier :id
 
   # Default view stays light — it's embedded in events, invites, tracks, etc.
-  fields :name, :nickname, :image_url, :logo_url, :created_at
+  fields :review_status, :city, :name, :nickname, :image_url, :logo_url, :created_at
 
   # Every scalar a group page or popup-city card needs, and no sub-resources.
   # Use this for LISTS. :detail on a list embeds each group's whole membership
@@ -10,7 +10,7 @@ class GroupBlueprint < Blueprinter::Base
   # which is a 726KB response against sails' 16KB for the same page — and the
   # consumer (sola-sdk popup_city.ts toPopupCity) reads only scalars.
   view :card do
-    fields :bio, :location, :timezone, :start_date, :end_date, :active,
+    fields :review_reason, :reviewed_at, :bio, :location, :latitude, :longitude, :timezone, :start_date, :end_date, :active,
            :banner_image_url, :banner_link_url, :banner_text, :featured_image_url,
            :social_links, :group_tags, :event_tag_list, :requirement_tag_list, :venue_tag_list,
            :can_publish_event, :can_join_event, :can_view_event, :require_event_approval,
@@ -37,13 +37,27 @@ class GroupBlueprint < Blueprinter::Base
   # the associations below are a per-record N+1 otherwise.
   view :detail do
     include_view :card
+    field :review_history, if: ->(_field, group, options) { options[:review_history] } do |group|
+      group.group_review_logs.includes(:reviewer).order(created_at: :desc).limit(50).map { |entry| {decision: entry.decision, reason: entry.reason, created_at: entry.created_at, reviewer: entry.reviewer&.slice(:id, :name, :nickname)} }
+    end
     association :parent, blueprint: GroupBlueprint
     association :children, blueprint: GroupBlueprint
     association :tracks, blueprint: TrackBlueprint
     # Source is active_venues (archived: false) but the key stays `venues` —
     # removed venues are soft-deleted and must not appear in any list.
-    association :active_venues, blueprint: VenueBlueprint, name: :venues
-    association :memberships, blueprint: MembershipBlueprint
+    field :venues do |group, options|
+      VenueBlueprint.render_as_hash(options[:compact] ? group.active_venues.includes(:place).order(:id).limit(5) : group.active_venues)
+    end
+    field :venue_next_page, if: ->(_field, _group, options) { options[:compact] } do |group|
+      group.active_venues.count > 5 ? 2 : nil
+    end
+    field :memberships do |group, options|
+      rows = options[:compact] ? group.memberships.active.where(user_id: options[:viewer]&.id).includes(user: :teams).to_a : group.memberships
+      MembershipBlueprint.render_as_hash(rows, member_group_ids: options[:member_group_ids])
+    end
+    field :member_preview, if: ->(_field, _group, options) { options[:compact] } do |group, options|
+      MembershipBlueprint.render_as_hash(group.memberships.active.includes(user: :teams).order(created_at: :asc, id: :asc).limit(5), member_group_ids: options[:member_group_ids])
+    end
   end
 
   view :extended do

@@ -5,9 +5,19 @@ class UserBlueprint < Blueprinter::Base
   # member lists, badge owner/creator, participants, etc.
   fields :name, :nickname, :image_url, :created_at
 
+  # Counts only on a single profile, never an N+1 query across user lists.
+  field :followers_count, if: ->(_field, _user, options) { options[:profile_counts] } do |user|
+    user.incoming_follows.where(status: "active").count
+  end
+  field :following_count, if: ->(_field, _user, options) { options[:profile_counts] } do |user|
+    user.follows.where(status: "active", target_type: "User").count
+  end
+
   # Public profile page: bio and public identifiers (wallet, social links).
   view :profile do
     fields :bio, :eth, :social_links
+    field(:cover_image_url) { |user| user.data.to_h["cover_image_url"] }
+    field(:city) { |user| user.data.to_h["city"] }
   end
 
   # Private fields, only rendered for the user viewing their own record.

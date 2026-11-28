@@ -343,4 +343,67 @@ class Api::V1::TicketsWechatFlowTest < ActionDispatch::IntegrationTest
   ensure
     ENV.delete("NEXT_TOKEN")
   end
+  test "paginated manager orders expose refund capability and cohosts can list" do
+    cohost = create_user
+    EventRole.create!(event: @event, item_type: "User", item_id: cohost.id, role: "co_host")
+    item = create_order(status: "succeeded", txhash: "wx_orders")
+    get "/api/v1/tickets/list", params: { event_id: @event.id, page: 1, limit: 1 }, headers: auth_headers(cohost)
+    assert_response :success
+    assert_equal item.id, json_response["data"].sole["id"]
+    assert_equal true, json_response["data"].sole["can_refund"]
+    assert_equal 1, json_response["meta"]["total"]
+  end
+
+  test "buyer detail exposes own refund state without internal actors errors or reasons" do
+    item = create_order(status: "succeeded", txhash: "wx_buyer")
+    item.refunds.create!(requested_by: @owner, amount: 10, status: "pending", reason: "internal reason", error: "internal error")
+    get "/api/v1/tickets/list", params: { event_id: @event.id, mine: true, include_refunds: true, page: 1 }, headers: auth_headers(@buyer)
+    assert_response :success
+    row = json_response["data"].sole
+    assert_equal "pending", row["refunds"].sole["status"]
+    assert_nil row["refunds"].sole["reason"]
+    assert_nil row["refunds"].sole["error"]
+    assert_nil row["refunds"].sole["requested_by"]
+    assert_nil row["activities"]
+    assert_nil row["can_refund"]
+  end
+
+  test "a pending partial refund blocks another within-balance refund" do
+    item = create_order(status: "succeeded", txhash: "wx_serial")
+    item.refunds.create!(requested_by: @owner, amount: 10, status: "pending", full_refund: false)
+    post "/api/v1/tickets/#{item.id}/refund", params: { amount: 10 }, headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_match "already in progress", json_response["error"]
+    assert_equal 1, item.refunds.count
+  end
+
+  test "refund amount must be integer minor units" do
+    item = create_order(status: "succeeded", txhash: "wx_precision")
+    post "/api/v1/tickets/#{item.id}/refund", params: { amount: "10.9" }, headers: auth_headers(@owner)
+    assert_response :unprocessable_entity
+    assert_equal 0, item.refunds.count
+  end
+
+  test "group managers may inspect orders but cannot initiate regular event refunds" do
+    manager = create_user
+    create_membership(user: manager, group: @group, role: "manager")
+    item = create_order(status: "succeeded", txhash: "wx_manager")
+    get "/api/v1/tickets/list", params: { event_id: @event.id, page: 1 }, headers: auth_headers(manager)
+    assert_response :success
+    assert_equal false, json_response["data"].sole["can_refund"]
+    post "/api/v1/tickets/#{item.id}/refund", params: { amount: 10 }, headers: auth_headers(manager)
+    assert_response :forbidden
+    assert_equal 0, item.refunds.count
+  end
+
+  test "buyer cannot use order list to read another event attendee orders" do
+    create_order(status: "succeeded", txhash: "wx_private")
+    other = create_user
+    get "/api/v1/tickets/list", params: { event_id: @event.id, page: 1 }, headers: auth_headers(other)
+    assert_response :forbidden
+    get "/api/v1/tickets/list", params: { event_id: @event.id, mine: true, include_refunds: true, page: 1 }, headers: auth_headers(other)
+    assert_response :success
+    assert_empty json_response["data"]
+  end
+
 end

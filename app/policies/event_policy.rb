@@ -8,7 +8,8 @@ class EventPolicy < ApplicationPolicy
   # membership gate. It used to be, back when this value was called "private";
   # the rename to "unlisted" wasn't matched here until 2026-08-24.
   def show?
-    return owner?(record) || group_admin?(record.group) if %w[draft archived].include?(record.status)
+    return owner?(record) if record.moderated_at.present?
+    return update? || user&.platform_admin? if %w[draft pending archived].include?(record.status)
     true
   end
 
@@ -33,6 +34,7 @@ class EventPolicy < ApplicationPolicy
   # create an event. Previously this only checked group_member?, so a group set
   # to "everyone" silently 403'd any non-member who the UI told could publish.
   def create?
+    return false unless record.group.review_status == "approved"
     case record.group.can_publish_event
     when "everyone" then true
     when "member" then group_member?(record.group)

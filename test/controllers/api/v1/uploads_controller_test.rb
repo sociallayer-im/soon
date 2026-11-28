@@ -1,6 +1,7 @@
 require "test_helper"
 
 class Api::V1::UploadsControllerTest < ActionDispatch::IntegrationTest
+  include ImageSafetyTestGateway
   def png_upload(type: "image/png")
     fixture_file_upload("pixel.png", type)
   end
@@ -24,7 +25,7 @@ class Api::V1::UploadsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "https://datastore.sola.day/0123456789abcdef", json_response["url"]
-    assert_equal "image/png", delivered[:content_type]
+    assert_equal "image/jpeg", delivered[:content_type]
     assert delivered[:bytes].present?
   end
 

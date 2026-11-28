@@ -211,7 +211,7 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
   test "a response we cannot read is Unreachable, not a refusal" do
     [ Zlib::DataError.new("incorrect header check"), Errno::ECONNRESET.new, EOFError.new ].each do |boom|
       error = assert_raises(WechatPayGateway::Unreachable) do
-        WechatPayGateway.handle_response(error_response(boom))
+        WechatPayGateway.handle_response(error_response(boom), setting: @setting)
       end
       assert_match "could not read", error.message
     end
@@ -255,9 +255,9 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
   end
 
   test "a non-2xx answer is a refusal, carrying WeChat's own code" do
-    response = Struct.new(:status, :body).new(403, '{"code":"NOTENOUGH","message":"余额不足"}')
+    response = signed_response(403, '{"code":"NOTENOUGH","message":"余额不足"}')
 
-    error = assert_raises(WechatPayGateway::Error) { WechatPayGateway.handle_response(response) }
+    error = assert_raises(WechatPayGateway::Error) { WechatPayGateway.handle_response(response, setting: @setting) }
     assert_equal "NOTENOUGH", error.code
     assert_equal 403, error.status
     assert_not_kind_of WechatPayGateway::Unreachable, error, "a refusal is not an unknown outcome"
@@ -275,6 +275,36 @@ class WechatPayGatewayTest < ActiveSupport::TestCase
     assert_raises(WechatPayGateway::UnsupportedMode) do
       WechatPayGateway.create_jsapi_order(partner, @item, payer_openid: "o_buyer")
     end
+  end
+
+  test "signed responses authenticate exact bytes including empty 204" do
+    [signed_response(200, '{"prepay_id":"pp"}'), signed_response(204, "")].each do |response|
+      assert_kind_of Hash, WechatPayGateway.handle_response(response, setting: @setting)
+    end
+  end
+
+  test "invalid response signatures are unknown outcomes even for errors" do
+    [200, 403].each do |status|
+      response = signed_response(status, '{"code":"ORDER_NOT_EXIST"}')
+      response.body = '{"code":"OTHER"}'
+      assert_raises(WechatPayGateway::Unreachable) { WechatPayGateway.handle_response(response, setting: @setting) }
+    end
+    %w[wechatpay-timestamp wechatpay-nonce wechatpay-signature wechatpay-serial].each do |header|
+      response = signed_response(200, '{}')
+      response.headers.delete(header)
+      assert_raises(WechatPayGateway::Unreachable) { WechatPayGateway.handle_response(response, setting: @setting) }
+    end
+    response = signed_response(200, '{}', timestamp: 10.minutes.ago.to_i.to_s)
+    assert_raises(WechatPayGateway::Unreachable) { WechatPayGateway.handle_response(response, setting: @setting) }
+    response = signed_response(200, 'not json')
+    assert_raises(WechatPayGateway::Unreachable) { WechatPayGateway.handle_response(response, setting: @setting) }
+  end
+
+  def signed_response(status, body, **args)
+    signed = signed_notification(body: body, **args)
+    headers = {"wechatpay-timestamp" => signed[:timestamp], "wechatpay-nonce" => signed[:nonce],
+      "wechatpay-signature" => signed[:signature], "wechatpay-serial" => signed[:serial]}
+    Struct.new(:status, :body, :headers).new(status, body, headers)
   end
 
   private

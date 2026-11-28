@@ -1,4 +1,5 @@
 class Api::V1::RepliesController < Api::BaseController
+  include ContentSafetyGate
   include DiscussionRateLimit
   include DiscussionGate
 
@@ -16,7 +17,8 @@ class Api::V1::RepliesController < Api::BaseController
     return render_not_found unless TopicPolicy.new(current_user, topic).show?
 
     manager = GroupPolicy.new(current_user, topic.group).manage?
-    scope = topic.replies.visible_to(current_user, manager: manager).chronological
+    scope = topic.replies.visible_to(current_user, manager: manager)
+    scope = params[:sort] == "newest" ? scope.order(created_at: :desc, id: :desc) : scope.chronological
     render_collection scope.includes(:user, reply_to: :user),
                       blueprint: ReplyBlueprint, view: :with_permissions,
                       current_user: current_user, can_manage: manager,
@@ -24,10 +26,16 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   def create
+    return unless safe_text_submission?(reply_params, scene: 2)
     topic = Topic.find(params[:topic_id])
     return unless require_group_discussion!(topic.group)
     return render_not_found unless TopicPolicy.new(current_user, topic).show?
 
+    if reply_params[:reply_to_id].present?
+      manager = GroupPolicy.new(current_user, topic.group).manage?
+      target = topic.replies.visible_to(current_user, manager: manager).find_by(id: reply_params[:reply_to_id])
+      return render_error("回复的评论已不可查看，请刷新后重试") unless target
+    end
     reply = topic.replies.new(reply_params)
     reply.user = current_user
     authorize reply, :create?
@@ -44,6 +52,7 @@ class Api::V1::RepliesController < Api::BaseController
   end
 
   def update
+    return unless safe_text_submission?(reply_params, scene: 2, previous: @reply)
     authorize @reply, :update?
     @reply.update!(reply_params.except(:reply_to_id))
     render json: ReplyBlueprint.render(@reply, view: :with_permissions,

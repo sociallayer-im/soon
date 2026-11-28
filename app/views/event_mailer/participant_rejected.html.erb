@@ -1,6 +1,1 @@
-<h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">Application update</h1>
-<p style="margin: 0 0 16px; color: #4b5563;">
-  Thanks for your interest in <strong><%= @event.title %></strong>. Unfortunately your application
-  wasn't accepted this time.
-</p>
-<%= cta_button "Explore other events", MailerHelper::WEB_URL %>
+<h1>报名申请未通过</h1><p>你申请的「<%= @event.title %>」未通过审核。</p><p>原因：<%= @participant.review_reason.presence || "请联系主办方了解详情" %></p><p>你可以修改资料后重新申请。</p><%= cta_button "查看活动", "#{MailerHelper::WEB_URL}/event/detail/#{@event.id}" %>

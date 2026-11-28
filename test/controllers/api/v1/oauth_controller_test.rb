@@ -47,7 +47,7 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
     assert_equal %w[openid profile], json_response["scopes"]
     assert_equal "client.example.com", json_response["redirect_host"]
     assert_equal @client.owner.name, json_response["owner_handle"]
-    assert_equal false, json_response["can_skip_consent"]
+    assert_equal true, json_response["can_skip_consent"]
     assert_equal 2, json_response["scope_details"].size
   end
 
@@ -96,6 +96,15 @@ class Api::V1::OauthControllerTest < ActionDispatch::IntegrationTest
     post "/api/v1/oauth/authorize", params: authorize_params(decision: "allow")
     assert_response :unauthorized
     assert_equal "login_required", json_response["error"]
+  end
+
+  test "an enabled application can authorize automatically without a trust flag or prior grant" do
+    assert_not @client.trusted?
+    assert_difference ["OauthGrant.count", "OauthAuthorizationCode.count"], 1 do
+      post "/api/v1/oauth/authorize", params: authorize_params(decision: "auto"), headers: auth_headers(@user)
+      assert_response :success
+      assert json_response["code"].present?
+    end
   end
 
   test "authorize_decision issues a code and records the grant" do

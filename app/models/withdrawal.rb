@@ -13,6 +13,7 @@
 # for that role). `user_id` still records who made each individual request,
 # for the audit trail — it is never part of the balance calculation.
 class Withdrawal < ApplicationRecord
+  include SiteNotifiable
   belongs_to :user
   belongs_to :group
   belongs_to :processed_by, class_name: "User", optional: true
@@ -35,11 +36,11 @@ class Withdrawal < ApplicationRecord
   # — each group's own manager withdraws its own events' revenue. Revisit if
   # that turns out to be the wrong call for popup-city-style hierarchies.
   def self.manageable_groups(user)
-    Group.where(id: Membership.where(user_id: user.id, role: %w[owner manager]).select(:group_id))
+    Group.where(id: Membership.active.where(user_id: user.id, role: %w[owner manager]).select(:group_id))
   end
 
   def self.may_manage?(user, group)
-    Membership.exists?(user_id: user.id, group_id: group.id, role: %w[owner manager])
+    Membership.active.exists?(user_id: user.id, group_id: group.id, role: %w[owner manager])
   end
 
   # WeChat orders under this group. Left-joined to event (not inner) and
@@ -61,7 +62,7 @@ class Withdrawal < ApplicationRecord
   def self.wechat_net_amount(group, currency: "cny")
     items = wechat_ticket_items(group, currency: currency)
     gross = items.sum(:amount)
-    refunded = Refund.where(ticket_item_id: items.select(:id), status: "succeeded").sum(:amount)
+    refunded = Refund.where(ticket_item_id: items.select(:id), status: %w[pending succeeded]).sum(:amount)
     gross - refunded
   end
 

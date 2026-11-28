@@ -496,3 +496,82 @@ class Api::V1::GroupInvitesControllerTest < ActionDispatch::IntegrationTest
     ENV.delete("PHONE_LOGIN_ENABLED")
   end
 end
+
+class Api::V1::GroupInvitesControllerTest
+  test "Surf invitation requires recipient confirmation and supports decline" do
+    owner = create_user
+    target = create_user
+    outsider = create_user
+    group = create_group(owner: owner)
+    2.times do
+      post "/api/v1/groups/#{group.id}/group_invites", params: { receivers: [target.name], require_confirmation: true }, headers: auth_headers(owner)
+      assert_response :success
+    end
+    assert_not group.memberships.exists?(user: target)
+    assert_equal 1, group.group_invites.where(receiver: target, status: "sending").count
+    invite = group.group_invites.find_by!(receiver: target)
+    get "/api/v1/group_invites/pending", headers: auth_headers(target)
+    assert_equal [invite.id], json_response.map { |i| i["id"] }
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(outsider)
+    assert_response :unprocessable_entity
+    post "/api/v1/groups/#{group.id}/group_invites/#{invite.id}/accept", headers: auth_headers(target)
+    assert_response :success
+    assert group.memberships.exists?(user: target)
+    get "/api/v1/group_invites/pending", headers: auth_headers(target)
+    assert_empty json_response
+  end
+
+  test "Surf invitation can be declined without joining" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    post "/api/v1/groups/#{group.id}/group_invites", params: { receivers: [target.name], require_confirmation: true }, headers: auth_headers(owner)
+    invite = group.group_invites.find_by!(receiver: target)
+    delete "/api/v1/groups/#{group.id}/group_invites/#{invite.id}", headers: auth_headers(target)
+    assert_response :no_content
+    assert_not group.memberships.exists?(user: target)
+    assert_equal "cancelled", invite.reload.status
+  end
+end
+
+class Api::V1::GroupInvitesControllerTest
+  test "revoked reusable code cannot grant membership" do
+    owner = create_user
+    target = create_user
+    group = create_group(owner: owner)
+    invite = GroupInvite.create!(group: group, sender: owner, role: "member", status: "revoked", receiver_address_type: "code", receiver_address: "TESTCODE")
+    post "/api/v1/groups/#{group.id}/group_invites/accept_with_code", params: { code: "TESTCODE" }, headers: auth_headers(target)
+    assert_response :unprocessable_entity
+    assert_not group.memberships.exists?(user: target)
+  end
+
+  test "accepting reusable member code never demotes a group owner" do
+    owner = create_user
+    group = create_group(owner: owner)
+    GroupInvite.create!(group: group, sender: owner, role: "member", status: "sending", receiver_address_type: "code", receiver_address: "TESTCODE")
+    post "/api/v1/groups/#{group.id}/group_invites/accept_with_code", params: { code: "TESTCODE" }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal "owner", group.memberships.find_by!(user: owner).role
+  end
+end
+
+class Api::V1::GroupInvitesControllerTest
+  test "invite lookup supports names and exact phones without exposing contact data" do
+    owner = create_user
+    target = create_user(phone: "+8613800138000", nickname: "中文昵称")
+    group = create_group(owner: owner)
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: "13800138000" }, headers: auth_headers(owner)
+    assert_response :success
+    assert_equal [target.id], json_response["users"].map { |u| u["id"] }
+    assert_not json_response["users"].first.key?("phone")
+    assert_not json_response["users"].first.key?("email")
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: "中文" }, headers: auth_headers(owner)
+    assert_equal target.id, json_response["users"].first["id"]
+    post "/api/v1/groups/#{group.id}/group_invites/lookup", params: { keyword: target.name }, headers: auth_headers(target)
+    assert_response :forbidden
+    post "/api/v1/groups/#{group.id}/group_invites", params: { receivers: ["13800138000"], require_confirmation: true }, headers: auth_headers(owner)
+    assert_equal "invited", json_response["results"].first["result"]
+    assert_not group.memberships.exists?(user: target)
+    assert group.group_invites.exists?(receiver_id: target.id, status: "sending")
+  end
+end

@@ -4,6 +4,8 @@
 # Full refunds release the seat/coupon/membership; partial refunds move money
 # only (design/PAYMENTS_PLAN.md decision #10).
 class Refund < ApplicationRecord
+  include SiteNotifiable
+  has_one :refund_request
   belongs_to :ticket_item
   belongs_to :requested_by, class_name: "User", foreign_key: :requested_by_user_id
 

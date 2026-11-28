@@ -29,7 +29,7 @@ class UserMerger
   }.freeze
 
   # Straight FK repoints — no uniqueness risk on these tables.
-  REPOINT_OWNER_ID = %w[events markers venues].freeze
+  REPOINT_OWNER_ID = %w[events markers venues campaigns].freeze
 
   def self.call(from:, into:)
     new(from, into).call
@@ -58,6 +58,8 @@ class UserMerger
 
       REPOINT_OWNER_ID.each { |table| repoint(table, "owner_id") }
       repoint("stripe_settings", "user_id")
+      repoint("withdrawals", "user_id")
+      repoint("withdrawals", "processed_by_id")
       repoint("badge_classes", "creator_id")
       repoint("badges", "owner_id")
       repoint("badges", "creator_id")
@@ -79,6 +81,13 @@ class UserMerger
       repoint("vouchers", "sender_id")
       repoint("vouchers", "receiver_id")
       repoint("refunds", "requested_by_user_id")
+      repoint("refund_requests", "user_id")
+      repoint("refund_requests", "reviewed_by_id")
+      repoint("campaigns", "reviewed_by_id")
+      repoint("campaign_review_logs", "reviewer_id")
+      repoint("group_review_logs", "reviewer_id")
+      repoint("groups", "reviewed_by_id")
+      repoint("participants", "reviewed_by_id")
       repoint("ticket_items", "user_id")
       repoint("wechat_pay_settings", "user_id")
       repoint("group_invites", "receiver_id")
@@ -92,6 +101,9 @@ class UserMerger
 
       Domain.where(item_type: "User", item_id: @from.id).update_all(item_id: @into.id)
       dedupe_and_repoint_event_roles
+      # Follows are unique on (user_id, target) and also point *at* a user.
+      # A blind repoint would either collide or leave `into` following itself.
+      dedupe_and_repoint_follows
 
       @from.destroy!
     end
@@ -128,6 +140,25 @@ class UserMerger
         r.destroy!
       else
         r.update!(item_id: @into.id)
+      end
+    end
+  end
+
+  def dedupe_and_repoint_follows
+    Follow.where(user_id: @from.id).find_each do |follow|
+      self_follow = follow.target_type == "User" && follow.target_id == @into.id
+      if self_follow || Follow.exists?(user_id: @into.id, target_type: follow.target_type, target_id: follow.target_id)
+        follow.destroy!
+      else
+        follow.update!(user_id: @into.id)
+      end
+    end
+
+    Follow.where(target_type: "User", target_id: @from.id).find_each do |follow|
+      if follow.user_id == @into.id || Follow.exists?(user_id: follow.user_id, target_type: "User", target_id: @into.id)
+        follow.destroy!
+      else
+        follow.update!(target_id: @into.id)
       end
     end
   end
